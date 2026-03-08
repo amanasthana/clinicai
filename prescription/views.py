@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from reception.models import Visit
 from .models import Prescription, PrescriptionMedicine
-from .services import generate_prescription, deidentify_clinical_note
+from .services import generate_prescription, get_differentials, get_investigations, deidentify_clinical_note
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +161,72 @@ def generate_prescription_api(request):
 
 @login_required
 @require_POST
+def differentials_api(request):
+    """
+    AJAX endpoint: clinical note → ranked differential diagnoses (Step 1 of diff-dx workflow).
+    Rate limited. Returns list of 3-5 diagnoses with probability + reasoning.
+    """
+    if not _check_rate_limit(request.user.id):
+        return JsonResponse({'ok': False, 'error': 'Too many requests. Please wait a moment.'}, status=429)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    raw_note = data.get('clinical_note', '').strip()
+    patient_age = data.get('age', 0)
+    patient_gender = data.get('gender', 'M')
+
+    if not raw_note:
+        return JsonResponse({'ok': False, 'error': 'Clinical note is empty.'}, status=400)
+
+    try:
+        result = get_differentials(raw_note, patient_age, patient_gender)
+        return JsonResponse({'ok': True, 'differentials': result.get('differentials', [])})
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse differentials response: %s", e)
+        return JsonResponse({'ok': False, 'error': 'AI returned an unexpected format. Please try again.'}, status=500)
+    except Exception as e:
+        logger.error("Differentials generation error: %s", e)
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def investigations_api(request):
+    """
+    AJAX endpoint: confirmed diagnosis → investigations split into Immediate/Elective (Step 2).
+    """
+    if not _check_rate_limit(request.user.id):
+        return JsonResponse({'ok': False, 'error': 'Too many requests. Please wait a moment.'}, status=429)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    selected_diagnosis = data.get('selected_diagnosis', '').strip()
+    raw_note = data.get('clinical_note', '').strip()
+    patient_age = data.get('age', 0)
+    patient_gender = data.get('gender', 'M')
+
+    if not selected_diagnosis:
+        return JsonResponse({'ok': False, 'error': 'No diagnosis selected.'}, status=400)
+
+    try:
+        result = get_investigations(selected_diagnosis, raw_note, patient_age, patient_gender)
+        return JsonResponse({'ok': True, 'investigations': result.get('investigations', {})})
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse investigations response: %s", e)
+        return JsonResponse({'ok': False, 'error': 'AI returned an unexpected format. Please try again.'}, status=500)
+    except Exception as e:
+        logger.error("Investigations generation error: %s", e)
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
 def save_prescription_api(request, visit_id):
     """
     Save the final prescription (AI-generated or manually edited) to the DB.
@@ -195,6 +261,9 @@ def save_prescription_api(request, visit_id):
             'patient_summary_en': rx_data.get('patient_summary_en', ''),
             'patient_summary_hi': rx_data.get('patient_summary_hi', ''),
             'follow_up_date': follow_up_date,
+            'differential_diagnoses': data.get('differential_diagnoses'),
+            'investigations': data.get('investigations'),
+            'selected_diagnosis': data.get('selected_diagnosis', ''),
         },
     )
 

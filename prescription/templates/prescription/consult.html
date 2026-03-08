@@ -154,6 +154,11 @@
   opacity: 1;
 }
 
+/* Diff / Inv step cards hover on labels */
+#diff-list label:hover,
+#inv-immediate label:hover,
+#inv-elective label:hover { border-color: #7C3AED !important; }
+
 @media (max-width: 640px) {
   /* Patient info 2-up grid on mobile */
   .pib-item { flex: 1 1 calc(50% - 8px); }
@@ -174,7 +179,6 @@
   .rx-actions-top .btn { width: 100%; justify-content: center; }
 
   /* Generate button area */
-  #generate-row { flex-direction: column; }
   #generate-row button { width: 100%; }
 }
 </style>
@@ -267,14 +271,88 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
         <!-- PII ok indicator -->
         <div id="pii-ok" class="pii-ok">Privacy check passed — no patient names detected ✓</div>
 
-        <div id="generate-row" style="display:flex; gap:10px; margin-top:12px; align-items:center;">
-          <button id="generate-btn" onclick="generatePrescription()" class="btn btn-primary btn-lg" style="flex:1;">
-            Generate Prescription with AI
-          </button>
-          <div id="loading-spinner" style="display:none; align-items:center; gap:8px; color:#6B7280; font-size:14px; flex-shrink:0;">
-            <div class="spinner" style="border-color:rgba(0,0,0,0.1); border-top-color:#2563EB;"></div>
-            Generating...
+        <!-- Action row: two-mode choice -->
+        <div id="generate-row" style="margin-top:12px;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="quick-btn" onclick="runQuickPrescribe()" class="btn btn-primary btn-lg" style="flex:1; min-width:180px;">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" style="vertical-align:-3px; margin-right:6px;"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+              Quick Prescribe
+            </button>
+            <button id="diff-btn" onclick="runDifferentials()" class="btn btn-secondary btn-lg" style="flex:1; min-width:180px; border-color:#7C3AED; color:#7C3AED;">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" style="vertical-align:-3px; margin-right:6px;"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+              Differential Dx
+            </button>
           </div>
+          <div style="font-size:12px; color:#9CA3AF; margin-top:8px; line-height:1.5;">
+            <strong>Quick Prescribe</strong> — go straight to prescription &nbsp;·&nbsp;
+            <strong>Differential Dx</strong> — AI ranks diagnoses → investigations → prescription
+          </div>
+        </div>
+
+        <!-- Loading indicator (shared) -->
+        <div id="loading-spinner" style="display:none; align-items:center; gap:10px; color:#6B7280; font-size:14px; margin-top:14px;">
+          <div class="spinner" style="border-color:rgba(0,0,0,0.1); border-top-color:#7C3AED;"></div>
+          <span id="loading-msg">Thinking…</span>
+        </div>
+      </div>
+
+      <!-- ── Step 1: Differential Diagnoses ─────────────────────── -->
+      <div id="diff-card" class="card" style="display:none; margin-bottom:16px; border:2px solid #7C3AED20; background:#FAFAFF;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+          <div>
+            <div style="font-size:11px; font-weight:700; color:#7C3AED; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">Step 1 of 3 — Differential Diagnosis</div>
+            <div style="font-size:15px; font-weight:600; color:#1E1B4B;">Select the most likely diagnosis</div>
+          </div>
+          <button onclick="resetToNotes()" style="font-size:12px; color:#9CA3AF; background:none; border:none; cursor:pointer;">← Back</button>
+        </div>
+        <div id="diff-error" class="alert alert-error" style="display:none; margin-bottom:12px;"></div>
+        <div id="diff-list" style="display:flex; flex-direction:column; gap:10px;"></div>
+        <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="proceed-investigations-btn" onclick="runInvestigations()" class="btn btn-lg" style="flex:1; background:#7C3AED; color:#fff; min-width:180px;" disabled>
+            Get Investigations →
+          </button>
+          <button onclick="runQuickPrescribeFromDiff()" class="btn btn-secondary" style="flex:1; min-width:160px;">
+            Skip — Prescribe Directly
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 2: Investigations ──────────────────────────────── -->
+      <div id="inv-card" class="card" style="display:none; margin-bottom:16px; border:2px solid #059669; background:#F0FDF4;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+          <div>
+            <div style="font-size:11px; font-weight:700; color:#059669; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">Step 2 of 3 — Investigations</div>
+            <div style="font-size:15px; font-weight:600; color:#14532D;">Tick tests to order, then proceed</div>
+          </div>
+          <div style="font-size:13px; background:#DCFCE7; color:#166534; border-radius:20px; padding:4px 12px; font-weight:600;" id="inv-diagnosis-badge"></div>
+        </div>
+        <div id="inv-error" class="alert alert-error" style="display:none; margin-bottom:12px;"></div>
+
+        <!-- Immediate investigations -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:12px; font-weight:700; color:#DC2626; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+            <span style="width:8px;height:8px;background:#DC2626;border-radius:50%;display:inline-block;"></span>
+            Immediate
+          </div>
+          <div id="inv-immediate" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+
+        <!-- Elective investigations -->
+        <div>
+          <div style="font-size:12px; font-weight:700; color:#2563EB; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+            <span style="width:8px;height:8px;background:#2563EB;border-radius:50%;display:inline-block;"></span>
+            Elective
+          </div>
+          <div id="inv-elective" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+
+        <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button onclick="proceedToPrescription()" class="btn btn-success btn-lg" style="flex:1; min-width:180px;">
+            Generate Prescription →
+          </button>
+          <button onclick="showStep(1)" class="btn btn-secondary">
+            ← Back to Diagnoses
+          </button>
         </div>
       </div>
 
@@ -418,6 +496,8 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
      data-patient-gender="{{ patient.gender }}"
      data-save-url="/rx/save/{{ visit.id }}/"
      data-generate-url="/rx/generate/"
+     data-differentials-url="/rx/differentials/"
+     data-investigations-url="/rx/investigations/"
      style="display:none;"></div>
 
 {% endblock %}
@@ -425,6 +505,12 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
 {% block extra_js %}
 <script>
 const visitData = document.getElementById('visit-data').dataset;
+
+// Workflow state
+let _differentials = [];       // from Step 1 API
+let _selectedDiagnosis = null; // chosen by doctor
+let _investigations = {};      // from Step 2 API
+let _currentStep = 0;          // 0=notes, 1=differentials, 2=investigations, 3=prescription
 
 function getCsrfToken() {
   return document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
@@ -465,32 +551,69 @@ function detectPossibleNames(text) {
   return [...new Set(candidates)];
 }
 
-// ── Generate ───────────────────────────────────────────────────
-async function generatePrescription(force) {
-  const note = document.getElementById('clinical-note').value.trim();
-  if (!note) { alert('Please enter clinical notes before generating.'); return; }
+// ── Helpers ─────────────────────────────────────────────────────
+function getNote() { return document.getElementById('clinical-note').value.trim(); }
 
+function checkPii(note, force, callback) {
   const piiWarning = document.getElementById('pii-warning');
   const piiOk = document.getElementById('pii-ok');
-
   if (!force) {
     const suspects = detectPossibleNames(note);
     if (suspects.length > 0) {
       document.getElementById('pii-detected-words').textContent = suspects.slice(0, 5).join(', ');
       piiWarning.style.display = 'block';
       piiOk.style.display = 'none';
-      return;
+      return false;
     }
-    // Check passed — show green badge
     piiWarning.style.display = 'none';
     piiOk.style.display = 'block';
   } else {
     piiWarning.style.display = 'none';
     piiOk.style.display = 'none';
   }
+  return true;
+}
 
-  document.getElementById('generate-btn').disabled = true;
-  document.getElementById('loading-spinner').style.display = 'flex';
+function setLoading(on, msg) {
+  const el = document.getElementById('loading-spinner');
+  if (on) {
+    document.getElementById('loading-msg').textContent = msg || 'Thinking…';
+    el.style.display = 'flex';
+    document.getElementById('quick-btn').disabled = true;
+    document.getElementById('diff-btn').disabled = true;
+  } else {
+    el.style.display = 'none';
+    document.getElementById('quick-btn').disabled = false;
+    document.getElementById('diff-btn').disabled = false;
+  }
+}
+
+function showStep(n) {
+  _currentStep = n;
+  document.getElementById('diff-card').style.display = n === 1 ? 'block' : 'none';
+  document.getElementById('inv-card').style.display  = n === 2 ? 'block' : 'none';
+  document.getElementById('rx-output').style.display = n === 3 ? 'block' : 'none';
+  if (n > 0) {
+    const target = n === 1 ? 'diff-card' : n === 2 ? 'inv-card' : 'rx-output';
+    document.getElementById(target).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function resetToNotes() {
+  showStep(0);
+  document.getElementById('rx-card').style.display = 'none';
+  document.getElementById('rx-error').style.display = 'none';
+  document.getElementById('limit-gate').style.display = 'none';
+}
+
+// ── Quick Prescribe (existing flow) ─────────────────────────────
+async function runQuickPrescribe(force) {
+  const note = getNote();
+  if (!note) { alert('Please enter clinical notes before generating.'); return; }
+  if (!checkPii(note, force)) return;
+
+  setLoading(true, 'Generating prescription…');
+  showStep(0);
   document.getElementById('rx-output').style.display = 'block';
   document.getElementById('rx-error').style.display = 'none';
   document.getElementById('rx-card').style.display = 'none';
@@ -500,15 +623,15 @@ async function generatePrescription(force) {
     const resp = await fetch(visitData.generateUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-      body: JSON.stringify({
-        clinical_note: note,
-        age: parseInt(visitData.patientAge) || 0,
-        gender: visitData.patientGender,
-      }),
+      body: JSON.stringify({ clinical_note: note, age: parseInt(visitData.patientAge) || 0, gender: visitData.patientGender }),
     });
     const data = await resp.json();
     if (data.ok) {
+      _differentials = [];
+      _selectedDiagnosis = null;
+      _investigations = {};
       renderPrescription(data.prescription);
+      showStep(3);
     } else if (data.limit_reached) {
       showLimitGate(data.count, data.limit);
     } else {
@@ -517,8 +640,219 @@ async function generatePrescription(force) {
   } catch (e) {
     showError('Network error. Please check your connection and try again.');
   } finally {
-    document.getElementById('generate-btn').disabled = false;
-    document.getElementById('loading-spinner').style.display = 'none';
+    setLoading(false);
+  }
+}
+
+// Alias kept for PII "send anyway" button
+function generatePrescription(force) { runQuickPrescribe(force); }
+
+// ── Step 1: Differential Diagnoses ──────────────────────────────
+async function runDifferentials(force) {
+  const note = getNote();
+  if (!note) { alert('Please enter clinical notes before generating.'); return; }
+  if (!checkPii(note, force)) return;
+
+  setLoading(true, 'Analysing differentials…');
+  document.getElementById('diff-error').style.display = 'none';
+  document.getElementById('diff-list').innerHTML = '';
+  document.getElementById('proceed-investigations-btn').disabled = true;
+  _selectedDiagnosis = null;
+
+  try {
+    const resp = await fetch(visitData.differentialsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({ clinical_note: note, age: parseInt(visitData.patientAge) || 0, gender: visitData.patientGender }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      _differentials = data.differentials || [];
+      renderDifferentials(_differentials);
+      showStep(1);
+    } else {
+      document.getElementById('diff-error').textContent = data.error || 'Could not generate differentials.';
+      document.getElementById('diff-error').style.display = 'block';
+      showStep(1);
+    }
+  } catch (e) {
+    document.getElementById('diff-error').textContent = 'Network error. Please try again.';
+    document.getElementById('diff-error').style.display = 'block';
+    showStep(1);
+  } finally {
+    setLoading(false);
+  }
+}
+
+const PROB_STYLE = {
+  High:   { bg: '#FEF2F2', border: '#FECACA', dot: '#DC2626', text: '#991B1B' },
+  Medium: { bg: '#FFFBEB', border: '#FDE68A', dot: '#D97706', text: '#92400E' },
+  Low:    { bg: '#F0FDF4', border: '#BBF7D0', dot: '#16A34A', text: '#14532D' },
+};
+
+function renderDifferentials(list) {
+  const container = document.getElementById('diff-list');
+  container.innerHTML = '';
+  list.forEach((d, i) => {
+    const s = PROB_STYLE[d.probability] || PROB_STYLE.Low;
+    const id = `diff-radio-${i}`;
+    const div = document.createElement('label');
+    div.htmlFor = id;
+    div.style.cssText = `display:block; cursor:pointer; border:2px solid ${s.border}; border-radius:12px; padding:14px 16px; background:${s.bg}; transition:border-color 0.15s;`;
+    div.innerHTML = `
+      <div style="display:flex; align-items:flex-start; gap:12px;">
+        <input type="radio" name="diff-choice" id="${id}" value="${esc(d.diagnosis)}"
+          style="margin-top:4px; accent-color:#7C3AED; width:16px; height:16px; flex-shrink:0;"
+          onchange="onDiffSelect('${esc(d.diagnosis)}')">
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+            <span style="font-size:11px; font-weight:700; color:#9CA3AF;">#${d.rank}</span>
+            <span style="font-size:15px; font-weight:700; color:#1E1B4B;">${esc(d.diagnosis)}</span>
+            <span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; background:${s.bg}; color:${s.text}; border:1px solid ${s.border};">
+              <span style="width:6px;height:6px;background:${s.dot};border-radius:50%;display:inline-block;margin-right:4px;vertical-align:1px;"></span>${d.probability}
+            </span>
+          </div>
+          <div style="font-size:13px; color:#374151; line-height:1.5; margin-bottom:${d.red_flags ? '6px' : '0'};">${esc(d.reasoning)}</div>
+          ${d.red_flags ? `<div style="font-size:12px; color:#B91C1C; background:#FEF2F2; border-radius:6px; padding:4px 8px; display:inline-block;">⚠ ${esc(d.red_flags)}</div>` : ''}
+        </div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function onDiffSelect(diagnosis) {
+  _selectedDiagnosis = diagnosis;
+  document.getElementById('proceed-investigations-btn').disabled = false;
+  // Highlight selected card
+  document.querySelectorAll('#diff-list label').forEach(lbl => {
+    const radio = lbl.querySelector('input[type=radio]');
+    lbl.style.borderColor = radio.checked ? '#7C3AED' : '';
+    lbl.style.boxShadow   = radio.checked ? '0 0 0 3px rgba(124,58,237,0.12)' : '';
+  });
+}
+
+function runQuickPrescribeFromDiff() {
+  // Proceed directly to prescription using selected diagnosis as context
+  runQuickPrescribe(true);
+}
+
+// ── Step 2: Investigations ───────────────────────────────────────
+async function runInvestigations() {
+  if (!_selectedDiagnosis) return;
+  const note = getNote();
+
+  setLoading(true, 'Fetching investigations…');
+  document.getElementById('inv-error').style.display = 'none';
+  document.getElementById('inv-immediate').innerHTML = '';
+  document.getElementById('inv-elective').innerHTML = '';
+  document.getElementById('inv-diagnosis-badge').textContent = _selectedDiagnosis;
+
+  try {
+    const resp = await fetch(visitData.investigationsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({
+        selected_diagnosis: _selectedDiagnosis,
+        clinical_note: note,
+        age: parseInt(visitData.patientAge) || 0,
+        gender: visitData.patientGender,
+      }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      _investigations = data.investigations || {};
+      renderInvestigations(_investigations);
+      showStep(2);
+    } else {
+      document.getElementById('inv-error').textContent = data.error || 'Could not load investigations.';
+      document.getElementById('inv-error').style.display = 'block';
+      showStep(2);
+    }
+  } catch (e) {
+    document.getElementById('inv-error').textContent = 'Network error. Please try again.';
+    document.getElementById('inv-error').style.display = 'block';
+    showStep(2);
+  } finally {
+    setLoading(false);
+  }
+}
+
+const AVAIL_STYLE = {
+  'Available in primary care': { bg: '#F0FDF4', color: '#166534' },
+  'Requires lab':              { bg: '#EFF6FF', color: '#1D4ED8' },
+  'Tertiary care only':        { bg: '#FEF3C7', color: '#92400E' },
+};
+
+function renderInvItem(item, container) {
+  const av = AVAIL_STYLE[item.availability] || { bg: '#F3F4F6', color: '#374151' };
+  const id = `inv-${Math.random().toString(36).slice(2)}`;
+  const div = document.createElement('label');
+  div.htmlFor = id;
+  div.style.cssText = 'display:flex; align-items:flex-start; gap:10px; background:#fff; border:1px solid rgba(0,0,0,0.08); border-radius:10px; padding:12px 14px; cursor:pointer; transition:border-color 0.15s;';
+  div.innerHTML = `
+    <input type="checkbox" id="${id}" checked style="margin-top:3px; accent-color:#059669; width:16px; height:16px; flex-shrink:0;">
+    <div style="flex:1;">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:3px;">
+        <span style="font-size:14px; font-weight:600; color:#111827;">${esc(item.name)}</span>
+        <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:${av.bg}; color:${av.color};">${esc(item.availability)}</span>
+      </div>
+      <div style="font-size:12px; color:#6B7280; line-height:1.4;">${esc(item.purpose)}</div>
+    </div>
+  `;
+  container.appendChild(div);
+}
+
+function renderInvestigations(inv) {
+  const immContainer = document.getElementById('inv-immediate');
+  const elcContainer = document.getElementById('inv-elective');
+  (inv.immediate || []).forEach(item => renderInvItem(item, immContainer));
+  (inv.elective   || []).forEach(item => renderInvItem(item, elcContainer));
+  if (!inv.immediate?.length) immContainer.innerHTML = '<div style="font-size:13px; color:#9CA3AF; padding:8px 0;">None required immediately</div>';
+  if (!inv.elective?.length)  elcContainer.innerHTML = '<div style="font-size:13px; color:#9CA3AF; padding:8px 0;">None required</div>';
+}
+
+// Step 2 → Step 3: Generate prescription using confirmed diagnosis
+async function proceedToPrescription() {
+  const note = getNote();
+  // Build a richer clinical note that includes the confirmed diagnosis context
+  const enrichedNote = _selectedDiagnosis
+    ? `Confirmed diagnosis: ${_selectedDiagnosis}. ${note}`
+    : note;
+
+  setLoading(true, 'Generating prescription…');
+  document.getElementById('rx-error').style.display = 'none';
+  document.getElementById('rx-card').style.display = 'none';
+  document.getElementById('limit-gate').style.display = 'none';
+
+  try {
+    const resp = await fetch(visitData.generateUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({
+        clinical_note: enrichedNote,
+        age: parseInt(visitData.patientAge) || 0,
+        gender: visitData.patientGender,
+      }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      // Pre-fill diagnosis with confirmed choice
+      data.prescription.diagnosis = data.prescription.diagnosis || _selectedDiagnosis;
+      renderPrescription(data.prescription);
+      showStep(3);
+    } else if (data.limit_reached) {
+      showLimitGate(data.count, data.limit);
+      showStep(3);
+    } else {
+      showError(data.error || 'Something went wrong. Please try again.');
+      showStep(3);
+    }
+  } catch (e) {
+    showError('Network error. Please check your connection and try again.');
+    showStep(3);
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -738,7 +1072,13 @@ async function savePrescription() {
     const resp = await fetch(visitData.saveUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-      body: JSON.stringify({ raw_clinical_note: note, prescription: rx }),
+      body: JSON.stringify({
+        raw_clinical_note: note,
+        prescription: rx,
+        differential_diagnoses: _differentials.length ? _differentials : null,
+        investigations: Object.keys(_investigations).length ? _investigations : null,
+        selected_diagnosis: _selectedDiagnosis || '',
+      }),
     });
     const data = await resp.json();
     if (data.ok) {

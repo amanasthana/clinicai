@@ -26,6 +26,10 @@ class Prescription(models.Model):
     patient_summary_en = models.TextField(blank=True)
     patient_summary_hi = models.TextField(blank=True)
     follow_up_date = models.DateField(null=True, blank=True)
+    # Differential diagnosis workflow fields
+    differential_diagnoses = models.JSONField(null=True, blank=True)  # [{rank, diagnosis, probability, reasoning, red_flags}]
+    investigations = models.JSONField(null=True, blank=True)          # {immediate: [...], elective: [...]}
+    selected_diagnosis = models.CharField(max_length=500, blank=True) # doctor's confirmed choice from differentials
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -20,7 +20,7 @@ import logging
 from django.conf import settings
 from anthropic import Anthropic
 
-from .prompts import PRESCRIPTION_SYSTEM_PROMPT
+from .prompts import PRESCRIPTION_SYSTEM_PROMPT, DIFFERENTIAL_SYSTEM_PROMPT, INVESTIGATIONS_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -97,3 +97,74 @@ def generate_prescription(raw_note: str, patient_age: int, patient_gender: str) 
 
     logger.info("Claude API returned prescription successfully")
     return prescription_data
+
+
+def get_differentials(raw_note: str, patient_age: int, patient_gender: str) -> dict:
+    """
+    Step 1 of differential workflow.
+    Returns ranked list of differential diagnoses with probability and reasoning.
+
+    Args:
+        raw_note: Doctor's raw clinical text (will be de-identified)
+        patient_age: Patient age
+        patient_gender: 'M', 'F', or 'O'
+
+    Returns:
+        dict with key: differentials (list of ranked diagnosis objects)
+    """
+    safe_note = deidentify_clinical_note(raw_note)
+    gender_text = {'M': 'M', 'F': 'F', 'O': 'NB'}.get(patient_gender, '')
+    clinical_input = f"{patient_age}{gender_text}, {safe_note}"
+
+    logger.info("Calling Claude API for differential diagnosis (de-identified)")
+
+    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    response = client.messages.create(
+        model='claude-haiku-4-5-20251001',
+        max_tokens=1000,
+        system=DIFFERENTIAL_SYSTEM_PROMPT,
+        messages=[{'role': 'user', 'content': clinical_input}],
+    )
+
+    result_text = response.content[0].text.replace('```json', '').replace('```', '').strip()
+    data = json.loads(result_text)
+    logger.info("Claude returned %d differentials", len(data.get('differentials', [])))
+    return data
+
+
+def get_investigations(selected_diagnosis: str, raw_note: str, patient_age: int, patient_gender: str) -> dict:
+    """
+    Step 2 of differential workflow.
+    Returns investigations split into Immediate and Elective with availability context.
+
+    Args:
+        selected_diagnosis: Diagnosis chosen by doctor in Step 1
+        raw_note: Doctor's raw clinical text (will be de-identified)
+        patient_age: Patient age
+        patient_gender: 'M', 'F', or 'O'
+
+    Returns:
+        dict with keys: diagnosis, investigations (immediate + elective lists)
+    """
+    safe_note = deidentify_clinical_note(raw_note)
+    gender_text = {'M': 'M', 'F': 'F', 'O': 'NB'}.get(patient_gender, '')
+    clinical_input = (
+        f"Confirmed diagnosis: {selected_diagnosis}\n"
+        f"Patient: {patient_age}{gender_text}\n"
+        f"Clinical note: {safe_note}"
+    )
+
+    logger.info("Calling Claude API for investigations (diagnosis: %s)", selected_diagnosis)
+
+    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    response = client.messages.create(
+        model='claude-haiku-4-5-20251001',
+        max_tokens=1000,
+        system=INVESTIGATIONS_SYSTEM_PROMPT,
+        messages=[{'role': 'user', 'content': clinical_input}],
+    )
+
+    result_text = response.content[0].text.replace('```json', '').replace('```', '').strip()
+    data = json.loads(result_text)
+    logger.info("Claude returned investigations for: %s", selected_diagnosis)
+    return data
