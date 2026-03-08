@@ -84,6 +84,76 @@
 /* RX action buttons */
 .rx-actions { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--color-border); }
 
+/* ── Voice dictation ── */
+.voice-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.mic-btn {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: none;
+  background: #F3F4F6;
+  color: #6B7280;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.mic-btn:hover { background: #E5E7EB; color: #374151; }
+.mic-btn:active { transform: scale(0.93); }
+.mic-btn.recording {
+  background: #EF4444;
+  color: #fff;
+  animation: mic-pulse 1.4s ease-out infinite;
+}
+@keyframes mic-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.45); }
+  70%  { box-shadow: 0 0 0 11px rgba(239,68,68,0); }
+  100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
+.voice-status {
+  font-size: 13px;
+  color: #9CA3AF;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+}
+.voice-status.active { color: #EF4444; font-weight: 500; }
+.voice-dot {
+  width: 5px; height: 5px;
+  background: #EF4444;
+  border-radius: 50%;
+  display: inline-block;
+  animation: vdot 1.2s ease-in-out infinite;
+}
+.voice-dot:nth-child(2) { animation-delay: 0.2s; }
+.voice-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes vdot {
+  0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
+  40%          { transform: scale(1);   opacity: 1; }
+}
+.voice-interim {
+  margin-top: 6px;
+  min-height: 0;
+  max-height: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: #9CA3AF;
+  font-style: italic;
+  line-height: 1.5;
+  transition: max-height 0.2s ease, opacity 0.2s;
+  opacity: 0;
+}
+.voice-interim.visible {
+  max-height: 60px;
+  opacity: 1;
+}
+
 @media (max-width: 640px) {
   /* Patient info 2-up grid on mobile */
   .pib-item { flex: 1 1 calc(50% - 8px); }
@@ -166,6 +236,20 @@
 E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add glimepiride 1mg OD before breakfast, check HbA1c after 3 months, diet advice"
           style="resize:vertical; font-size:15px; line-height:1.6;"
         >{% if existing_rx %}{{ existing_rx.raw_clinical_note }}{% endif %}</textarea>
+
+        <!-- Voice dictation bar -->
+        <div class="voice-bar" id="voice-bar" style="display:none;">
+          <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoice()" title="Dictate clinical notes">
+            <!-- mic icon -->
+            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V21h-2v-5.07z"/>
+            </svg>
+          </button>
+          <div>
+            <div class="voice-status" id="voice-status">Tap to dictate</div>
+            <div class="voice-interim" id="voice-interim"></div>
+          </div>
+        </div>
 
         <!-- PII warning -->
         <div id="pii-warning" style="display:none; margin-top:10px; background:#FEF3C7; border:1px solid #FCD34D; border-radius:10px; padding:12px 14px;">
@@ -548,6 +632,99 @@ function showLimitGate(count, limit) {
   document.getElementById('gate-count').textContent = count;
   document.getElementById('limit-gate').style.display = 'block';
 }
+
+// ── Voice dictation ────────────────────────────────────────────
+(function initVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const bar = document.getElementById('voice-bar');
+  if (!SR) return;  // silently hide on unsupported browsers
+  bar.style.display = 'flex';
+
+  const recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-IN';
+  recognition.maxAlternatives = 1;
+
+  let active = false;
+  let baseText = '';   // text in textarea before session started
+  let finalText = '';  // confirmed words this session
+
+  const micBtn    = document.getElementById('mic-btn');
+  const statusEl  = document.getElementById('voice-status');
+  const interimEl = document.getElementById('voice-interim');
+  const textarea  = document.getElementById('clinical-note');
+
+  function setUI(recording) {
+    if (recording) {
+      micBtn.classList.add('recording');
+      statusEl.className = 'voice-status active';
+      statusEl.innerHTML = 'Listening <span class="voice-dot"></span><span class="voice-dot"></span><span class="voice-dot"></span>';
+    } else {
+      micBtn.classList.remove('recording');
+      statusEl.className = 'voice-status';
+      statusEl.textContent = 'Tap to dictate';
+      interimEl.textContent = '';
+      interimEl.classList.remove('visible');
+    }
+  }
+
+  recognition.onstart = () => setUI(true);
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalText += e.results[i][0].transcript;
+        // add a space between sentences if needed
+        if (finalText && !finalText.endsWith(' ')) finalText += ' ';
+      } else {
+        interim = e.results[i][0].transcript;
+      }
+    }
+    // Update textarea with base + confirmed + current interim
+    const sep = baseText && !baseText.endsWith(' ') ? ' ' : '';
+    textarea.value = baseText + (baseText ? sep : '') + finalText;
+
+    // Show interim below mic as ghost preview
+    if (interim) {
+      interimEl.textContent = interim + '…';
+      interimEl.classList.add('visible');
+    } else {
+      interimEl.textContent = '';
+      interimEl.classList.remove('visible');
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === 'no-speech') return; // user paused — keep listening
+    if (e.error === 'aborted') return;
+    active = false;
+    setUI(false);
+  };
+
+  recognition.onend = () => {
+    // Auto-restart while active (handles iOS stopping after silence)
+    if (active) {
+      try { recognition.start(); } catch (_) {}
+    } else {
+      setUI(false);
+    }
+  };
+
+  window.toggleVoice = function() {
+    if (active) {
+      active = false;
+      recognition.stop();
+      setUI(false);
+    } else {
+      baseText = textarea.value.trim();
+      finalText = '';
+      active = true;
+      try { recognition.start(); } catch (_) {}
+    }
+  };
+})();
 
 // ── Save ───────────────────────────────────────────────────────
 async function savePrescription() {
