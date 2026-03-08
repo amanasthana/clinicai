@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ patient.full_name }} — ClinicAI{% endblock %}
+{% block nav_reception %}active{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <a href="/" style="font-size:14px; color:#6B7280; text-decoration:none;">&larr; Back to Dashboard</a>
+
+  <!-- Patient card -->
+  <div class="card" style="margin-top:16px; margin-bottom:20px;">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <!-- Avatar -->
+        <div style="width:56px; height:56px; border-radius:50%; background:#EFF6FF;
+                    display:flex; align-items:center; justify-content:center;
+                    font-size:22px; font-weight:700; color:#2563EB; flex-shrink:0;">
+          {{ patient.full_name|first|upper }}
+        </div>
+        <div>
+          <h1 style="font-size:22px; font-weight:700; margin:0; letter-spacing:-0.3px;">
+            {{ patient.full_name }}
+          </h1>
+          <div style="font-size:14px; color:#6B7280; margin-top:4px;">
+            {% if patient.age %}{{ patient.age }} yrs{% endif %}
+            {% if patient.gender %} · {{ patient.gender_display }}{% endif %}
+            {% if patient.blood_group %} · {{ patient.blood_group }}{% endif %}
+            · {{ patient.phone }}
+          </div>
+          {% if patient.allergies %}
+          <div style="margin-top:8px;">
+            <span style="background:#FEF3C7; color:#92400E; font-size:12px; padding:3px 10px;
+                         border-radius:6px; font-weight:500;">
+              ⚠ Allergic to: {{ patient.allergies }}
+            </span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex; flex-direction:column; gap:10px; align-items:flex-end;">
+        <a href="/patient/{{ patient.id }}/edit/" class="btn btn-secondary btn-sm">Edit Profile</a>
+        <form method="post">
+          {% csrf_token %}
+          <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+            {{ quick_form.chief_complaint }}
+            <button type="submit" class="btn btn-primary" style="white-space:nowrap;">
+              + Add to Today's Queue
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if patient.notes %}
+    <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--color-border);">
+      <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:4px;">NOTES</div>
+      <div style="font-size:14px; color:#374151;">{{ patient.notes }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Visit history -->
+  <div style="font-size:16px; font-weight:600; margin-bottom:12px;">Visit History</div>
+
+  {% for visit in visits %}
+  <div class="card" style="margin-bottom:10px;">
+    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div class="token-badge token-badge-{{ visit.status }}" style="width:40px; height:40px; font-size:16px;">
+        {{ visit.token_number }}
+      </div>
+      <div style="flex:1;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="font-weight:600;">{{ visit.visit_date|date:"j M Y" }}</span>
+          <span class="status-pill status-{{ visit.status }}">{{ visit.get_status_display }}</span>
+        </div>
+        <div style="font-size:13px; color:#6B7280; margin-top:3px;">
+          {{ visit.chief_complaint|default:"No complaint noted" }}
+        </div>
+        {% if visit.vitals_bp or visit.vitals_temp %}
+        <div style="font-size:12px; color:#9CA3AF; margin-top:3px;">
+          {% if visit.vitals_bp %}BP: {{ visit.vitals_bp }}{% endif %}
+          {% if visit.vitals_temp %} · Temp: {{ visit.vitals_temp }}{% endif %}
+          {% if visit.vitals_weight %} · Wt: {{ visit.vitals_weight }}{% endif %}
+          {% if visit.vitals_spo2 %} · SpO2: {{ visit.vitals_spo2 }}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      <div style="display:flex; gap:6px;">
+        {% if visit.status != 'done' and visit.status != 'no_show' %}
+          <a href="/visit/{{ visit.id }}/" class="btn btn-secondary btn-sm">Vitals</a>
+        {% endif %}
+        {% if visit.status == 'done' %}
+          {% if visit.prescription %}
+            <a href="/rx/print/{{ visit.prescription.id }}/" class="btn btn-secondary btn-sm">
+              View Rx
+            </a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="card" style="text-align:center; color:#6B7280; padding:32px;">
+    No previous visits.
+  </div>
+  {% endfor %}
+
+</div>
+{% endblock %}

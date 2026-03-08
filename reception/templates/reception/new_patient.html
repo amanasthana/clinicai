@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Register Patient — ClinicAI{% endblock %}
+{% block nav_reception %}active{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width: 600px;">
+  <a href="/" style="font-size:14px; color:#6B7280; text-decoration:none;">&larr; Back to Dashboard</a>
+  <h1 class="page-title" style="margin-top:16px;">Register New Patient</h1>
+  <p class="page-subtitle">Fill in the details and the patient will be added to today's queue.</p>
+
+  <div id="token-success" style="display:none;" class="token-pop">
+    <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:16px; padding:32px; text-align:center; margin-bottom:20px;">
+      <div style="font-size:48px; font-weight:800; color:#059669;" id="token-number">—</div>
+      <div style="font-size:16px; color:#065F46; margin-top:8px; font-weight:500;">Token Assigned!</div>
+      <div style="font-size:14px; color:#6B7280; margin-top:4px;" id="token-patient-name"></div>
+    </div>
+  </div>
+
+  <div class="card" id="patient-form-card">
+    <form method="post" novalidate id="patient-form">
+      {% csrf_token %}
+
+      <!-- Required fields -->
+      <div class="form-group">
+        <label class="form-label">Full Name *</label>
+        {{ form.full_name }}
+        {% if form.full_name.errors %}<div class="form-error">{{ form.full_name.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="resp-grid-2" style="gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Phone Number *</label>
+          {{ form.phone }}
+          {% if form.phone.errors %}<div class="form-error">{{ form.phone.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Age</label>
+          {{ form.age }}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Gender</label>
+        <div style="display:flex; gap:16px; margin-top:8px;">
+          {% for radio in form.gender %}
+          <label style="display:flex; align-items:center; gap:6px; font-size:14px; cursor:pointer;">
+            {{ radio.tag }} {{ radio.choice_label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Chief Complaint (today's reason for visit)</label>
+        {{ form.chief_complaint }}
+      </div>
+
+      <!-- Optional section -->
+      <details style="margin-top:8px;">
+        <summary style="font-size:14px; color:#6B7280; cursor:pointer; padding:8px 0; user-select:none;">
+          + Additional details (optional)
+        </summary>
+        <div style="padding-top:16px;">
+          <div class="form-group">
+            <label class="form-label">Address</label>
+            {{ form.address }}
+          </div>
+          <div class="resp-grid-2" style="gap:12px;">
+            <div class="form-group">
+              <label class="form-label">Blood Group</label>
+              {{ form.blood_group }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Known Allergies</label>
+            {{ form.allergies }}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            {{ form.notes }}
+          </div>
+        </div>
+      </details>
+
+      <div style="margin-top:24px;">
+        <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">
+          Register &amp; Add to Queue
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

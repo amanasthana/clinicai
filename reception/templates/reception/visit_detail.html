@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Visit Vitals — ClinicAI{% endblock %}
+{% block nav_reception %}active{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:520px;">
+  <a href="/" style="font-size:14px; color:#6B7280; text-decoration:none;">&larr; Back to Dashboard</a>
+
+  <div style="margin-top:16px; margin-bottom:20px;">
+    <h1 class="page-title">Record Vitals</h1>
+    <p class="page-subtitle">Token #{{ visit.token_number }} · {{ visit.patient.full_name }}</p>
+  </div>
+
+  <div class="card">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="form-group">
+        <label class="form-label">Chief Complaint</label>
+        {{ form.chief_complaint }}
+      </div>
+
+      <hr class="divider">
+      <div style="font-size:13px; font-weight:500; color:#6B7280; margin-bottom:12px;">VITALS (optional)</div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Blood Pressure</label>
+          {{ form.vitals_bp }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Temperature (°F)</label>
+          {{ form.vitals_temp }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weight</label>
+          {{ form.vitals_weight }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">SpO2</label>
+          {{ form.vitals_spo2 }}
+        </div>
+      </div>
+
+      <div style="margin-top:8px; display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">Save Vitals</button>
+        <a href="/" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

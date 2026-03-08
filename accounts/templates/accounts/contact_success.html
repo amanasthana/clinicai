@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Message Sent — ClinicAI{% endblock %}
+
+{% block content %}
+<div style="min-height:80vh; display:flex; align-items:center; justify-content:center; padding:20px;">
+  <div style="max-width:440px; width:100%; text-align:center;">
+    <div style="font-size:56px; margin-bottom:16px;">✉️</div>
+    <h1 style="font-size:26px; font-weight:700; color:#111827; margin-bottom:10px;">Message received!</h1>
+    <p style="font-size:15px; color:#6B7280; line-height:1.7; margin-bottom:28px;">
+      Thanks for reaching out. We'll reply to your email within a few hours.
+    </p>
+    <a href="/accounts/login/" class="btn btn-secondary" style="width:100%;">Back to login page</a>
+  </div>
+</div>
+{% endblock %}

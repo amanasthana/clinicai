@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}ClinicAI — Smart Clinic OS for Indian Doctors{% endblock %}
+
+{% block content %}
+<style>
+.login-wrap {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  min-height: 100vh;
+}
+
+/* ── Left: marketing panel ── */
+.login-hero {
+  background: linear-gradient(145deg, #1E3A8A 0%, #2563EB 60%, #3B82F6 100%);
+  padding: 60px 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.login-hero::before {
+  content: '';
+  position: absolute;
+  top: -120px; right: -120px;
+  width: 420px; height: 420px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 50%;
+}
+.login-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -80px; left: -80px;
+  width: 300px; height: 300px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 50%;
+}
+
+.hero-brand {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  margin-bottom: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-brand-dot { color: #93C5FD; }
+
+.hero-headline {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  margin-bottom: 16px;
+}
+.hero-headline span { color: #93C5FD; }
+
+.hero-sub {
+  font-size: 16px;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.75);
+  max-width: 440px;
+  margin-bottom: 44px;
+}
+
+/* Feature list */
+.hero-features { display: flex; flex-direction: column; gap: 14px; margin-bottom: 52px; }
+.hero-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 15px;
+  color: rgba(255,255,255,0.9);
+  line-height: 1.4;
+}
+.hero-feature-icon {
+  width: 28px; height: 28px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Network stats */
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding-top: 32px;
+  border-top: 1px solid rgba(255,255,255,0.15);
+  position: relative;
+  z-index: 1;
+}
+.hero-stat-num {
+  font-size: 30px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.hero-stat-label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+/* ── Right: login panel ── */
+.login-form-panel {
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
+}
+.login-form-inner { width: 100%; max-width: 320px; }
+
+.login-form-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
+}
+.login-form-sub {
+  font-size: 14px;
+  color: #6B7280;
+  margin-bottom: 28px;
+}
+
+/* Mobile: stack vertically */
+@media (max-width: 768px) {
+  .login-wrap { grid-template-columns: 1fr; }
+  .login-hero {
+    padding: 40px 24px 36px;
+    min-height: auto;
+  }
+  .login-hero::before, .login-hero::after { display: none; }
+  .hero-headline { font-size: 26px; }
+  .hero-sub { font-size: 14px; margin-bottom: 28px; }
+  .hero-features { gap: 10px; margin-bottom: 28px; }
+  .hero-stats { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .hero-stat-num { font-size: 24px; }
+  .login-form-panel { padding: 36px 24px; }
+  .login-form-inner { max-width: 100%; }
+}
+</style>
+
+<div class="login-wrap">
+
+  <!-- ── Left: marketing hero ── -->
+  <div class="login-hero">
+    <div class="hero-brand">
+      ClinicAI<span class="hero-brand-dot">.</span>
+    </div>
+
+    <div class="hero-headline">
+      The smart OS for<br><span>Indian clinics</span>
+    </div>
+    <div class="hero-sub">
+      Built for busy doctors seeing 40–80 patients a day. Paperless queue, AI prescriptions, and WhatsApp summaries — all in one place.
+    </div>
+
+    <div class="hero-features">
+      <div class="hero-feature">
+        <div class="hero-feature-icon">🏥</div>
+        <div><strong>Smart Reception</strong> — digital queue, patient records, and vitals. No more paper registers.</div>
+      </div>
+      <div class="hero-feature">
+        <div class="hero-feature-icon">🤖</div>
+        <div><strong>AI Prescriptions</strong> — type a brief note; get a structured SOAP note, medicines, and patient summary in seconds.</div>
+      </div>
+      <div class="hero-feature">
+        <div class="hero-feature-icon">📲</div>
+        <div><strong>WhatsApp-ready</strong> — patient gets their prescription summary in English &amp; Hindi, directly on WhatsApp.</div>
+      </div>
+      <div class="hero-feature">
+        <div class="hero-feature-icon">🔒</div>
+        <div><strong>Private by design</strong> — patient PII is never sent to any AI. De-identified before every API call.</div>
+      </div>
+    </div>
+
+    <!-- Network stats -->
+    <div class="hero-stats">
+      <div>
+        <div class="hero-stat-num">7</div>
+        <div class="hero-stat-label">Clinics on network</div>
+      </div>
+      <div>
+        <div class="hero-stat-num">2,400+</div>
+        <div class="hero-stat-label">Patients managed</div>
+      </div>
+      <div>
+        <div class="hero-stat-num">₹0</div>
+        <div class="hero-stat-label">To get started</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: login form ── -->
+  <div class="login-form-panel">
+    <div class="login-form-inner">
+
+      <div class="login-form-title">Welcome back</div>
+      <div class="login-form-sub">Sign in to your clinic dashboard</div>
+
+      {% if form.errors %}
+      <div class="alert alert-error" style="margin-bottom:20px;">
+        Invalid username or password. Please try again.
+      </div>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <div class="form-group">
+          <label class="form-label" for="{{ form.username.id_for_label }}">Username</label>
+          {{ form.username }}
+        </div>
+
+        <div class="form-group" style="margin-bottom: 24px;">
+          <label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
+          {{ form.password }}
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; font-size: 15px;">
+          Sign In →
+        </button>
+      </form>
+
+      <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--color-border); text-align: center;">
+        <div style="font-size: 12px; color: #9CA3AF; line-height: 1.6; margin-bottom: 8px;">
+          New clinic?
+        </div>
+        <a href="/accounts/register/" class="btn btn-secondary" style="width: 100%; display: block; font-size: 13px; margin-bottom: 8px;">
+          Register your clinic →
+        </a>
+        <a href="/accounts/contact/" style="display: block; text-align: center; font-size: 12px; color: #9CA3AF; text-decoration: none; margin-top: 4px;">
+          Have a question? Get in touch →
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

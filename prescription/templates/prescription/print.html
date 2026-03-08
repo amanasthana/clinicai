@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prescription — {{ patient.full_name }}</title>
+  <!--
+    Print prescription: NO external resources loaded for privacy.
+    All CSS is inline. A5 format (148mm × 210mm), standard Indian prescription.
+  -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 12px;
+      color: #111827;
+      background: #F9FAFB;
+      line-height: 1.5;
+    }
+
+    .print-wrapper {
+      max-width: 560px;
+      margin: 20px auto;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    /* Clinic header */
+    .clinic-header {
+      background: #2563EB;
+      color: #ffffff;
+      padding: 20px 24px 16px;
+    }
+    .clinic-name {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .clinic-meta {
+      font-size: 12px;
+      opacity: 0.85;
+      margin-top: 4px;
+    }
+    .doctor-line {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.2);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .doctor-qual {
+      font-size: 11px;
+      opacity: 0.8;
+      font-weight: 400;
+    }
+
+    /* Patient info */
+    .patient-section {
+      padding: 14px 24px;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      background: #F9FAFB;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .patient-name { font-size: 15px; font-weight: 700; color: #111827; }
+    .patient-meta { font-size: 12px; color: #6B7280; margin-top: 3px; }
+    .rx-date { font-size: 12px; color: #6B7280; text-align: right; }
+
+    /* Body */
+    .rx-body { padding: 20px 24px; }
+
+    /* Rx symbol */
+    .rx-symbol {
+      font-size: 28px;
+      font-weight: 700;
+      color: #2563EB;
+      font-style: italic;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    /* Diagnosis */
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #9CA3AF;
+      margin-bottom: 4px;
+    }
+    .diagnosis-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 18px;
+    }
+
+    /* Medicines table */
+    .med-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 12px;
+    }
+    .med-table th {
+      text-align: left;
+      padding: 6px 8px;
+      background: #F3F4F6;
+      color: #6B7280;
+      font-weight: 500;
+      font-size: 11px;
+    }
+    .med-table td {
+      padding: 9px 8px;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      color: #374151;
+      vertical-align: top;
+    }
+    .med-num { color: #9CA3AF; width: 24px; }
+    .drug-name { font-weight: 600; color: #111827; }
+    .dosage-mono { font-family: 'Courier New', monospace; font-size: 11px; }
+
+    /* Advice */
+    .advice-box {
+      background: #F0FDF4;
+      border: 1px solid #BBF7D0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+
+    /* Follow-up */
+    .followup-box {
+      background: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #1E40AF;
+      font-weight: 500;
+      margin-bottom: 18px;
+    }
+
+    /* Signature */
+    .signature-section {
+      display: flex;
+      justify-content: flex-end;
+      padding-top: 12px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+    .signature-box { text-align: center; }
+    .signature-line {
+      width: 140px;
+      border-bottom: 1px solid #374151;
+      margin-bottom: 4px;
+      height: 28px;
+    }
+    .signature-label { font-size: 11px; color: #6B7280; }
+
+    /* Patient summary (Hindi) */
+    .patient-summary {
+      background: #FFF7ED;
+      border: 1px solid #FED7AA;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+    .summary-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #C2410C;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+    .summary-en { font-size: 12px; color: #7C2D12; line-height: 1.6; margin-bottom: 10px; }
+    .summary-hi {
+      font-family: 'Noto Sans Devanagari', sans-serif;
+      font-size: 13px;
+      color: #7C2D12;
+      line-height: 1.9;
+    }
+
+    /* Footer */
+    .rx-footer {
+      padding: 12px 24px;
+      background: #F9FAFB;
+      border-top: 1px solid rgba(0,0,0,0.06);
+      font-size: 11px;
+      color: #9CA3AF;
+      text-align: center;
+    }
+
+    /* Screen-only controls */
+    .screen-controls {
+      max-width: 560px;
+      margin: 16px auto;
+      display: flex;
+      gap: 10px;
+      padding: 0 14px;
+      flex-wrap: wrap;
+    }
+    .btn-print {
+      background: #2563EB;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-back {
+      background: #fff;
+      color: #374151;
+      border: 1px solid rgba(0,0,0,0.12);
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    @media print {
+      body { background: white; }
+      .screen-controls { display: none; }
+      .print-wrapper {
+        max-width: 100%;
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      @page {
+        size: A5;
+        margin: 8mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen controls -->
+  <div class="screen-controls">
+    <button class="btn-print" onclick="window.print()">Print Prescription</button>
+    {% if wa_url %}
+    <a href="{{ wa_url }}" target="_blank" class="btn-back"
+       style="background:#25D366; color:#fff; border:none;">
+      WhatsApp
+    </a>
+    {% endif %}
+    <a href="javascript:history.back()" class="btn-back">&larr; Back</a>
+    <a href="/rx/doctor/" class="btn-back">Doctor Queue</a>
+  </div>
+
+  <div class="print-wrapper">
+
+    <!-- Clinic header -->
+    <div class="clinic-header">
+      <div class="clinic-name">{{ clinic.name }}</div>
+      <div class="clinic-meta">
+        {% if clinic.address %}{{ clinic.address }}, {% endif %}
+        {{ clinic.city }}, {{ clinic.state }}
+        {% if clinic.phone %} · {{ clinic.phone }}{% endif %}
+      </div>
+      {% if doctor %}
+      <div class="doctor-line">
+        {{ doctor.display_name }}
+        {% if doctor.qualification %}
+        <span class="doctor-qual"> &middot; {{ doctor.qualification }}</span>
+        {% endif %}
+        {% if doctor.registration_number %}
+        <span class="doctor-qual"> &middot; Reg: {{ doctor.registration_number }}</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Patient info -->
+    <div class="patient-section">
+      <div>
+        <div class="patient-name">{{ patient.full_name }}</div>
+        <div class="patient-meta">
+          {% if patient.age %}Age: {{ patient.age }} yrs{% endif %}
+          {% if patient.gender %} &middot; {{ patient.gender_display }}{% endif %}
+          {% if patient.blood_group %} &middot; {{ patient.blood_group }}{% endif %}
+        </div>
+      </div>
+      <div class="rx-date">
+        <div style="font-weight:600; color:#374151;">{{ rx.created_at|date:"j F Y" }}</div>
+        <div style="margin-top:2px;">Token #{{ visit.token_number }}</div>
+      </div>
+    </div>
+
+    <!-- Prescription body -->
+    <div class="rx-body">
+
+      <span class="rx-symbol">℞</span>
+
+      <!-- Diagnosis -->
+      {% if rx.diagnosis %}
+      <div class="section-label">Diagnosis</div>
+      <div class="diagnosis-text">{{ rx.diagnosis }}</div>
+      {% endif %}
+
+      <!-- Medicines -->
+      <div class="section-label">Medicines</div>
+      <table class="med-table">
+        <thead>
+          <tr>
+            <th class="med-num">#</th>
+            <th>Drug &amp; Strength</th>
+            <th>Dosage</th>
+            <th>Frequency</th>
+            <th>Duration</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for med in medicines %}
+          <tr>
+            <td class="med-num">{{ forloop.counter }}</td>
+            <td class="drug-name">{{ med.drug_name }}</td>
+            <td class="dosage-mono">{{ med.dosage }}</td>
+            <td>{{ med.frequency }}</td>
+            <td>{{ med.duration }}</td>
+            <td style="color:#6B7280;">{{ med.notes|default:"—" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" style="text-align:center; color:#9CA3AF; padding:16px;">No medicines prescribed.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <!-- Advice -->
+      {% if rx.advice %}
+      <div class="section-label">Advice &amp; Instructions</div>
+      <div class="advice-box">{{ rx.advice }}</div>
+      {% endif %}
+
+      <!-- Follow-up -->
+      {% if rx.follow_up_date %}
+      <div class="followup-box">
+        Next Visit: {{ rx.follow_up_date|date:"j F Y" }}
+      </div>
+      {% endif %}
+
+      <!-- Doctor signature -->
+      <div class="signature-section">
+        <div class="signature-box">
+          <div class="signature-line"></div>
+          <div class="signature-label">
+            {% if doctor %}{{ doctor.display_name }}{% else %}Doctor's Signature{% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Patient summary -->
+    {% if rx.patient_summary_en or rx.patient_summary_hi %}
+    <div style="padding: 0 24px 20px;">
+      <div class="patient-summary">
+        <div class="summary-label">For Patient — Patient ke liye</div>
+        {% if rx.patient_summary_en %}
+        <div class="summary-en">{{ rx.patient_summary_en }}</div>
+        {% endif %}
+        {% if rx.patient_summary_hi %}
+        <hr style="border:none; border-top:1px solid rgba(194,65,12,0.2); margin:8px 0;">
+        <div class="summary-hi">{{ rx.patient_summary_hi }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Footer -->
+    <div class="rx-footer">
+      Generated by ClinicAI &middot; This prescription is valid for 30 days
+    </div>
+  </div>
+
+</body>
+</html>

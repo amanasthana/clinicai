@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Get in Touch — ClinicAI{% endblock %}
+
+{% block extra_head %}
+<style>
+.contact-wrap { max-width: 580px; margin: 0 auto; padding: 48px 20px 64px; }
+.contact-header { text-align: center; margin-bottom: 36px; }
+.contact-brand { font-size: 20px; font-weight: 800; color: #2563EB; margin-bottom: 14px; }
+.contact-title { font-size: 28px; font-weight: 700; color: #111827; letter-spacing: -0.5px; margin-bottom: 8px; }
+.contact-sub { font-size: 15px; color: #6B7280; line-height: 1.6; }
+.respond-strip {
+  display: flex; align-items: center; gap: 10px;
+  background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 10px;
+  padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: #065F46;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="contact-wrap">
+
+  <div class="contact-header">
+    <div class="contact-brand">ClinicAI</div>
+    <h1 class="contact-title">Get in touch</h1>
+    <p class="contact-sub">Have a question, want to know more, or need help?<br>We'll get back to you within a few hours.</p>
+  </div>
+
+  <div class="respond-strip">
+    <span style="font-size:18px;">📧</span>
+    We respond via email — make sure your email is correct.
+  </div>
+
+  <div class="card">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="resp-grid-2">
+        <div class="form-group">
+          <label class="form-label">Your name *</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email address *</label>
+          {{ form.email }}
+          {% if form.email.errors %}<div class="form-error">{{ form.email.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="resp-grid-2">
+        <div class="form-group">
+          <label class="form-label">Phone <span style="color:#9CA3AF; font-weight:400;">(optional)</span></label>
+          {{ form.phone }}
+          {% if form.phone.errors %}<div class="form-error">{{ form.phone.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">How can we help?</label>
+          {{ form.inquiry_type }}
+          {% if form.inquiry_type.errors %}<div class="form-error">{{ form.inquiry_type.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:24px;">
+        <label class="form-label">Message *</label>
+        {{ form.message }}
+        {% if form.message.errors %}<div class="form-error">{{ form.message.errors.0 }}</div>{% endif %}
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%; padding:13px; font-size:15px;">
+        Send Message →
+      </button>
+    </form>
+  </div>
+
+  <div style="text-align:center; margin-top:24px; font-size:13px; color:#9CA3AF;">
+    <a href="/accounts/login/" style="color:#6B7280; text-decoration:none;">← Back to login</a>
+    &nbsp;·&nbsp;
+    <a href="/accounts/register/" style="color:#6B7280; text-decoration:none;">Register your clinic</a>
+  </div>
+
+</div>
+{% endblock %}

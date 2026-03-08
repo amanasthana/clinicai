@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel — ClinicAI{% endblock %}
+
+{% block extra_head %}
+<style>
+.ap-page { max-width: 900px; margin: 0 auto; padding: 32px 20px 60px; }
+.ap-header { margin-bottom: 28px; }
+.ap-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--color-border); margin-bottom: 24px; }
+.ap-tab {
+  padding: 10px 20px; font-size: 14px; font-weight: 500; color: #6B7280;
+  border-bottom: 2px solid transparent; margin-bottom: -2px; cursor: pointer;
+  text-decoration: none;
+}
+.ap-tab.active { color: #2563EB; border-bottom-color: #2563EB; }
+.ap-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; background: #EF4444; color: #fff;
+  border-radius: 50%; font-size: 11px; font-weight: 700; margin-left: 6px;
+}
+
+.reg-card { margin-bottom: 16px; }
+.reg-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; margin-bottom: 14px; }
+.reg-field-label { font-size: 11px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.4px; }
+.reg-field-value { font-size: 14px; color: #111827; font-weight: 500; margin-top: 2px; }
+.reg-card-actions { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--color-border); }
+
+.wa-notify-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #25D366; color: #fff; padding: 8px 16px;
+  border-radius: 8px; font-size: 13px; font-weight: 600;
+  text-decoration: none;
+}
+.wa-notify-btn:hover { background: #1ebe5a; }
+
+.reject-form details { display: inline-block; }
+.reject-form summary { list-style: none; cursor: pointer; }
+.reject-form summary::-webkit-details-marker { display: none; }
+
+@media (max-width: 600px) {
+  .reg-card-grid { grid-template-columns: 1fr; }
+  .ap-tab { padding: 8px 14px; font-size: 13px; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ap-page">
+
+  <div class="ap-header" style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div>
+      <h1 style="font-size:24px; font-weight:700; color:#111827; margin-bottom:4px;">ClinicAI — Admin Panel</h1>
+      <p style="font-size:14px; color:#6B7280;">Review registrations and messages from clinics.</p>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <a href="#registrations" class="btn btn-secondary btn-sm">Registrations{% if pending %} <span style="background:#EF4444;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">{{ pending|length }}</span>{% endif %}</a>
+      <a href="#messages" class="btn btn-secondary btn-sm">Messages{% if unread_count %} <span style="background:#EF4444;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">{{ unread_count }}</span>{% endif %}</a>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags|default:'info' }}" style="margin-bottom:16px;">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Pending -->
+  <div id="registrations" style="font-size:16px; font-weight:600; color:#111827; margin-bottom:16px; display:flex; align-items:center; gap:10px;">
+    Pending Review
+    {% if pending %}<span style="background:#EF4444; color:#fff; font-size:12px; font-weight:700; padding:2px 9px; border-radius:20px;">{{ pending|length }}</span>{% endif %}
+  </div>
+
+  {% if pending %}
+    {% for reg in pending %}
+    <div class="card reg-card">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
+        <div>
+          <div style="font-size:18px; font-weight:700; color:#111827;">{{ reg.clinic_name }}</div>
+          <div style="font-size:13px; color:#6B7280; margin-top:2px;">{{ reg.get_clinic_type_display }} · {{ reg.city }}, {{ reg.state }}</div>
+        </div>
+        <div style="font-size:12px; color:#9CA3AF; white-space:nowrap;">{{ reg.created_at|date:"j M Y, H:i" }}</div>
+      </div>
+
+      <div class="reg-card-grid">
+        <div>
+          <div class="reg-field-label">Doctor</div>
+          <div class="reg-field-value">{{ reg.doctor_name }}</div>
+        </div>
+        <div>
+          <div class="reg-field-label">Qualification</div>
+          <div class="reg-field-value">{{ reg.qualification|default:"—" }}</div>
+        </div>
+        <div>
+          <div class="reg-field-label">Reg. Number</div>
+          <div class="reg-field-value">{{ reg.registration_number|default:"—" }}</div>
+        </div>
+        <div>
+          <div class="reg-field-label">Clinic Phone</div>
+          <div class="reg-field-value">{{ reg.clinic_phone }}</div>
+        </div>
+        <div>
+          <div class="reg-field-label">Doctor Mobile (login)</div>
+          <div class="reg-field-value" style="font-family:monospace; font-size:15px;">{{ reg.phone }}</div>
+        </div>
+        <div>
+          <div class="reg-field-label">Email</div>
+          <div class="reg-field-value">{{ reg.email|default:"—" }}</div>
+        </div>
+      </div>
+
+      <div class="reg-card-actions">
+        <!-- Approve -->
+        <form method="post" action="{% url 'accounts:approve_registration' reg.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-success" onclick="return confirm('Approve {{ reg.clinic_name }}? This will create their account.')">
+            ✓ Approve &amp; Activate
+          </button>
+        </form>
+
+        <!-- WhatsApp notify (pre-filled message) -->
+        {% with wa_msg="Hello Dr. "|add:reg.doctor_name|add:"! Your clinic "|add:reg.clinic_name|add:" has been approved on ClinicAI. Login at clinicai.in with your mobile number "|add:reg.phone|add:" and the password you set during registration." %}
+        <a href="https://wa.me/91{{ reg.phone }}?text={{ wa_msg|urlencode }}" target="_blank" class="wa-notify-btn">
+          <span style="font-size:18px;">📲</span> WhatsApp Doctor
+        </a>
+        {% endwith %}
+
+        <!-- Reject (expandable) -->
+        <details class="reject-form">
+          <summary class="btn btn-secondary btn-sm" style="color:#EF4444;">Reject</summary>
+          <div style="margin-top:10px; background:#FFF5F5; border:1px solid #FCA5A5; border-radius:8px; padding:14px;">
+            <form method="post" action="{% url 'accounts:reject_registration' reg.pk %}">
+              {% csrf_token %}
+              <textarea name="notes" class="input-field" rows="2" placeholder="Reason for rejection (optional)..." style="margin-bottom:10px; font-size:13px;"></textarea>
+              <button type="submit" class="btn btn-sm" style="background:#EF4444; color:#fff;">Confirm Reject</button>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="card" style="text-align:center; padding:40px; color:#6B7280; margin-bottom:24px;">
+    No pending applications right now.
+  </div>
+  {% endif %}
+
+  <!-- Approved -->
+  {% if approved %}
+  <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:12px; margin-top:32px;">
+    Recently Approved
+  </div>
+  {% for reg in approved %}
+  <div class="card" style="margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 18px;">
+    <div>
+      <div style="font-size:15px; font-weight:600; color:#111827;">{{ reg.clinic_name }}</div>
+      <div style="font-size:13px; color:#6B7280;">{{ reg.doctor_name }} · {{ reg.city }}</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span style="font-size:12px; color:#059669; font-weight:600; background:#ECFDF5; padding:3px 10px; border-radius:20px;">✓ Approved {{ reg.reviewed_at|date:"j M" }}</span>
+      <a href="https://wa.me/91{{ reg.phone }}" target="_blank" class="btn btn-secondary btn-sm">📲 WhatsApp</a>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- Rejected -->
+  {% if rejected %}
+  <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:12px; margin-top:32px;">
+    Rejected
+  </div>
+  {% for reg in rejected %}
+  <div class="card" style="margin-bottom:8px; padding:12px 16px; opacity:0.7;">
+    <div style="font-size:14px; font-weight:500; color:#374151;">{{ reg.clinic_name }} · {{ reg.city }}</div>
+    <div style="font-size:12px; color:#9CA3AF; margin-top:2px;">{{ reg.doctor_name }} · Rejected {{ reg.reviewed_at|date:"j M" }}{% if reg.admin_notes %} · {{ reg.admin_notes }}{% endif %}</div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+
+  <!-- ── Contact Messages ── -->
+  <div id="messages" style="margin-top:48px; padding-top:32px; border-top:2px solid var(--color-border);">
+    <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:4px; display:flex; align-items:center; gap:10px;">
+      Inbox
+      {% if unread_count %}
+      <span style="background:#EF4444; color:#fff; font-size:12px; font-weight:700; padding:2px 9px; border-radius:20px;">{{ unread_count }} unread</span>
+      {% endif %}
+    </div>
+    <p style="font-size:13px; color:#6B7280; margin-bottom:20px;">Messages sent via the Get in Touch form. Reply directly to their email.</p>
+
+    {% if contact_messages %}
+      {% for msg in contact_messages %}
+      <div class="card" style="margin-bottom:10px; {% if not msg.read %}border-left:3px solid #2563EB;{% else %}opacity:0.75;{% endif %}">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div style="flex:1;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
+              <span style="font-size:15px; font-weight:600; color:#111827;">{{ msg.name }}</span>
+              <span style="font-size:12px; background:#EFF6FF; color:#1D4ED8; padding:2px 8px; border-radius:6px; font-weight:500;">{{ msg.get_inquiry_type_display }}</span>
+              {% if not msg.read %}<span style="font-size:11px; background:#DBEAFE; color:#1D4ED8; padding:1px 7px; border-radius:20px; font-weight:600;">NEW</span>{% endif %}
+            </div>
+            <div style="font-size:13px; color:#374151; line-height:1.6; margin-bottom:10px;">{{ msg.message }}</div>
+            <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:#6B7280;">
+              <span>📧 <a href="mailto:{{ msg.email }}?subject=Re: Your ClinicAI inquiry" style="color:#2563EB; font-weight:500; text-decoration:none;">{{ msg.email }}</a></span>
+              {% if msg.phone %}<span>📱 <a href="https://wa.me/91{{ msg.phone }}" target="_blank" style="color:#25D366; font-weight:500; text-decoration:none;">{{ msg.phone }}</a></span>{% endif %}
+              <span>🕐 {{ msg.created_at|date:"j M Y, H:i" }}</span>
+            </div>
+          </div>
+          <form method="post" action="{% url 'accounts:mark_contact_read' msg.pk %}" style="flex-shrink:0;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-sm" style="white-space:nowrap;">
+              {% if msg.read %}Mark unread{% else %}Mark read{% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+    <div class="card" style="text-align:center; padding:36px; color:#6B7280;">
+      No messages yet. Share your contact page link to start receiving inquiries.
+    </div>
+    {% endif %}
+
+    <div style="margin-top:16px; padding:12px 16px; background:#F9FAFB; border-radius:10px; font-size:13px; color:#6B7280;">
+      Your contact page: <a href="/accounts/contact/" target="_blank" style="color:#2563EB; font-weight:500;">/accounts/contact/</a>
+      — share this link on your website or WhatsApp bio.
+    </div>
+  </div>
+
+</div>
+{% endblock %}

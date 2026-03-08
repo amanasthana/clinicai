@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Plan & Usage — {{ clinic.name }}{% endblock %}
+{% block nav_plan %}active{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width: 700px;">
+
+  <h1 class="page-title" style="margin-bottom:4px;">Plan &amp; Usage</h1>
+  <p class="page-subtitle" style="margin-bottom:32px;">{{ clinic.name }}</p>
+
+  <!-- Current plan badge -->
+  <div class="card" style="margin-bottom:20px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+      <div>
+        <div style="display:inline-flex; align-items:center; gap:8px; background:#F3F4F6; border-radius:20px; padding:5px 14px; margin-bottom:12px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:#10B981; display:inline-block;"></span>
+          <span style="font-size:13px; font-weight:600; color:#374151;">Free Plan - Active</span>
+        </div>
+        <h2 style="font-size:18px; font-weight:700; color:#111827; margin-bottom:4px;">
+          30 AI prescriptions / day
+        </h2>
+        <p style="font-size:14px; color:#6B7280; line-height:1.6;">
+          Free forever for clinics up to 30 consultations per day.
+          No credit card required.
+        </p>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:13px; color:#9CA3AF; margin-bottom:4px;">Resets daily at midnight</div>
+<!--        <div style="font-size:13px; color:#6B7280;">Clinic ID: {{ clinic.id|truncatechars:8 }}</div>-->
+      </div>
+    </div>
+  </div>
+
+  <!-- Today's usage -->
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:15px; font-weight:600; color:#111827; margin-bottom:16px;">Today's Usage</div>
+
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:10px;">
+      <div>
+        <span style="font-size:36px; font-weight:700; color:{% if percent_used >= 100 %}#EF4444{% elif percent_used >= 80 %}#F59E0B{% else %}#111827{% endif %};">
+          {{ daily_count }}
+        </span>
+        <span style="font-size:18px; color:#9CA3AF; font-weight:400;"> / {{ daily_limit }}</span>
+      </div>
+      <div style="text-align:right;">
+        {% if remaining == 0 %}
+        <span style="font-size:14px; color:#EF4444; font-weight:500;">Limit reached — resets at midnight</span>
+        {% elif remaining <= 5 %}
+        <span style="font-size:14px; color:#F59E0B; font-weight:500;">{{ remaining }} remaining today</span>
+        {% else %}
+        <span style="font-size:14px; color:#059669; font-weight:500;">{{ remaining }} remaining today</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div style="background:#F3F4F6; border-radius:8px; height:12px; overflow:hidden;">
+      <div style="height:100%; border-radius:8px; width:{{ percent_used }}%;
+                  background:{% if percent_used >= 100 %}#EF4444{% elif percent_used >= 80 %}#F59E0B{% else %}#2563EB{% endif %};
+                  transition:width 0.4s ease;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:12px; color:#9CA3AF;">
+      <span>0</span>
+      <span>{{ daily_limit }} (limit)</span>
+    </div>
+
+    {% if percent_used >= 80 and percent_used < 100 %}
+    <div style="margin-top:14px; font-size:13px; color:#92400E; background:#FEF3C7; border-radius:8px; padding:10px 14px;">
+      Getting close to the daily limit. Upgrade to Pro to keep seeing patients without interruption.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 7-day history -->
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:15px; font-weight:600; color:#111827; margin-bottom:16px;">Last 7 Days</div>
+    <div style="display:flex; align-items:flex-end; gap:8px; height:80px;">
+      {% for day in week_data %}
+      {% if daily_limit > 0 %}
+      {% with bar_pct=day.count|stringformat:"s" %}
+      <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div style="font-size:11px; color:#6B7280; font-weight:500;">{{ day.count }}</div>
+        <div style="width:100%; border-radius:4px 4px 0 0;
+                    background:{% if day.at_limit %}#EF4444{% else %}#2563EB{% endif %};
+                    opacity:{% if day.count == 0 %}0.15{% else %}0.85{% endif %};
+                    height:{{ day.count }}px;
+                    min-height:{% if day.count > 0 %}4{% else %}0{% endif %}px;
+                    max-height:60px;">
+        </div>
+        <div style="font-size:10px; color:#9CA3AF; white-space:nowrap;">
+          {{ day.date|date:"j M" }}
+        </div>
+      </div>
+      {% endwith %}
+      {% endif %}
+      {% endfor %}
+    </div>
+    <div style="margin-top:12px; font-size:12px; color:#9CA3AF; display:flex; gap:16px;">
+      <span style="display:flex; align-items:center; gap:5px;">
+        <span style="width:10px; height:10px; border-radius:2px; background:#2563EB; display:inline-block;"></span> Normal
+      </span>
+      <span style="display:flex; align-items:center; gap:5px;">
+        <span style="width:10px; height:10px; border-radius:2px; background:#EF4444; display:inline-block;"></span> Hit limit
+      </span>
+    </div>
+  </div>
+
+  <!-- Upgrade section -->
+  <div class="card" style="border:2px solid #2563EB; background:linear-gradient(135deg, #EFF6FF 0%, #F9FAFB 100%);">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:20px; flex-direction:row-reverse;">
+      <div style="flex:1;">
+        <div style="font-size:11px; font-weight:700; color:#2563EB; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px;">
+          Pro Plan
+        </div>
+        <h3 style="font-size:20px; font-weight:700; color:#111827; margin-bottom:4px;">
+          Unlimited consultations Only at Just ₹500/month
+        </h3>
+        <p style="font-size:14px; color:#374151; line-height:1.6; margin-bottom:16px;">
+          No daily limits. See as many patients as your clinic can handle,
+          every single day. As your practice grows, we grow with you.
+        </p>
+        <ul style="font-size:14px; color:#374151; line-height:1.8; padding-left:20px; margin-bottom:20px;">
+          <li>Unlimited AI prescriptions per day</li>
+          <li>Same great Optimised Intelligent quality </li>
+          <li>Priority support via WhatsApp</li>
+          <li>Cancel anytime, no lock-in</li>
+        </ul>
+        <a href="https://wa.me/919999999999?text=Hi%2C+I+want+to+upgrade+my+ClinicAI+plan+to+Pro.+Clinic%3A+{{ clinic.name|urlencode }}"
+           target="_blank"
+           class="btn btn-primary btn-lg">
+          Upgrade to Pro at ₹500/month
+        </a>
+        <div style="font-size:12px; color:#9CA3AF; margin-top:10px;">
+          We'll activate your Pro plan within 24 hours of payment.
+        </div>
+      </div>
+      <div style="text-align:center; flex-shrink:0;">
+        <div style="font-size:48px; line-height:1; margin-bottom:8px;">🚀</div>
+        <div style="font-size:13px; color:#1D4ED8; font-weight:500;">Growing clinics<br>choose Pro</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

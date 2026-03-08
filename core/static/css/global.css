@@ -1,0 +1,452 @@
+/* ClinicAI Global Styles — minimal overrides on top of Tailwind CDN */
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;700&display=swap');
+
+:root {
+  --color-primary: #2563EB;
+  --color-success: #059669;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+  --color-text: #111827;
+  --color-muted: #6B7280;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-bg: #F9FAFB;
+  --radius-card: 16px;
+  --radius-btn: 12px;
+  --radius-input: 12px;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hindi text */
+.hindi {
+  font-family: 'Noto Sans Devanagari', 'Inter', sans-serif;
+  line-height: 1.7;
+}
+
+/* Card */
+.card {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+/* Input fields — 16px prevents iOS zoom on focus */
+.input-field {
+  display: block;
+  width: 100%;
+  font-size: 16px;
+  font-family: 'Inter', sans-serif;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-input);
+  background: #ffffff;
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  -webkit-appearance: none;
+}
+
+.input-field:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.input-field::placeholder {
+  color: var(--color-muted);
+  font-size: 15px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+.btn-primary:hover { background: #1d4ed8; }
+
+.btn-secondary {
+  background: #ffffff;
+  color: var(--color-text);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+.btn-secondary:hover { background: #f3f4f6; }
+
+.btn-success {
+  background: var(--color-success);
+  color: #ffffff;
+}
+.btn-success:hover { background: #047857; }
+
+.btn-danger {
+  background: var(--color-danger);
+  color: #ffffff;
+}
+.btn-danger:hover { background: #b91c1c; }
+
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.btn-lg {
+  padding: 14px 28px;
+  font-size: 16px;
+  border-radius: 14px;
+}
+
+/* Token badge */
+.token-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.token-badge-waiting  { background: #F3F4F6; color: #374151; }
+.token-badge-in_consultation { background: #EFF6FF; color: #1D4ED8; }
+.token-badge-done     { background: #ECFDF5; color: #065F46; }
+.token-badge-no_show  { background: #FEF2F2; color: #991B1B; }
+
+/* Status pills */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.status-waiting        { background: #F3F4F6; color: #374151; }
+.status-in_consultation { background: #DBEAFE; color: #1E40AF; }
+.status-done           { background: #D1FAE5; color: #065F46; }
+.status-no_show        { background: #FEE2E2; color: #991B1B; }
+
+/* In-consultation pulse animation */
+@keyframes pulse-blue {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.status-in_consultation { animation: pulse-blue 2s ease-in-out infinite; }
+
+/* Nav */
+.nav {
+  background: #ffffff;
+  border-bottom: 1px solid var(--color-border);
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav-brand {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: none;
+  letter-spacing: -0.3px;
+}
+
+.nav-link {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-muted);
+  text-decoration: none;
+  transition: color 0.1s;
+}
+.nav-link:hover, .nav-link.active { color: var(--color-text); }
+
+/* Page layout */
+.page-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--color-text);
+  margin: 0 0 4px;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--color-muted);
+  margin: 0 0 24px;
+}
+
+/* Form label */
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-error {
+  font-size: 12px;
+  color: var(--color-danger);
+  margin-top: 4px;
+}
+
+/* Alert messages */
+.alert {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.alert-success { background: #D1FAE5; color: #065F46; }
+.alert-error   { background: #FEE2E2; color: #991B1B; }
+.alert-warning { background: #FEF3C7; color: #92400E; }
+.alert-info    { background: #DBEAFE; color: #1E40AF; }
+
+/* Divider */
+.divider {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 20px 0;
+}
+
+/* Loading spinner */
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Token success animation */
+@keyframes pop-in {
+  0% { transform: scale(0.8); opacity: 0; }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.token-pop {
+  animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Print prescription */
+@media print {
+  body { background: white; font-size: 12px; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+}
+
+/* ─── Mobile / Responsive ────────────────────────────── */
+
+/* Hamburger button (desktop: hidden) */
+.nav-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  margin-left: auto;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.nav-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #374151;
+  border-radius: 2px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+/* Mobile nav slide-down panel */
+.nav-mobile-panel {
+  display: none;
+  position: fixed;
+  top: 56px; left: 0; right: 0;
+  background: #ffffff;
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  z-index: 99;
+  padding: 4px 0 8px;
+}
+.nav-mobile-panel.open { display: block; }
+.nav-mobile-panel .nm-user {
+  display: block;
+  padding: 12px 20px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid var(--color-border);
+}
+.nav-mobile-panel a {
+  display: block;
+  padding: 13px 20px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-border);
+}
+.nav-mobile-panel a:last-of-type { border-bottom: none; }
+.nav-mobile-panel a.nm-active { color: var(--color-primary); }
+.nav-mobile-panel .nm-logout-wrap {
+  padding: 12px 20px 4px;
+  border-top: 1px solid var(--color-border);
+}
+.nav-mobile-panel .nm-logout-wrap form { margin: 0; }
+.nav-mobile-panel .nm-logout-wrap button {
+  background: none;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 10px;
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  width: 100%;
+}
+
+/* Stat cards — 2×2 on mobile, row on desktop */
+.stat-cards { display: flex; gap: 12px; flex-wrap: wrap; }
+.stat-card {
+  text-align: center;
+  padding: 10px 18px;
+  border-radius: 12px;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: outline 0.1s, transform 0.1s;
+  user-select: none;
+}
+.stat-card:hover { transform: translateY(-1px); }
+.stat-card-active { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* Consult 2-col grid */
+.consult-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/* Responsive 2-col that stacks on mobile */
+.resp-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Queue card layout */
+.queue-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.queue-card-info { flex: 1; min-width: 140px; }
+.queue-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+@media (max-width: 768px) {
+  /* Hamburger on, desktop links off */
+  .nav-hamburger { display: flex; }
+  .nav-desktop-links { display: none !important; }
+
+  /* More breathing room at bottom for FABs */
+  .page-container { padding: 16px 14px 88px; }
+
+  /* Tighter cards */
+  .card { padding: 16px 14px; }
+  .page-title { font-size: 20px; }
+
+  /* Consult sidebar stacks below */
+  .consult-grid { grid-template-columns: 1fr; }
+
+  /* Plan / limit-gate cards stack */
+  .resp-grid-2 { grid-template-columns: 1fr; }
+
+  /* Stat cards 2×2 */
+  .stat-card {
+    flex: 1 1 calc(50% - 8px);
+    min-width: calc(50% - 8px);
+    padding: 10px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav { padding: 0 14px; }
+  .card { padding: 14px 12px; }
+
+  .token-badge {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+    border-radius: 10px;
+  }
+
+  /* Queue actions take full row */
+  .queue-card-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Full-width primary actions on tiny screens */
+  .btn-mobile-full { width: 100%; }
+}

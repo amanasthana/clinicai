@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Setup Your Clinic — ClinicAI{% endblock %}
+
+{% block content %}
+<div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;">
+  <div style="width: 100%; max-width: 560px;">
+
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div style="font-size: 32px; font-weight: 700; color: #2563EB; letter-spacing: -1px; margin-bottom: 8px;">
+        ClinicAI
+      </div>
+      <div style="font-size: 15px; color: #6B7280;">
+        Welcome! Let's set up your clinic in 2 minutes.
+      </div>
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <!-- Clinic Details -->
+      <div class="card" style="margin-bottom: 16px;">
+        <div style="font-size: 16px; font-weight: 600; margin-bottom: 20px; color: #111827;">
+          Clinic Details
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Clinic Name *</label>
+          {{ clinic_form.name }}
+          {% if clinic_form.name.errors %}<div class="form-error">{{ clinic_form.name.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">City *</label>
+            {{ clinic_form.city }}
+            {% if clinic_form.city.errors %}<div class="form-error">{{ clinic_form.city.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">State</label>
+            {{ clinic_form.state }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Address</label>
+          {{ clinic_form.address }}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Clinic Phone</label>
+          {{ clinic_form.phone }}
+        </div>
+      </div>
+
+      <!-- Admin / Doctor Account -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div style="font-size: 16px; font-weight: 600; margin-bottom: 20px; color: #111827;">
+          Your Account (Doctor / Admin)
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">First Name *</label>
+            {{ user_form.first_name }}
+            {% if user_form.first_name.errors %}<div class="form-error">{{ user_form.first_name.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last Name *</label>
+            {{ user_form.last_name }}
+            {% if user_form.last_name.errors %}<div class="form-error">{{ user_form.last_name.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Display Name (on prescription) *</label>
+          {{ user_form.display_name }}
+          {% if user_form.display_name.errors %}<div class="form-error">{{ user_form.display_name.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">Qualification</label>
+            {{ user_form.qualification }}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Medical Council Reg. No.</label>
+            {{ user_form.registration_number }}
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="form-group">
+          <label class="form-label">Username (for login) *</label>
+          {{ user_form.username }}
+          {% if user_form.username.errors %}<div class="form-error">{{ user_form.username.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Password *</label>
+          {{ user_form.password }}
+          {% if user_form.password.errors %}<div class="form-error">{{ user_form.password.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+        Create Clinic &amp; Start
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

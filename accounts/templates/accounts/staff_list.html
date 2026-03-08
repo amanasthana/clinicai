@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Staff — {{ clinic.name }}{% endblock %}
+{% block nav_staff %}active{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+    <div>
+      <h1 class="page-title">Staff Members</h1>
+      <p class="page-subtitle">{{ clinic.name }}</p>
+    </div>
+    <a href="/accounts/staff/add/" class="btn btn-primary">+ Add Staff</a>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    {% for member in staff %}
+    <div class="card" style="display: flex; align-items: center; gap: 16px;">
+      <!-- Avatar -->
+      <div style="width: 44px; height: 44px; border-radius: 50%; background: #EFF6FF;
+                  display: flex; align-items: center; justify-content: center;
+                  font-weight: 700; font-size: 16px; color: #2563EB; flex-shrink: 0;">
+        {{ member.display_name|first|upper }}
+      </div>
+
+      <div style="flex: 1;">
+        <div style="font-weight: 600; font-size: 15px;">{{ member.display_name }}</div>
+        <div style="font-size: 13px; color: #6B7280;">
+          {{ member.get_role_display }}
+          {% if member.qualification %} &middot; {{ member.qualification }}{% endif %}
+          {% if member.registration_number %} &middot; Reg: {{ member.registration_number }}{% endif %}
+        </div>
+      </div>
+
+      <span class="status-pill {% if member.role == 'doctor' %}status-in_consultation{% else %}status-done{% endif %}">
+        {{ member.get_role_display }}
+      </span>
+    </div>
+    {% empty %}
+    <div class="card" style="text-align: center; color: #6B7280; padding: 40px;">
+      No staff members yet. Add your first team member.
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

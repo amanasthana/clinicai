@@ -1,0 +1,51 @@
+{% if queue %}
+  {% for visit in queue %}
+  <div class="card queue-card" style="margin-bottom:10px; cursor:pointer;"
+       onclick="if(!event.target.closest('button,a,form')) window.location='/patient/{{ visit.patient.id }}/'">
+    <!-- Token -->
+    <div class="token-badge token-badge-{{ visit.status }}">{{ visit.token_number }}</div>
+
+    <!-- Patient Info -->
+    <div class="queue-card-info">
+      <div style="font-weight:600; font-size:15px;">{{ visit.patient.full_name }}</div>
+      <div style="font-size:13px; color:#6B7280;">
+        {% if visit.patient.age %}{{ visit.patient.age }}y{% endif %}
+        {% if visit.patient.gender %} · {{ visit.patient.get_gender_display }}{% endif %}
+        {% if visit.chief_complaint %} · {{ visit.chief_complaint }}{% endif %}
+      </div>
+      {% if visit.vitals_bp %}
+      <div style="font-size:12px; color:#9CA3AF; margin-top:2px;">BP: {{ visit.vitals_bp }}</div>
+      {% endif %}
+    </div>
+
+    <!-- Status -->
+    <span class="status-pill status-{{ visit.status }}">{{ visit.get_status_display }}</span>
+
+    <!-- Actions -->
+    <div class="queue-card-actions">
+      {% if visit.status == 'waiting' %}
+        <form method="post" action="/api/visit/{{ visit.id }}/status/" style="display:inline;" class="status-form">
+          {% csrf_token %}
+          <input type="hidden" name="status" value="in_consultation">
+          <button type="button" onclick="updateStatus('{{ visit.id }}','in_consultation')" class="btn btn-primary btn-sm">
+            Call In
+          </button>
+        </form>
+      {% elif visit.status == 'in_consultation' %}
+        <a href="/rx/consult/{{ visit.id }}/" class="btn btn-primary btn-sm">Prescribe</a>
+      {% endif %}
+
+      {% if visit.status != 'done' and visit.status != 'no_show' %}
+        <a href="/visit/{{ visit.id }}/" class="btn btn-secondary btn-sm">Vitals</a>
+        <button onclick="updateStatus('{{ visit.id }}','no_show')" class="btn btn-secondary btn-sm" style="color:#EF4444;">No Show</button>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="card" style="text-align:center; color:#6B7280; padding:48px 20px;">
+    <div style="font-size: 40px; margin-bottom: 12px;">🏥</div>
+    <div style="font-size: 16px; font-weight: 500; margin-bottom: 6px;">Queue is empty</div>
+    <div style="font-size: 14px;">Register a patient to get started.</div>
+  </div>
+{% endif %}

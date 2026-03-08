@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% block title %}Reception — {{ clinic.name }}{% endblock %}
+{% block nav_reception %}active{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <!-- Header -->
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+    <div>
+      <h1 class="page-title">{{ clinic.name }}</h1>
+      <p class="page-subtitle">{{ today|date:"l, j F Y" }}</p>
+    </div>
+
+    <!-- Today's stats — click to filter queue -->
+    <div class="stat-cards">
+      <div class="stat-card" id="filter-all" style="background: #fff; border: 1px solid var(--color-border);"
+           onclick="setFilter('all', this)" title="Show all today">
+        <div style="font-size: 22px; font-weight: 700; color: #111827;">{{ stats.total }}</div>
+        <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Total Today</div>
+      </div>
+      <div class="stat-card" id="filter-waiting" style="background: #F3F4F6;"
+           onclick="setFilter('waiting', this)" title="Show waiting only">
+        <div style="font-size: 22px; font-weight: 700; color: #374151;">{{ stats.waiting }}</div>
+        <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Waiting</div>
+      </div>
+      <div class="stat-card" id="filter-in_consultation" style="background: #EFF6FF;"
+           onclick="setFilter('in_consultation', this)" title="Show in consultation only">
+        <div style="font-size: 22px; font-weight: 700; color: #1D4ED8;">{{ stats.in_consult }}</div>
+        <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">In Consult</div>
+      </div>
+      <div class="stat-card" id="filter-done" style="background: #ECFDF5;"
+           onclick="setFilter('done', this)" title="Show completed only">
+        <div style="font-size: 22px; font-weight: 700; color: #065F46;">{{ stats.done }}</div>
+        <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Done</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weekly summary bar -->
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px; padding:14px 18px; background:#F9FAFB; border:1px solid var(--color-border); border-radius:12px; font-size:13px; color:#6B7280; align-items:center;">
+    <span style="font-weight:600; color:#374151; margin-right:4px;">7-day summary:</span>
+    <span><strong style="color:#111827;">{{ week_stats.visits }}</strong> visits</span>
+    <span style="color:#D1D5DB;">·</span>
+    <span><strong style="color:#111827;">{{ week_stats.total_patients }}</strong> registered patients</span>
+    <span style="color:#D1D5DB;">·</span>
+    <span><strong style="color:#059669;">+{{ week_stats.new_patients }}</strong> new this week</span>
+  </div>
+
+  <!-- Patient Search (PRIMARY ACTION) -->
+  <div class="card" style="margin-bottom: 24px;">
+    <div style="font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 10px;">
+      Patient Lookup by Phone Number
+    </div>
+    <div style="display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 220px;">
+        <input
+          type="tel"
+          id="phone-search"
+          class="input-field"
+          placeholder="Enter 10-digit mobile number..."
+          maxlength="10"
+          inputmode="numeric"
+          autocomplete="tel"
+          style="font-size: 18px; padding: 14px 16px;"
+        >
+      </div>
+      <a href="/patient/new/" class="btn btn-secondary" style="padding: 14px 20px;" id="new-patient-btn">
+        + New Patient
+      </a>
+    </div>
+
+    <!-- Search result area -->
+    <div id="search-result" style="margin-top: 12px;"></div>
+  </div>
+
+  <!-- Today's Queue -->
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+    <div>
+      <span style="font-size: 16px; font-weight: 600; color: #111827;">Today's Queue</span>
+      <span id="queue-filter-label" style="font-size: 13px; color: #2563EB; margin-left: 8px; font-weight: 500;"></span>
+    </div>
+    <button onclick="setFilter('', null)" style="font-size: 13px; color: #6B7280; background: none; border: none; cursor: pointer; padding: 4px 8px;">
+      ↻ Reset / Refresh
+    </button>
+  </div>
+
+  <div id="queue-list">
+    {% include "reception/_queue_list.html" %}
+  </div>
+
+</div>
+
+<!-- Floating Add Walk-in button -->
+<a href="/patient/new/"
+   style="position: fixed; bottom: 28px; right: 28px; z-index: 50;"
+   class="btn btn-primary btn-lg"
+   title="Add walk-in patient">
+  + Walk-in
+</a>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const phoneInput = document.getElementById('phone-search');
+const resultDiv = document.getElementById('search-result');
+const newPatientBtn = document.getElementById('new-patient-btn');
+let searchTimeout = null;
+
+phoneInput.addEventListener('input', function() {
+  const phone = this.value.replace(/\D/g, '');
+  this.value = phone;  // strip non-digits
+
+  clearTimeout(searchTimeout);
+  resultDiv.innerHTML = '';
+
+  // Update new patient link with phone number
+  if (phone.length >= 1) {
+    newPatientBtn.href = `/patient/new/?phone=${phone}`;
+  } else {
+    newPatientBtn.href = '/patient/new/';
+  }
+
+  if (phone.length === 10) {
+    resultDiv.innerHTML = '<div style="color:#6B7280; font-size:14px; padding:8px 0;">Searching...</div>';
+    searchTimeout = setTimeout(() => searchPatient(phone), 300);
+  }
+});
+
+async function searchPatient(phone) {
+  try {
+    const resp = await fetch(`/api/patient/search/?phone=${phone}`);
+    const data = await resp.json();
+
+    if (data.found) {
+      // Patient found — show card
+      const p = data.patient;
+      const recentVisits = data.recent_visits;
+      let visitsHtml = '';
+      if (recentVisits.length > 0) {
+        visitsHtml = `<div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(0,0,0,0.06);">
+          <div style="font-size:12px; color:#6B7280; font-weight:500; margin-bottom:6px;">RECENT VISITS</div>
+          ${recentVisits.slice(0, 3).map(v => `
+            <div style="font-size:13px; color:#374151; display:flex; gap:12px; margin-bottom:4px;">
+              <span>${v.visit_date}</span>
+              <span>${v.chief_complaint || '—'}</span>
+              <span class="status-pill status-${v.status}" style="font-size:11px; padding:1px 8px;">${v.status.replace('_', ' ')}</span>
+            </div>
+          `).join('')}
+        </div>`;
+      }
+      let allergyBadge = '';
+      if (p.allergies) {
+        allergyBadge = `<span style="background:#FEF3C7; color:#92400E; font-size:12px; padding:2px 8px; border-radius:6px; font-weight:500;">
+          ⚠ Allergic to: ${p.allergies}
+        </span>`;
+      }
+
+      resultDiv.innerHTML = `
+        <div style="border:1px solid #D1FAE5; border-radius:12px; padding:16px; background:#F0FDF4;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+            <div>
+              <div style="font-size:16px; font-weight:700; color:#111827;">${p.name}</div>
+              <div style="font-size:14px; color:#6B7280; margin-top:2px;">
+                ${p.age ? p.age + ' yrs' : ''} ${p.gender_display ? '· ' + p.gender_display : ''}
+                ${p.blood_group ? '· ' + p.blood_group : ''}
+              </div>
+              ${allergyBadge ? '<div style="margin-top:6px;">' + allergyBadge + '</div>' : ''}
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <a href="/patient/${p.id}/?add_to_queue=1" class="btn btn-success btn-sm">
+                + Add to Queue
+              </a>
+              <a href="/patient/${p.id}/" class="btn btn-secondary btn-sm">
+                View Profile
+              </a>
+            </div>
+          </div>
+          ${visitsHtml}
+        </div>
+      `;
+    } else {
+      // Not found — prompt to register
+      resultDiv.innerHTML = `
+        <div style="border:1px solid rgba(0,0,0,0.08); border-radius:12px; padding:16px; background:#fff;">
+          <div style="font-size:14px; color:#374151; margin-bottom:10px;">
+            No patient found with phone <strong>${phone}</strong>. Register as new patient?
+          </div>
+          <a href="/patient/new/?phone=${phone}" class="btn btn-primary btn-sm">
+            Register New Patient
+          </a>
+        </div>
+      `;
+    }
+  } catch (e) {
+    resultDiv.innerHTML = '<div class="alert alert-error">Search failed. Please try again.</div>';
+  }
+}
+
+let currentFilter = '';  // '' = active only (default)
+
+function setFilter(status, el) {
+  currentFilter = status;
+
+  // Update active highlight on stat cards
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('stat-card-active'));
+  if (el) el.classList.add('stat-card-active');
+
+  // Update label
+  const labelMap = {
+    'all': '— All visits',
+    'waiting': '— Waiting only',
+    'in_consultation': '— In Consultation only',
+    'done': '— Completed only',
+    '': '',
+  };
+  document.getElementById('queue-filter-label').textContent = labelMap[status] ?? '';
+
+  refreshQueue();
+}
+
+async function updateStatus(visitId, newStatus) {
+  try {
+    const resp = await fetch(`/api/visit/${visitId}/status/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    const data = await resp.json();
+    if (data.ok) refreshQueue();
+  } catch (e) {
+    console.error('Status update failed', e);
+  }
+}
+
+async function refreshQueue() {
+  const queueList = document.getElementById('queue-list');
+  const url = currentFilter ? `/api/queue/?status=${currentFilter}` : '/api/queue/';
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.queue !== undefined) {
+      renderQueue(data.queue, queueList);
+    }
+  } catch (e) {
+    console.error('Queue refresh failed', e);
+  }
+}
+
+function renderQueue(queue, container) {
+  if (queue.length === 0) {
+    const msg = currentFilter && currentFilter !== ''
+      ? 'No patients match this filter.'
+      : 'No patients in queue right now.';
+    container.innerHTML = `<div class="card" style="text-align:center; color:#6B7280; padding:40px;">${msg}</div>`;
+    return;
+  }
+  container.innerHTML = queue.map(v => {
+    const statusLabel = v.status.replace('_', ' ');
+    const actionBtns = [
+      v.status === 'waiting' ? `<button onclick="updateStatus('${v.id}','in_consultation')" class="btn btn-primary btn-sm">Call In</button>` : '',
+      v.status === 'in_consultation' ? `<a href="/rx/consult/${v.id}/" class="btn btn-primary btn-sm">Prescribe</a>` : '',
+      v.status !== 'done' && v.status !== 'no_show' ? `<button onclick="updateStatus('${v.id}','no_show')" class="btn btn-secondary btn-sm" style="color:#EF4444;">No Show</button>` : '',
+    ].join('');
+    return `
+      <div class="card queue-card" style="margin-bottom:10px; cursor:pointer;"
+           onclick="if(!event.target.closest('button,a')) window.location='/patient/${v.patient_id}/'">
+        <div class="token-badge token-badge-${v.status}">${v.token}</div>
+        <div class="queue-card-info">
+          <div style="font-weight:600; font-size:15px;">${v.name}</div>
+          <div style="font-size:13px; color:#6B7280;">
+            ${v.age ? v.age + 'y' : ''} ${v.gender ? '· ' + v.gender : ''} ${v.chief_complaint ? '· ' + v.chief_complaint : ''}
+          </div>
+          ${v.vitals_bp ? `<div style="font-size:12px; color:#9CA3AF; margin-top:2px;">BP: ${v.vitals_bp}</div>` : ''}
+        </div>
+        <span class="status-pill status-${v.status}">${statusLabel}</span>
+        <div class="queue-card-actions">${actionBtns}</div>
+      </div>`;
+  }).join('');
+}
+
+function getCsrfToken() {
+  return document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+// Auto-refresh every 30s using current filter
+setInterval(refreshQueue, 30000);
+</script>
+{% endblock %}

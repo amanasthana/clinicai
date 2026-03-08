@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Doctor's Queue — ClinicAI{% endblock %}
+{% block nav_doctor %}active{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+    <div>
+      <h1 class="page-title">Doctor's Queue</h1>
+      <p class="page-subtitle">{{ today|date:"l, j F Y" }} · {{ done_today }} completed today</p>
+    </div>
+    <span style="font-size:14px; color:#6B7280;">{{ queue.count }} waiting</span>
+  </div>
+
+  {% if queue %}
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    {% for visit in queue %}
+    <div class="card" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div class="token-badge token-badge-{{ visit.status }}">{{ visit.token_number }}</div>
+
+      <div style="flex:1; min-width:160px;">
+        <div style="font-weight:600; font-size:16px;">{{ visit.patient.full_name }}</div>
+        <div style="font-size:13px; color:#6B7280; margin-top:3px;">
+          {% if visit.patient.age %}{{ visit.patient.age }}y{% endif %}
+          {% if visit.patient.gender %} · {{ visit.patient.gender_display }}{% endif %}
+          {% if visit.chief_complaint %} · {{ visit.chief_complaint }}{% endif %}
+        </div>
+        {% if visit.patient.allergies %}
+        <div style="margin-top:4px;">
+          <span style="background:#FEF3C7; color:#92400E; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:500;">
+            ⚠ {{ visit.patient.allergies }}
+          </span>
+        </div>
+        {% endif %}
+        {% if visit.vitals_bp or visit.vitals_temp %}
+        <div style="font-size:12px; color:#9CA3AF; margin-top:4px;">
+          {% if visit.vitals_bp %}BP: {{ visit.vitals_bp }}{% endif %}
+          {% if visit.vitals_temp %} · {{ visit.vitals_temp }}°F{% endif %}
+          {% if visit.vitals_weight %} · {{ visit.vitals_weight }}{% endif %}
+          {% if visit.vitals_spo2 %} · SpO2: {{ visit.vitals_spo2 }}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <span class="status-pill status-{{ visit.status }}">{{ visit.get_status_display }}</span>
+
+      <a href="/rx/consult/{{ visit.id }}/" class="btn btn-primary">
+        {% if visit.status == 'waiting' %}Start Consultation{% else %}Continue Consultation{% endif %}
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="card" style="text-align:center; padding:64px 20px; color:#6B7280;">
+    <div style="font-size:48px; margin-bottom:16px;">✓</div>
+    <div style="font-size:18px; font-weight:600; margin-bottom:8px; color:#111827;">All caught up!</div>
+    <div style="font-size:14px;">No patients waiting. {{ done_today }} completed today.</div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

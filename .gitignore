@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+clinicai.db
+staticfiles/
+media/
+
+# Environment
+.env
+.env.*
+!.env.example
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Migrations (keep these, they're part of the project)
+# !**/migrations/*.py
+
+# Coverage
+.coverage
+htmlcov/

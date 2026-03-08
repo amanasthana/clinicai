@@ -1,0 +1,577 @@
+{% extends "base.html" %}
+{% block title %}Consultation — {{ patient.full_name }}{% endblock %}
+{% block nav_doctor %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Consult page mobile styles ── */
+
+/* Patient info bar */
+.patient-info-bar {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.pib-item { min-width: 0; }
+.pib-label {
+  font-size: 11px;
+  color: #6B7280;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
+}
+.pib-value { font-size: 15px; color: #374151; }
+
+/* Medicine cards — div-based (not table) */
+.med-rows { display: flex; flex-direction: column; gap: 8px; }
+.med-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #F9FAFB;
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 10px;
+  padding: 10px;
+}
+.med-num-cell {
+  font-size: 13px;
+  color: #9CA3AF;
+  padding-top: 26px;
+  min-width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.med-fields {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 2fr 90px 1.5fr 85px 1fr;
+  gap: 6px;
+}
+.med-field label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 3px;
+}
+.med-delete-btn {
+  background: none;
+  border: none;
+  color: #EF4444;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 20px 4px 0;
+  flex-shrink: 0;
+}
+
+/* PII status badge */
+.pii-ok {
+  display: none;
+  font-size: 12px;
+  color: #059669;
+  font-weight: 500;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #ECFDF5;
+  border-radius: 8px;
+}
+
+/* RX action buttons */
+.rx-actions { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--color-border); }
+
+@media (max-width: 640px) {
+  /* Patient info 2-up grid on mobile */
+  .pib-item { flex: 1 1 calc(50% - 8px); }
+  .pib-item-name { flex: 1 1 100%; }
+
+  /* Medicines stack 2-col on mobile */
+  .med-fields {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  /* Drug takes full row on mobile */
+  .med-field-drug { grid-column: 1 / -1; }
+
+  /* Buttons full width on mobile */
+  .rx-actions { flex-direction: column; }
+  .rx-actions .btn { width: 100%; justify-content: center; }
+  .rx-actions-top { flex-direction: column; }
+  .rx-actions-top .btn { width: 100%; justify-content: center; }
+
+  /* Generate button area */
+  #generate-row { flex-direction: column; }
+  #generate-row button { width: 100%; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width: 820px;">
+
+  <!-- Patient info bar -->
+  <div class="card" style="margin-bottom:16px; background:#F9FAFB;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <div class="patient-info-bar" style="flex:1;">
+        <div class="pib-item pib-item-name">
+          <div class="pib-label">Patient</div>
+          <div style="font-size:18px; font-weight:700; color:#111827;">{{ patient.full_name }}</div>
+        </div>
+        <div class="pib-item">
+          <div class="pib-label">Age / Gender</div>
+          <div class="pib-value">{% if patient.age %}{{ patient.age }} yrs{% else %}—{% endif %} / {{ patient.gender_display|default:"—" }}</div>
+        </div>
+        <div class="pib-item">
+          <div class="pib-label">Complaint</div>
+          <div class="pib-value">{{ visit.chief_complaint|default:"—" }}</div>
+        </div>
+        {% if patient.allergies %}
+        <div class="pib-item">
+          <div class="pib-label" style="color:#92400E;">⚠ Allergy</div>
+          <div style="font-size:14px; color:#92400E; font-weight:600;">{{ patient.allergies }}</div>
+        </div>
+        {% endif %}
+        {% if visit.vitals_bp or visit.vitals_temp or visit.vitals_spo2 %}
+        <div class="pib-item">
+          <div class="pib-label">Vitals</div>
+          <div class="pib-value" style="font-size:13px;">
+            {% if visit.vitals_bp %}BP: {{ visit.vitals_bp }}{% endif %}
+            {% if visit.vitals_temp %} · T: {{ visit.vitals_temp }}{% endif %}
+            {% if visit.vitals_spo2 %} · SpO2: {{ visit.vitals_spo2 }}{% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      <div style="font-size:32px; font-weight:700; color:#E5E7EB; flex-shrink:0;">#{{ visit.token_number }}</div>
+    </div>
+  </div>
+
+  <div class="consult-grid">
+
+    <!-- Left: Clinical notes + AI output -->
+    <div>
+
+      <!-- Clinical Notes -->
+      <div class="card" style="margin-bottom:16px;">
+        <div style="font-size:15px; font-weight:600; margin-bottom:10px;">Clinical Notes</div>
+        <textarea
+          id="clinical-note"
+          class="input-field"
+          rows="6"
+          placeholder="Type clinical observations, findings, and plan...
+E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add glimepiride 1mg OD before breakfast, check HbA1c after 3 months, diet advice"
+          style="resize:vertical; font-size:15px; line-height:1.6;"
+        >{% if existing_rx %}{{ existing_rx.raw_clinical_note }}{% endif %}</textarea>
+
+        <!-- PII warning -->
+        <div id="pii-warning" style="display:none; margin-top:10px; background:#FEF3C7; border:1px solid #FCD34D; border-radius:10px; padding:12px 14px;">
+          <div style="font-size:13px; font-weight:600; color:#92400E; margin-bottom:4px;">Possible patient name detected</div>
+          <div style="font-size:13px; color:#78350F; line-height:1.5;">
+            Found: <strong id="pii-detected-words" style="font-family:monospace;"></strong><br>
+            Clinical notes work best without patient names. Consider removing it, or send anyway — the system will still strip known patterns.
+          </div>
+          <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;" class="rx-actions-top">
+            <button onclick="generatePrescription(true)" class="btn btn-sm" style="background:#92400E; color:#fff;">Send anyway</button>
+            <button onclick="document.getElementById('pii-warning').style.display='none'" class="btn btn-secondary btn-sm">I'll edit my note</button>
+          </div>
+        </div>
+
+        <!-- PII ok indicator -->
+        <div id="pii-ok" class="pii-ok">Privacy check passed — no patient names detected ✓</div>
+
+        <div id="generate-row" style="display:flex; gap:10px; margin-top:12px; align-items:center;">
+          <button id="generate-btn" onclick="generatePrescription()" class="btn btn-primary btn-lg" style="flex:1;">
+            Generate Prescription with AI
+          </button>
+          <div id="loading-spinner" style="display:none; align-items:center; gap:8px; color:#6B7280; font-size:14px; flex-shrink:0;">
+            <div class="spinner" style="border-color:rgba(0,0,0,0.1); border-top-color:#2563EB;"></div>
+            Generating...
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Result -->
+      <div id="rx-output" style="display:none;">
+
+        <div id="rx-error" class="alert alert-error" style="display:none;"></div>
+
+        <!-- Daily limit gate -->
+        <div id="limit-gate" class="card" style="display:none; text-align:center; padding:40px 20px;">
+          <div style="font-size:48px; margin-bottom:12px; line-height:1;">🎉</div>
+          <h2 style="font-size:20px; font-weight:700; color:#111827; margin-bottom:8px;">Congratulations!</h2>
+          <p style="font-size:15px; color:#374151; margin-bottom:6px;">
+            Your clinic has completed <strong id="gate-count">30</strong> consultations today.
+          </p>
+          <p style="font-size:14px; color:#6B7280; margin-bottom:24px; max-width:340px; margin-left:auto; margin-right:auto; line-height:1.6;">
+            That's a busy, growing practice — something to be proud of.
+          </p>
+          <div class="resp-grid-2" style="max-width:460px; margin:0 auto 20px;">
+            <div style="border:1px solid var(--color-border); border-radius:12px; padding:20px 16px;">
+              <div style="font-size:12px; font-weight:600; color:#6B7280; text-transform:uppercase; margin-bottom:6px;">Free Plan</div>
+              <div style="font-size:26px; font-weight:700; color:#111827; margin-bottom:4px;">₹0</div>
+              <div style="font-size:13px; color:#6B7280; margin-bottom:12px;">30 consultations/day</div>
+              <div style="font-size:13px; color:#059669; font-weight:500;">Resets at midnight ✓</div>
+            </div>
+            <div style="border:2px solid #2563EB; border-radius:12px; padding:20px 16px; background:#EFF6FF; position:relative;">
+              <div style="position:absolute; top:-10px; left:50%; transform:translateX(-50%); background:#2563EB; color:#fff; font-size:10px; font-weight:700; padding:2px 10px; border-radius:20px; white-space:nowrap;">RECOMMENDED</div>
+              <div style="font-size:12px; font-weight:600; color:#1D4ED8; text-transform:uppercase; margin-bottom:6px;">Pro Plan</div>
+              <div style="font-size:26px; font-weight:700; color:#1D4ED8; margin-bottom:4px;">₹500</div>
+              <div style="font-size:13px; color:#1D4ED8; margin-bottom:12px;">per month</div>
+              <a href="/accounts/plan/" class="btn btn-primary" style="width:100%; display:block; text-align:center; font-size:13px;">Upgrade to Pro</a>
+            </div>
+          </div>
+          <a href="/accounts/plan/" style="font-size:12px; color:#9CA3AF;">View Plan details →</a>
+        </div>
+
+        <!-- Prescription card — editable -->
+        <div id="rx-card" class="card" style="display:none;">
+
+          <div style="font-size:13px; color:#6B7280; background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin-bottom:16px;">
+            AI-generated — review and edit any field before saving.
+          </div>
+
+          <!-- SOAP Note -->
+          <details style="margin-bottom:16px;">
+            <summary style="font-size:14px; font-weight:600; color:#374151; cursor:pointer; padding:4px 0; user-select:none;">
+              SOAP Note (Doctor's Reference)
+            </summary>
+            <textarea id="edit-soap-note" class="input-field" rows="5"
+              style="margin-top:10px; font-size:13px; line-height:1.6; resize:vertical;"></textarea>
+          </details>
+
+          <!-- Diagnosis -->
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:6px;">DIAGNOSIS</div>
+            <input type="text" id="edit-diagnosis" class="input-field" placeholder="Diagnosis..." style="font-size:15px; font-weight:600;">
+          </div>
+
+          <!-- Medicines — div-based, mobile-friendly -->
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:10px;">MEDICINES</div>
+            <div class="med-rows" id="medicines-table"></div>
+            <button type="button" onclick="addMedicineRow()" class="btn btn-secondary btn-sm" style="margin-top:10px;">
+              + Add Medicine
+            </button>
+          </div>
+
+          <!-- Advice -->
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:6px;">ADVICE</div>
+            <textarea id="edit-advice" class="input-field" rows="3"
+              placeholder="Advice and instructions..." style="resize:vertical;"></textarea>
+          </div>
+
+          <!-- Patient Summary -->
+          <div style="background:#EFF6FF; border-radius:12px; padding:16px; margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:500; color:#1D4ED8; margin-bottom:8px;">PATIENT SUMMARY (for WhatsApp / handout)</div>
+            <textarea id="edit-summary-en" class="input-field" rows="2"
+              placeholder="English summary for patient..."
+              style="margin-bottom:10px; background:#fff; resize:vertical;"></textarea>
+            <hr style="border:none; border-top:1px solid rgba(29,78,216,0.15); margin:10px 0;">
+            <textarea id="edit-summary-hi" class="input-field" rows="2"
+              placeholder="हिंदी सारांश..."
+              style="background:#fff; font-family:'Noto Sans Devanagari',sans-serif; font-size:15px; line-height:1.8; resize:vertical;"></textarea>
+          </div>
+
+          <!-- Follow-up -->
+          <div style="margin-bottom:20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div style="font-size:12px; font-weight:500; color:#6B7280;">FOLLOW-UP IN (days)</div>
+            <input type="number" id="edit-followup-days" class="input-field"
+              placeholder="e.g. 14" min="0" max="365" style="width:100px; font-size:14px;">
+          </div>
+
+          <!-- Actions -->
+          <div class="rx-actions">
+            <button onclick="savePrescription()" class="btn btn-success btn-lg">
+              Save &amp; Complete Visit
+            </button>
+            <button onclick="generatePrescription()" class="btn btn-secondary">
+              ↻ Regenerate
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right: Past visits sidebar -->
+    <div>
+      <div style="font-size:14px; font-weight:600; color:#374151; margin-bottom:10px;">Past Visits</div>
+
+      {% for pv in past_visits %}
+      <div class="card" style="margin-bottom:10px; padding:14px;">
+        <div style="font-size:13px; font-weight:500; color:#374151;">{{ pv.visit_date|date:"j M Y" }}</div>
+        <div style="font-size:12px; color:#6B7280; margin-top:3px;">{{ pv.chief_complaint|default:"—" }}</div>
+        {% if pv.prescription %}
+          {% if pv.prescription.diagnosis %}
+          <div style="font-size:12px; color:#2563EB; margin-top:4px; font-weight:500;">
+            Dx: {{ pv.prescription.diagnosis|truncatechars:60 }}
+          </div>
+          {% endif %}
+          <a href="/rx/print/{{ pv.prescription.id }}/"
+             style="font-size:12px; color:#6B7280; text-decoration:none; display:inline-block; margin-top:4px;">
+            View Rx →
+          </a>
+        {% endif %}
+      </div>
+      {% empty %}
+      <div class="card" style="padding:20px; text-align:center; color:#9CA3AF; font-size:13px;">
+        First visit
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+
+<div id="visit-data"
+     data-visit-id="{{ visit.id }}"
+     data-patient-age="{{ patient.age|default:'' }}"
+     data-patient-gender="{{ patient.gender }}"
+     data-save-url="/rx/save/{{ visit.id }}/"
+     data-generate-url="/rx/generate/"
+     style="display:none;"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const visitData = document.getElementById('visit-data').dataset;
+
+function getCsrfToken() {
+  return document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── PII detection ──────────────────────────────────────────────
+const MEDICAL_TERMS = new Set([
+  'Tab','Cap','Syp','Inj','Oint','Susp','Sol','BD','Tds','Ods','Sos','Prn',
+  'Fbs','Rbs','Pbs','Hba','Spo','Ecg','Ekg','Usg','Mri','Cbc','Lfts','Kft',
+  'Tsh','Metformin','Glimepiride','Glipizide','Amlodipine','Atorvastatin',
+  'Paracetamol','Amoxicillin','Azithromycin','Cetirizine','Pantoprazole',
+  'Omeprazole','Losartan','Aspirin','Clopidogrel','Insulin','Prednisolone',
+  'Dexamethasone','Salbutamol','Montelukast','Metoprolol','Ramipril',
+  'Mumbai','Delhi','Chennai','Pune','Hyderabad','Bangalore','Kolkata',
+  'Ahmedabad','Surat','Jaipur','Lucknow','Kanpur','Nagpur','Indore',
+  'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday',
+  'January','February','March','April','June','July','August',
+  'September','October','November','December',
+  'Patient','Male','Female','Other','Normal','Chronic','Acute',
+  'Left','Right','Upper','Lower','Post','Pre','Follow','Review',
+  'Mild','Moderate','Severe','Bilateral','Unilateral','Grade',
+]);
+
+function detectPossibleNames(text) {
+  const candidates = [];
+  const wordPattern = /\b([A-Z][a-z]{2,})(\s+[A-Z][a-z]{2,}){0,2}\b/g;
+  let match;
+  while ((match = wordPattern.exec(text)) !== null) {
+    const phrase = match[0].trim();
+    const words = phrase.split(/\s+/);
+    if (words.every(w => MEDICAL_TERMS.has(w))) continue;
+    candidates.push(phrase);
+  }
+  return [...new Set(candidates)];
+}
+
+// ── Generate ───────────────────────────────────────────────────
+async function generatePrescription(force) {
+  const note = document.getElementById('clinical-note').value.trim();
+  if (!note) { alert('Please enter clinical notes before generating.'); return; }
+
+  const piiWarning = document.getElementById('pii-warning');
+  const piiOk = document.getElementById('pii-ok');
+
+  if (!force) {
+    const suspects = detectPossibleNames(note);
+    if (suspects.length > 0) {
+      document.getElementById('pii-detected-words').textContent = suspects.slice(0, 5).join(', ');
+      piiWarning.style.display = 'block';
+      piiOk.style.display = 'none';
+      return;
+    }
+    // Check passed — show green badge
+    piiWarning.style.display = 'none';
+    piiOk.style.display = 'block';
+  } else {
+    piiWarning.style.display = 'none';
+    piiOk.style.display = 'none';
+  }
+
+  document.getElementById('generate-btn').disabled = true;
+  document.getElementById('loading-spinner').style.display = 'flex';
+  document.getElementById('rx-output').style.display = 'block';
+  document.getElementById('rx-error').style.display = 'none';
+  document.getElementById('rx-card').style.display = 'none';
+  document.getElementById('limit-gate').style.display = 'none';
+
+  try {
+    const resp = await fetch(visitData.generateUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({
+        clinical_note: note,
+        age: parseInt(visitData.patientAge) || 0,
+        gender: visitData.patientGender,
+      }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      renderPrescription(data.prescription);
+    } else if (data.limit_reached) {
+      showLimitGate(data.count, data.limit);
+    } else {
+      showError(data.error || 'Something went wrong. Please try again.');
+    }
+  } catch (e) {
+    showError('Network error. Please check your connection and try again.');
+  } finally {
+    document.getElementById('generate-btn').disabled = false;
+    document.getElementById('loading-spinner').style.display = 'none';
+  }
+}
+
+// ── Render prescription ────────────────────────────────────────
+function renderPrescription(rx) {
+  document.getElementById('edit-soap-note').value = rx.soap_note || '';
+  document.getElementById('edit-diagnosis').value = rx.diagnosis || '';
+  document.getElementById('edit-advice').value = rx.advice || '';
+  document.getElementById('edit-summary-en').value = rx.patient_summary_en || '';
+  document.getElementById('edit-summary-hi').value = rx.patient_summary_hi || '';
+  document.getElementById('edit-followup-days').value = rx.follow_up_days || '';
+
+  const container = document.getElementById('medicines-table');
+  container.innerHTML = '';
+  if (rx.medicines && rx.medicines.length > 0) {
+    rx.medicines.forEach(m => addMedicineRow(m));
+  } else {
+    addMedicineRow();
+  }
+  document.getElementById('rx-card').style.display = 'block';
+  // Scroll to result smoothly
+  document.getElementById('rx-output').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Medicine rows ──────────────────────────────────────────────
+function addMedicineRow(m) {
+  m = m || {};
+  const container = document.getElementById('medicines-table');
+  const div = document.createElement('div');
+  div.className = 'med-row';
+  div.innerHTML = `
+    <div class="med-num-cell"></div>
+    <div class="med-fields">
+      <div class="med-field med-field-drug">
+        <label>Drug &amp; Strength</label>
+        <input class="input-field med-drug" value="${esc(m.drug_name)}" placeholder="e.g. Tab Metformin 500mg" style="font-size:13px; padding:7px 10px;">
+      </div>
+      <div class="med-field">
+        <label>Dosage</label>
+        <input class="input-field med-dosage" value="${esc(m.dosage)}" placeholder="1-0-1" style="font-size:13px; padding:7px 10px;">
+      </div>
+      <div class="med-field">
+        <label>Frequency</label>
+        <input class="input-field med-frequency" value="${esc(m.frequency)}" placeholder="Twice daily" style="font-size:13px; padding:7px 10px;">
+      </div>
+      <div class="med-field">
+        <label>Duration</label>
+        <input class="input-field med-duration" value="${esc(m.duration)}" placeholder="7 days" style="font-size:13px; padding:7px 10px;">
+      </div>
+      <div class="med-field">
+        <label>Notes</label>
+        <input class="input-field med-notes" value="${esc(m.notes)}" placeholder="After food" style="font-size:13px; padding:7px 10px;">
+      </div>
+    </div>
+    <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove">×</button>
+  `;
+  container.appendChild(div);
+  renumberMedicines();
+}
+
+function removeMedicineRow(btn) {
+  btn.closest('.med-row').remove();
+  renumberMedicines();
+}
+
+function renumberMedicines() {
+  document.querySelectorAll('#medicines-table .med-num-cell').forEach((el, i) => {
+    el.textContent = i + 1;
+  });
+}
+
+// ── Read prescription from form ────────────────────────────────
+function readPrescription() {
+  const medicines = [];
+  document.querySelectorAll('#medicines-table .med-row').forEach(row => {
+    const drug = row.querySelector('.med-drug')?.value.trim();
+    if (drug) {
+      medicines.push({
+        drug_name: drug,
+        dosage:     row.querySelector('.med-dosage')?.value.trim() || '',
+        frequency:  row.querySelector('.med-frequency')?.value.trim() || '',
+        duration:   row.querySelector('.med-duration')?.value.trim() || '',
+        notes:      row.querySelector('.med-notes')?.value.trim() || '',
+      });
+    }
+  });
+  return {
+    soap_note:          document.getElementById('edit-soap-note').value.trim(),
+    diagnosis:          document.getElementById('edit-diagnosis').value.trim(),
+    medicines,
+    advice:             document.getElementById('edit-advice').value.trim(),
+    patient_summary_en: document.getElementById('edit-summary-en').value.trim(),
+    patient_summary_hi: document.getElementById('edit-summary-hi').value.trim(),
+    follow_up_days:     parseInt(document.getElementById('edit-followup-days').value) || null,
+  };
+}
+
+// ── Error / gate states ────────────────────────────────────────
+function showError(msg) {
+  document.getElementById('rx-output').style.display = 'block';
+  document.getElementById('limit-gate').style.display = 'none';
+  const el = document.getElementById('rx-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function showLimitGate(count, limit) {
+  document.getElementById('rx-output').style.display = 'block';
+  document.getElementById('rx-error').style.display = 'none';
+  document.getElementById('rx-card').style.display = 'none';
+  document.getElementById('gate-count').textContent = count;
+  document.getElementById('limit-gate').style.display = 'block';
+}
+
+// ── Save ───────────────────────────────────────────────────────
+async function savePrescription() {
+  const rx = readPrescription();
+  if (!rx.diagnosis && rx.medicines.length === 0) {
+    alert('Please add at least a diagnosis or a medicine before saving.');
+    return;
+  }
+  const note = document.getElementById('clinical-note').value.trim();
+  try {
+    const resp = await fetch(visitData.saveUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({ raw_clinical_note: note, prescription: rx }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      window.location.href = data.print_url;
+    } else {
+      alert('Failed to save: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Network error. Please try again.');
+  }
+}
+</script>
+{% endblock %}
