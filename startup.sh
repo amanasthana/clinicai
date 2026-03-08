@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+echo "--- Installing packages ---"
+pip install -r /home/site/wwwroot/requirements.txt --quiet
+
 echo "--- Running migrations ---"
 python manage.py migrate --no-input
 
