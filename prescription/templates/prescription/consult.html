@@ -263,7 +263,7 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
             Clinical notes work best without patient names. Consider removing it, or send anyway — the system will still strip known patterns.
           </div>
           <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;" class="rx-actions-top">
-            <button onclick="generatePrescription(true)" class="btn btn-sm" style="background:#92400E; color:#fff;">Send anyway</button>
+            <button onclick="sendAnyway()" class="btn btn-sm" style="background:#92400E; color:#fff;">Send anyway</button>
             <button onclick="document.getElementById('pii-warning').style.display='none'" class="btn btn-secondary btn-sm">I'll edit my note</button>
           </div>
         </div>
@@ -511,6 +511,7 @@ let _differentials = [];       // from Step 1 API
 let _selectedDiagnosis = null; // chosen by doctor
 let _investigations = {};      // from Step 2 API
 let _currentStep = 0;          // 0=notes, 1=differentials, 2=investigations, 3=prescription
+let _pendingMode = 'quick';    // 'quick' | 'diff' — which mode triggered PII warning
 
 function getCsrfToken() {
   return document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
@@ -610,6 +611,7 @@ function resetToNotes() {
 async function runQuickPrescribe(force) {
   const note = getNote();
   if (!note) { alert('Please enter clinical notes before generating.'); return; }
+  _pendingMode = 'quick';
   if (!checkPii(note, force)) return;
 
   setLoading(true, 'Generating prescription…');
@@ -644,13 +646,20 @@ async function runQuickPrescribe(force) {
   }
 }
 
-// Alias kept for PII "send anyway" button
+// Alias kept for legacy calls; PII "send anyway" must use sendAnyway() instead
 function generatePrescription(force) { runQuickPrescribe(force); }
+
+// Called by the PII warning "Send anyway" button — routes to whichever mode was active
+function sendAnyway() {
+  if (_pendingMode === 'diff') runDifferentials(true);
+  else runQuickPrescribe(true);
+}
 
 // ── Step 1: Differential Diagnoses ──────────────────────────────
 async function runDifferentials(force) {
   const note = getNote();
   if (!note) { alert('Please enter clinical notes before generating.'); return; }
+  _pendingMode = 'diff';
   if (!checkPii(note, force)) return;
 
   setLoading(true, 'Analysing differentials…');
