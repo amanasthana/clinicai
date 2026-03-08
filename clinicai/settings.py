@@ -1,5 +1,5 @@
 """
-ClinicAI Django Settings
+ClinicAI Django Settings 
 ========================
 Configuration for the ClinicAI clinic operating system.
 Uses django-environ for all secrets/config. Never hardcode credentials.
