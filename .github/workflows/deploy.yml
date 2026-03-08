@@ -13,10 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -35,18 +35,13 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Ensure Oryx build is enabled on Azure
+      - name: Deploy via az webapp up
         run: |
-          az webapp config appsettings set \
+          az webapp up \
             --name clinicai \
             --resource-group clinicai-rg \
-            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
-
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: clinicai
-          package: '.'
+            --runtime "PYTHON:3.11" \
+            --sku B1
 
       - name: Azure logout
         run: az logout
