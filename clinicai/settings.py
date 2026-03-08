@@ -116,6 +116,10 @@ FREE_DAILY_RX_LIMIT = 30   # prescriptions per clinic per day on free plan
 
 # Security settings (enforced in production)
 if not DEBUG:
+    # Azure App Service terminates SSL at the load balancer and forwards HTTP
+    # internally. Trust the X-Forwarded-Proto header so Django doesn't
+    # redirect HTTPS requests to HTTPS in an infinite loop.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
