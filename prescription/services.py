@@ -25,6 +25,29 @@ from .prompts import PRESCRIPTION_SYSTEM_PROMPT, DIFFERENTIAL_SYSTEM_PROMPT, INV
 logger = logging.getLogger(__name__)
 
 
+def _extract_json(text: str) -> dict:
+    """
+    Robustly extract a JSON object from AI response text.
+    Handles markdown fences, leading/trailing prose, and partial wrapping.
+    """
+    # Strip markdown code fences
+    text = re.sub(r'```(?:json)?', '', text).strip()
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Find the first { ... } block (handles prose before/after JSON)
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+    # Last resort: raise with the cleaned text for logging
+    raise json.JSONDecodeError("No valid JSON object found", text, 0)
+
+
 def deidentify_clinical_note(text: str) -> str:
     """
     Strip all PII from clinical text before sending to AI.
@@ -91,10 +114,7 @@ def generate_prescription(raw_note: str, patient_age: int, patient_gender: str) 
     )
 
     result_text = response.content[0].text
-    # Strip any accidental markdown fences
-    result_text = result_text.replace('```json', '').replace('```', '').strip()
-    prescription_data = json.loads(result_text)
-
+    prescription_data = _extract_json(result_text)
     logger.info("Claude API returned prescription successfully")
     return prescription_data
 
@@ -126,8 +146,8 @@ def get_differentials(raw_note: str, patient_age: int, patient_gender: str) -> d
         messages=[{'role': 'user', 'content': clinical_input}],
     )
 
-    result_text = response.content[0].text.replace('```json', '').replace('```', '').strip()
-    data = json.loads(result_text)
+    result_text = response.content[0].text
+    data = _extract_json(result_text)
     logger.info("Claude returned %d differentials", len(data.get('differentials', [])))
     return data
 
@@ -164,7 +184,7 @@ def get_investigations(selected_diagnosis: str, raw_note: str, patient_age: int,
         messages=[{'role': 'user', 'content': clinical_input}],
     )
 
-    result_text = response.content[0].text.replace('```json', '').replace('```', '').strip()
-    data = json.loads(result_text)
+    result_text = response.content[0].text
+    data = _extract_json(result_text)
     logger.info("Claude returned investigations for: %s", selected_diagnosis)
     return data

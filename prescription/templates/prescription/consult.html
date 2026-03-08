@@ -262,9 +262,8 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
             Found: <strong id="pii-detected-words" style="font-family:monospace;"></strong><br>
             Clinical notes work best without patient names. Consider removing it, or send anyway — the system will still strip known patterns.
           </div>
-          <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;" class="rx-actions-top">
-            <button onclick="sendAnyway()" class="btn btn-sm" style="background:#92400E; color:#fff;">Send anyway</button>
-            <button onclick="document.getElementById('pii-warning').style.display='none'" class="btn btn-secondary btn-sm">I'll edit my note</button>
+          <div style="margin-top:10px;">
+            <button onclick="document.getElementById('pii-warning').style.display='none'" class="btn btn-secondary btn-sm">Dismiss — system will strip names automatically</button>
           </div>
         </div>
 
@@ -511,7 +510,6 @@ let _differentials = [];       // from Step 1 API
 let _selectedDiagnosis = null; // chosen by doctor
 let _investigations = {};      // from Step 2 API
 let _currentStep = 0;          // 0=notes, 1=differentials, 2=investigations, 3=prescription
-let _pendingMode = 'quick';    // 'quick' | 'diff' — which mode triggered PII warning
 
 function getCsrfToken() {
   return document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
@@ -521,33 +519,14 @@ function esc(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── PII detection ──────────────────────────────────────────────
-const MEDICAL_TERMS = new Set([
-  'Tab','Cap','Syp','Inj','Oint','Susp','Sol','BD','Tds','Ods','Sos','Prn',
-  'Fbs','Rbs','Pbs','Hba','Spo','Ecg','Ekg','Usg','Mri','Cbc','Lfts','Kft',
-  'Tsh','Metformin','Glimepiride','Glipizide','Amlodipine','Atorvastatin',
-  'Paracetamol','Amoxicillin','Azithromycin','Cetirizine','Pantoprazole',
-  'Omeprazole','Losartan','Aspirin','Clopidogrel','Insulin','Prednisolone',
-  'Dexamethasone','Salbutamol','Montelukast','Metoprolol','Ramipril',
-  'Mumbai','Delhi','Chennai','Pune','Hyderabad','Bangalore','Kolkata',
-  'Ahmedabad','Surat','Jaipur','Lucknow','Kanpur','Nagpur','Indore',
-  'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday',
-  'January','February','March','April','June','July','August',
-  'September','October','November','December',
-  'Patient','Male','Female','Other','Normal','Chronic','Acute',
-  'Left','Right','Upper','Lower','Post','Pre','Follow','Review',
-  'Mild','Moderate','Severe','Bilateral','Unilateral','Grade',
-]);
-
+// ── PII detection (soft — informational only, never blocks AI) ──
+// Only flags names explicitly preceded by a title or label.
 function detectPossibleNames(text) {
+  const pattern = /\b(Mr\.?|Mrs\.?|Ms\.?|Miss|Shri|Smt\.?|Dr\.?|Patient\s*[:\s]+|Name\s*[:\s]+)\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/gi;
   const candidates = [];
-  const wordPattern = /\b([A-Z][a-z]{2,})(\s+[A-Z][a-z]{2,}){0,2}\b/g;
-  let match;
-  while ((match = wordPattern.exec(text)) !== null) {
-    const phrase = match[0].trim();
-    const words = phrase.split(/\s+/);
-    if (words.every(w => MEDICAL_TERMS.has(w))) continue;
-    candidates.push(phrase);
+  let m;
+  while ((m = pattern.exec(text)) !== null) {
+    candidates.push(m[0].trim());
   }
   return [...new Set(candidates)];
 }
@@ -555,23 +534,20 @@ function detectPossibleNames(text) {
 // ── Helpers ─────────────────────────────────────────────────────
 function getNote() { return document.getElementById('clinical-note').value.trim(); }
 
-function checkPii(note, force, callback) {
+function checkPii(note) {
+  // Purely informational — never blocks AI generation.
   const piiWarning = document.getElementById('pii-warning');
   const piiOk = document.getElementById('pii-ok');
-  if (!force) {
-    const suspects = detectPossibleNames(note);
-    if (suspects.length > 0) {
-      document.getElementById('pii-detected-words').textContent = suspects.slice(0, 5).join(', ');
-      piiWarning.style.display = 'block';
-      piiOk.style.display = 'none';
-      return false;
-    }
-    piiWarning.style.display = 'none';
-    piiOk.style.display = 'block';
+  const suspects = detectPossibleNames(note);
+  if (suspects.length > 0) {
+    document.getElementById('pii-detected-words').textContent = suspects.slice(0, 5).join(', ');
+    piiWarning.style.display = 'block';
+    piiOk.style.display = 'none';
   } else {
     piiWarning.style.display = 'none';
-    piiOk.style.display = 'none';
+    piiOk.style.display = 'block';
   }
+  // Always continue — system strips PII server-side anyway
   return true;
 }
 
@@ -608,11 +584,10 @@ function resetToNotes() {
 }
 
 // ── Quick Prescribe (existing flow) ─────────────────────────────
-async function runQuickPrescribe(force) {
+async function runQuickPrescribe() {
   const note = getNote();
   if (!note) { alert('Please enter clinical notes before generating.'); return; }
-  _pendingMode = 'quick';
-  if (!checkPii(note, force)) return;
+  checkPii(note);
 
   setLoading(true, 'Generating prescription…');
   showStep(0);
@@ -646,21 +621,13 @@ async function runQuickPrescribe(force) {
   }
 }
 
-// Alias kept for legacy calls; PII "send anyway" must use sendAnyway() instead
-function generatePrescription(force) { runQuickPrescribe(force); }
-
-// Called by the PII warning "Send anyway" button — routes to whichever mode was active
-function sendAnyway() {
-  if (_pendingMode === 'diff') runDifferentials(true);
-  else runQuickPrescribe(true);
-}
+function generatePrescription() { runQuickPrescribe(); }
 
 // ── Step 1: Differential Diagnoses ──────────────────────────────
-async function runDifferentials(force) {
+async function runDifferentials() {
   const note = getNote();
   if (!note) { alert('Please enter clinical notes before generating.'); return; }
-  _pendingMode = 'diff';
-  if (!checkPii(note, force)) return;
+  checkPii(note);
 
   setLoading(true, 'Analysing differentials…');
   document.getElementById('diff-error').style.display = 'none';
@@ -742,8 +709,7 @@ function onDiffSelect(diagnosis) {
 }
 
 function runQuickPrescribeFromDiff() {
-  // Proceed directly to prescription using selected diagnosis as context
-  runQuickPrescribe(true);
+  runQuickPrescribe();
 }
 
 // ── Step 2: Investigations ───────────────────────────────────────

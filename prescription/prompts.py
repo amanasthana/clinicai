@@ -1,3 +1,14 @@
+MULTILINGUAL_NOTE = """
+LANGUAGE RULES (critical):
+- The clinical note may be in English, Hindi, Hinglish (Hindi-English mix), or transliterated Hindi (Hindi written in Roman script).
+- Examples of valid inputs: "45 sal ke patient, 8 sal se diabetes, hemoglobin 9.2, pet mein dard, 5mm stone" or "han bhai patient ko sugar hai".
+- Understand the clinical meaning regardless of language or script.
+- Your JSON output fields must always be in English (diagnosis names, drug names, etc.).
+- "patient_summary_hi" must always be in proper Devanagari Hindi script.
+- NEVER refuse or return non-JSON output because the input is in Hindi or mixed language.
+- Your output is ALWAYS a valid JSON object, even if the input is informal or colloquial.
+"""
+
 DIFFERENTIAL_SYSTEM_PROMPT = """You are a senior clinician assistant for Indian doctors.
 
 Given a de-identified clinical note with patient age and gender, generate a ranked differential diagnosis list.
@@ -22,7 +33,7 @@ RULES:
 - "red_flags": brief string, or null if none.
 - Use standard diagnosis names (ICD-friendly, common Indian clinical usage).
 - Respond with valid JSON only. No markdown, no backticks, no preamble.
-
+""" + MULTILINGUAL_NOTE + """
 PRIVACY RULES:
 - Input has been de-identified. Ignore any residual names/identifiers.
 - NEVER include any personal name, phone, Aadhaar, or address in output.
@@ -61,7 +72,7 @@ RULES:
 - Limit to clinically meaningful tests; do not over-investigate.
 - Use Indian clinical practice conventions (ICMR guidelines preferred).
 - Respond with valid JSON only. No markdown, no backticks, no preamble.
-
+""" + MULTILINGUAL_NOTE + """
 PRIVACY RULES:
 - Input has been de-identified. Ignore any residual names/identifiers.
 - NEVER include any personal name, phone, Aadhaar, or address in output.
@@ -92,7 +103,7 @@ IMPORTANT RULES:
 - If the doctor's note mentions specific drugs, use those exact drugs
 - If the doctor only mentions a condition without specific drugs, suggest standard first-line treatment per Indian clinical guidelines
 - Always respond with valid JSON only. No markdown, no backticks, no preamble.
-
+""" + MULTILINGUAL_NOTE + """
 PRIVACY RULES (strictly enforced):
 - The input has been de-identified, but may still contain residual personal names, place names, or identifiers that were not caught by automated stripping.
 - You MUST ignore any personal names (patient names, relative names, doctor names) that appear in the input. Treat them as irrelevant noise.
