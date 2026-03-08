@@ -35,4 +35,4 @@ jobs:
         with:
           app-name: clinicai
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          os-type: linux
+          package: '.'
