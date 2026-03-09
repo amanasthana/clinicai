@@ -981,21 +981,34 @@ function showLimitGate(count, limit) {
   recognition.onstart = () => setUI(true);
 
   recognition.onresult = (e) => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
+    // IMPORTANT: do NOT use e.resultIndex to slice — it is broken on Chrome
+    // Android / many mobile WebViews and stays 0 even after results finalise,
+    // causing every onresult call to re-append already-seen finals to finalText.
+    //
+    // Instead, rebuild the confirmed text completely from e.results on every
+    // call. e.results is the browser's single source of truth for this session;
+    // each slot appears exactly once and finals never change, so rebuilding is
+    // both safe and duplicate-free regardless of what e.resultIndex says.
+
+    let confirmed = '';
+    let interim   = '';
+
+    for (let i = 0; i < e.results.length; i++) {
       if (e.results[i].isFinal) {
-        finalText += e.results[i][0].transcript;
-        // add a space between sentences if needed
-        if (finalText && !finalText.endsWith(' ')) finalText += ' ';
+        confirmed += e.results[i][0].transcript;
+        if (!confirmed.endsWith(' ')) confirmed += ' ';
       } else {
         interim = e.results[i][0].transcript;
       }
     }
-    // Update textarea with base + confirmed + current interim
-    const sep = baseText && !baseText.endsWith(' ') ? ' ' : '';
-    textarea.value = baseText + (baseText ? sep : '') + finalText;
 
-    // Show interim below mic as ghost preview
+    // Keep finalText in sync so onend can fold it into baseText on restart
+    finalText = confirmed;
+
+    // Rebuild textarea from scratch — no cross-call accumulation, no duplication
+    const sep = baseText && !baseText.endsWith(' ') ? ' ' : '';
+    textarea.value = baseText + (baseText ? sep : '') + confirmed;
+
     if (interim) {
       interimEl.textContent = interim + '…';
       interimEl.classList.add('visible');
