@@ -1015,6 +1015,14 @@ function showLimitGate(count, limit) {
   recognition.onend = () => {
     // Auto-restart while active (handles iOS stopping after silence)
     if (active) {
+      // Fold confirmed words into baseText before restarting.
+      // Without this, the new session replays buffered audio and onresult
+      // appends the same words again → "okay okay okay okay" duplication.
+      if (finalText) {
+        const sep = baseText && !baseText.endsWith(' ') ? ' ' : '';
+        baseText = baseText + (baseText ? sep : '') + finalText;
+        finalText = '';
+      }
       try { recognition.start(); } catch (_) {}
     } else {
       setUI(false);
