@@ -946,18 +946,23 @@ function showLimitGate(count, limit) {
 (function initVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const bar = document.getElementById('voice-bar');
-  if (!SR) return;  // silently hide on unsupported browsers
+  if (!SR) return;
   bar.style.display = 'flex';
 
   const recognition = new SR();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-IN';
+  // continuous = false: one utterance per session.
+  // With continuous = true, Chrome Android's e.results accumulation is broken
+  // (e.resultIndex stays 0, causing every onresult to reprocess old finals).
+  // continuous = false resets e.results each session — no accumulation, no duplication.
+  // onend fires after each utterance; we commit and immediately restart.
+  // This matches how the Google keyboard mic works.
+  recognition.continuous      = false;
+  recognition.interimResults  = true;
+  recognition.lang            = 'en-IN';
   recognition.maxAlternatives = 1;
 
-  let active = false;
-  let baseText = '';   // text in textarea before session started
-  let finalText = '';  // confirmed words this session
+  let active   = false;
+  let baseText = '';  // everything committed from previous utterances
 
   const micBtn    = document.getElementById('mic-btn');
   const statusEl  = document.getElementById('voice-status');
@@ -981,18 +986,10 @@ function showLimitGate(count, limit) {
   recognition.onstart = () => setUI(true);
 
   recognition.onresult = (e) => {
-    // IMPORTANT: do NOT use e.resultIndex to slice — it is broken on Chrome
-    // Android / many mobile WebViews and stays 0 even after results finalise,
-    // causing every onresult call to re-append already-seen finals to finalText.
-    //
-    // Instead, rebuild the confirmed text completely from e.results on every
-    // call. e.results is the browser's single source of truth for this session;
-    // each slot appears exactly once and finals never change, so rebuilding is
-    // both safe and duplicate-free regardless of what e.resultIndex says.
-
+    // e.results contains only THIS utterance's results (fresh each session).
+    // No accumulation across sessions, no e.resultIndex needed.
     let confirmed = '';
     let interim   = '';
-
     for (let i = 0; i < e.results.length; i++) {
       if (e.results[i].isFinal) {
         confirmed += e.results[i][0].transcript;
@@ -1001,11 +998,6 @@ function showLimitGate(count, limit) {
         interim = e.results[i][0].transcript;
       }
     }
-
-    // Keep finalText in sync so onend can fold it into baseText on restart
-    finalText = confirmed;
-
-    // Rebuild textarea from scratch — no cross-call accumulation, no duplication
     const sep = baseText && !baseText.endsWith(' ') ? ' ' : '';
     textarea.value = baseText + (baseText ? sep : '') + confirmed;
 
@@ -1019,23 +1011,19 @@ function showLimitGate(count, limit) {
   };
 
   recognition.onerror = (e) => {
-    if (e.error === 'no-speech') return; // user paused — keep listening
-    if (e.error === 'aborted') return;
+    if (e.error === 'no-speech') return;
+    if (e.error === 'aborted')   return;
     active = false;
     setUI(false);
   };
 
   recognition.onend = () => {
-    // Auto-restart while active (handles iOS stopping after silence)
     if (active) {
-      // Fold confirmed words into baseText before restarting.
-      // Without this, the new session replays buffered audio and onresult
-      // appends the same words again → "okay okay okay okay" duplication.
-      if (finalText) {
-        const sep = baseText && !baseText.endsWith(' ') ? ' ' : '';
-        baseText = baseText + (baseText ? sep : '') + finalText;
-        finalText = '';
-      }
+      // Commit whatever landed in the textarea as the new base, clear interim,
+      // then immediately start the next utterance session.
+      baseText = textarea.value;
+      interimEl.textContent = '';
+      interimEl.classList.remove('visible');
       try { recognition.start(); } catch (_) {}
     } else {
       setUI(false);
@@ -1049,8 +1037,7 @@ function showLimitGate(count, limit) {
       setUI(false);
     } else {
       baseText = textarea.value.trim();
-      finalText = '';
-      active = true;
+      active   = true;
       try { recognition.start(); } catch (_) {}
     }
   };
