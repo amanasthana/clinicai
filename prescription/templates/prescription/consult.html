@@ -187,6 +187,8 @@
 .cat-investigation { background:#E0F2FE; color:#0369A1; }
 .cat-advice     { background:#DCFCE7; color:#166534; }
 .cat-medicine   { background:#FEE2E2; color:#991B1B; }
+.cat-snippet    { background:#CCFBF1; color:#0F766E; }
+.cat-abbreviation { background:#FFEDD5; color:#C2410C; }
 
 /* Diff / Inv step cards hover on labels */
 #diff-list label:hover,
@@ -1172,7 +1174,7 @@ async function fetchSuggestions(q) {
   try {
     const resp = await fetch(`${visitData.suggestUrl}?q=${encodeURIComponent(q)}`);
     const data = await resp.json();
-    renderSuggestions(data.items || []);
+    renderSuggestions(data.results || data.items || []);
   } catch (_) {}
 }
 
@@ -1182,35 +1184,46 @@ const CAT_BADGE = {
   investigation: 'cat-investigation',
   advice:        'cat-advice',
   medicine:      'cat-medicine',
+  snippet:       'cat-snippet',
+  abbreviation:  'cat-abbreviation',
 };
 
 function renderSuggestions(items) {
   const dd = document.getElementById('suggest-dropdown');
   if (!items.length) { dd.style.display = 'none'; return; }
   dd.innerHTML = items.map(item => `
-    <div class="suggest-item" onclick="insertSuggestion('${esc(item.term)}')">
+    <div class="suggest-item" onclick="insertSuggestion('${esc(item.term)}', ${item.is_snippet ? 'true' : 'false'})">
       <div style="flex:1; min-width:0; font-size:14px; color:#111827;">${esc(item.term)}</div>
       <span class="suggest-cat ${CAT_BADGE[item.category] || ''}">${item.category}</span>
-      ${item.icd_code ? `<span style="font-size:11px; color:#9CA3AF;">${esc(item.icd_code)}</span>` : ''}
+      ${item.icd ? `<span style="font-size:11px; color:#9CA3AF;">${esc(item.icd)}</span>` : ''}
     </div>
   `).join('');
   dd.style.display = 'block';
 }
 
-function insertSuggestion(term) {
+function insertSuggestion(term, isSnippet) {
   const ta = document.getElementById('clinical-note');
-  const val = ta.value;
-  // Replace the last partial word with the suggestion
-  const lastSpaceIdx = val.lastIndexOf(' ');
-  const lastNewlineIdx = val.lastIndexOf('\n');
-  const splitAt = Math.max(lastSpaceIdx, lastNewlineIdx);
-  if (splitAt >= 0) {
-    ta.value = val.slice(0, splitAt + 1) + term + ' ';
+  const cursorPos = ta.selectionStart;
+  const before = ta.value.substring(0, cursorPos);
+  const after = ta.value.substring(cursorPos);
+  // Replace the current partial word with the suggestion
+  const lastSpaceOrNewline = Math.max(before.lastIndexOf(' '), before.lastIndexOf('\n'));
+  const beforeWord = before.substring(0, lastSpaceOrNewline + 1);
+  ta.value = beforeWord + term + ' ' + after.trimStart();
+
+  if (isSnippet) {
+    // Find first [  ] placeholder and select it
+    const placeholderIdx = ta.value.indexOf('[  ]', beforeWord.length);
+    if (placeholderIdx !== -1) {
+      ta.setSelectionRange(placeholderIdx, placeholderIdx + 4);
+    } else {
+      ta.setSelectionRange(beforeWord.length + term.length + 1, beforeWord.length + term.length + 1);
+    }
   } else {
-    ta.value = term + ' ';
+    ta.setSelectionRange(beforeWord.length + term.length + 1, beforeWord.length + term.length + 1);
   }
-  closeSuggestDropdown();
   ta.focus();
+  closeSuggestDropdown();
   _lastSuggestWord = '';
 }
 

@@ -343,18 +343,39 @@ def print_prescription_view(request, rx_id):
 
 @login_required
 def suggest_terms(request):
-    """Fast local DB typeahead for medical terms."""
-    from django.db.models import Q
+    """Fast local DB typeahead for medical terms — smarter ranked results."""
     q = request.GET.get('q', '').strip()
     if len(q) < 2:
-        return JsonResponse({'items': []})
+        return JsonResponse({'results': []})
+
+    from django.db.models import Case, When, IntegerField, Value, Q
+
     qs = MedicalTerm.objects.filter(
         Q(term__icontains=q) | Q(aliases__icontains=q)
-    )[:10]
-    return JsonResponse({'items': [
-        {'term': t.term, 'category': t.category, 'icd_code': t.icd_code}
-        for t in qs
-    ]})
+    ).annotate(
+        match_rank=Case(
+            # Exact match
+            When(term__iexact=q, then=Value(0)),
+            # Starts with query
+            When(term__istartswith=q, then=Value(1)),
+            # Word boundary match (term contains " query")
+            When(term__icontains=' ' + q, then=Value(2)),
+            # Contains match
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('match_rank', '-weight', 'term')[:12]
+
+    results = []
+    for t in qs:
+        results.append({
+            'term': t.term,
+            'category': t.category,
+            'icd': t.icd_code or '',
+            'is_snippet': t.category == 'snippet',
+        })
+
+    return JsonResponse({'results': results})
 
 
 @login_required

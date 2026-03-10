@@ -63,12 +63,18 @@ class MedicalTerm(models.Model):
         ('procedure', 'Procedure'),
         ('medicine', 'Medicine'),
         ('advice', 'Advice'),
+        ('snippet', 'Snippet'),
+        ('abbreviation', 'Abbreviation'),
     ]
     term = models.CharField(max_length=300, db_index=True)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     aliases = models.TextField(blank=True)
     specialty = models.CharField(max_length=50, blank=True)
     icd_code = models.CharField(max_length=20, blank=True)
+    weight = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="Higher = surfaces first. Common terms get 90-100, rare ones 10-20."
+    )
 
     class Meta:
         indexes = [
