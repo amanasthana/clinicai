@@ -200,42 +200,50 @@ def approve_registration_view(request, pk):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden('Not authorized.')
 
+    from django.db import transaction
+
     reg = ClinicRegistrationRequest.objects.get(pk=pk, status='pending')
 
-    # Create clinic
-    clinic = Clinic.objects.create(
-        name=reg.clinic_name,
-        city=reg.city,
-        state=reg.state,
-        phone=reg.clinic_phone,
-    )
+    try:
+        with transaction.atomic():
+            # Create clinic
+            clinic = Clinic.objects.create(
+                name=reg.clinic_name,
+                city=reg.city,
+                state=reg.state,
+                phone=reg.clinic_phone,
+            )
 
-    # Create user (phone = username)
-    user = User(
-        username=reg.phone,
-        email=reg.email,
-        first_name=reg.doctor_name.split()[0] if reg.doctor_name else '',
-        last_name=' '.join(reg.doctor_name.split()[1:]) if reg.doctor_name else '',
-    )
-    user.password = reg.password_hash   # already hashed by make_password
-    user.save()
+            # Create user (phone = username)
+            user = User(
+                username=reg.phone,
+                email=reg.email,
+                first_name=reg.doctor_name.split()[0] if reg.doctor_name else '',
+                last_name=' '.join(reg.doctor_name.split()[1:]) if reg.doctor_name else '',
+            )
+            user.password = reg.password_hash   # already hashed by make_password
+            user.save()
 
-    # Create staff member
-    StaffMember.objects.create(
-        user=user,
-        clinic=clinic,
-        role='admin',
-        display_name=reg.doctor_name,
-        qualification=reg.qualification,
-        registration_number=reg.registration_number,
-    )
+            # Create staff member
+            StaffMember.objects.create(
+                user=user,
+                clinic=clinic,
+                role='admin',
+                display_name=reg.doctor_name,
+                qualification=reg.qualification,
+                registration_number=reg.registration_number,
+            )
 
-    # Mark as approved
-    reg.status = 'approved'
-    reg.reviewed_at = timezone.now()
-    reg.save()
+            # Mark as approved
+            reg.status = 'approved'
+            reg.reviewed_at = timezone.now()
+            reg.save()
 
-    messages.success(request, f'{reg.clinic_name} approved! Notify them on WhatsApp.')
+    except Exception as e:
+        messages.error(request, f'Approval failed: {e}')
+        return redirect('accounts:admin_panel')
+
+    messages.success(request, f'{reg.clinic_name} approved! Login: {reg.phone} / [password set at registration]. Send WhatsApp.')
     return redirect('accounts:admin_panel')
 
 
@@ -339,3 +347,42 @@ def letterhead_view(request):
         return redirect('accounts:letterhead')
 
     return render(request, 'accounts/letterhead.html', {'clinic': clinic})
+
+
+@_require_POST
+def reset_clinic_password_view(request, pk):
+    """Superuser-only: re-apply password hash from a ClinicRegistrationRequest to its user."""
+    if not request.user.is_superuser:
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden('Not authorized.')
+
+    reg = ClinicRegistrationRequest.objects.get(pk=pk)
+    try:
+        user = User.objects.get(username=reg.phone)
+        user.password = reg.password_hash
+        user.save(update_fields=['password'])
+        messages.success(request, f'Password reset for {reg.phone} ({reg.doctor_name}). They can now log in with the password they set during registration.')
+    except User.DoesNotExist:
+        messages.error(request, f'No user found with username {reg.phone}. Was the approval run?')
+    return redirect('accounts:admin_panel')
+
+
+def check_user_view(request, phone):
+    """Superuser-only debug: verify if a registered user account is healthy."""
+    from django.http import JsonResponse
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Not authorized'}, status=403)
+    try:
+        u = User.objects.get(username=phone)
+    except User.DoesNotExist:
+        return JsonResponse({'exists': False, 'phone': phone})
+    has_staff = hasattr(u, 'staff_profile')
+    return JsonResponse({
+        'exists': True,
+        'phone': phone,
+        'is_active': u.is_active,
+        'has_staff_profile': has_staff,
+        'role': u.staff_profile.role if has_staff else None,
+        'clinic': u.staff_profile.clinic.name if has_staff else None,
+        'date_joined': str(u.date_joined),
+    })

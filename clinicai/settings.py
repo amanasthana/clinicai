@@ -132,3 +132,7 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SECURE = True
+    CSRF_TRUSTED_ORIGINS = env.list(
+        'CSRF_TRUSTED_ORIGINS',
+        default=['https://clinicai.azurewebsites.net']
+    )

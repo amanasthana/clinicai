@@ -20,4 +20,6 @@ urlpatterns = [
     path('contact/success/', views.contact_success_view, name='contact_success'),
     path('api/preference/', views.update_preference_api, name='update_preference'),
     path('letterhead/', views.letterhead_view, name='letterhead'),
+    path('admin-panel/check-user/<str:phone>/', views.check_user_view, name='check_user'),
+    path('admin-panel/reset-password/<int:pk>/', views.reset_clinic_password_view, name='reset_clinic_password'),
 ]
