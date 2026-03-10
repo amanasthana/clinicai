@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Prescription, PrescriptionMedicine
+from .models import Prescription, PrescriptionMedicine, MedicalTerm
 
 
 class PrescriptionMedicineInline(admin.TabularInline):
@@ -30,3 +30,11 @@ class PrescriptionAdmin(admin.ModelAdmin):
     def medicine_count(self, obj):
         return obj.medicines.count()
     medicine_count.short_description = 'Medicines'
+
+
+@admin.register(MedicalTerm)
+class MedicalTermAdmin(admin.ModelAdmin):
+    list_display = ('term', 'category', 'specialty', 'icd_code')
+    search_fields = ('term', 'aliases', 'icd_code')
+    list_filter = ('category', 'specialty')
+    ordering = ('category', 'term')

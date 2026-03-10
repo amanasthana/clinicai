@@ -79,21 +79,25 @@ def deidentify_clinical_note(text: str) -> str:
     return text
 
 
-def generate_prescription(raw_note: str, patient_age: int, patient_gender: str) -> dict:
+def generate_prescription(raw_note: str, patient_age: int, patient_gender: str,
+                          doctor=None, clinic=None) -> dict:
     """
     Full AI prescription generation pipeline.
 
     Steps:
       1. De-identify the clinical note (CRITICAL — never skip)
       2. Build minimal clinical input: age + gender + safe note
-      3. Call Claude Haiku with structured JSON prompt
-      4. Parse and validate the response
-      5. Return dict ready for saving to PrescriptionMedicine rows
+      3. Optionally append doctor favorites + clinic inventory context (NOT PII)
+      4. Call Claude Haiku with structured JSON prompt
+      5. Parse and validate the response
+      6. Return dict ready for saving to PrescriptionMedicine rows
 
     Args:
         raw_note: Doctor's raw clinical text (may contain PII)
         patient_age: Patient age (integer)
         patient_gender: 'M', 'F', or 'O'
+        doctor: StaffMember instance (optional) — used to fetch favorites
+        clinic: Clinic instance (optional) — used to fetch in-stock medicines
 
     Returns:
         dict with keys: soap_note, diagnosis, medicines (list), advice,
@@ -102,6 +106,38 @@ def generate_prescription(raw_note: str, patient_age: int, patient_gender: str) 
     safe_note = deidentify_clinical_note(raw_note)
     gender_text = {'M': 'M', 'F': 'F', 'O': 'NB'}.get(patient_gender, '')
     clinical_input = f"{patient_age}{gender_text}, {safe_note}"
+
+    # Append inventory context if available (NOT PII — purely medicine names)
+    try:
+        if clinic:
+            from pharmacy.models import PharmacyItem
+            in_stock = list(
+                PharmacyItem.objects.filter(clinic=clinic, quantity__gt=0)
+                .select_related('medicine')
+                .values_list('medicine__name', 'custom_name')[:50]
+            )
+            stock_names = [n or c for n, c in in_stock if (n or c)]
+            if stock_names:
+                clinical_input += f"\n\nClinic inventory (prefer these if appropriate): {', '.join(stock_names)}"
+
+        if doctor:
+            from pharmacy.models import DoctorFavorite
+            favs = list(
+                DoctorFavorite.objects.filter(doctor=doctor)
+                .select_related('medicine')[:30]
+            )
+            fav_lines = []
+            for f in favs:
+                line = f.display_name
+                if f.default_dosage:
+                    line += f" ({f.default_dosage})"
+                if f.default_frequency:
+                    line += f" {f.default_frequency}"
+                fav_lines.append(line)
+            if fav_lines:
+                clinical_input += f"\n\nDoctor's preferred medicines (use if clinically appropriate): {', '.join(fav_lines)}"
+    except Exception as e:
+        logger.warning("Could not fetch inventory/favorites context: %s", e)
 
     logger.info("Calling Claude API for prescription generation (de-identified note sent)")
 

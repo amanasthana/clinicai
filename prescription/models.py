@@ -53,3 +53,28 @@ class PrescriptionMedicine(models.Model):
 
     def __str__(self):
         return f"{self.drug_name} — {self.dosage} for {self.duration}"
+
+
+class MedicalTerm(models.Model):
+    CATEGORY_CHOICES = [
+        ('symptom', 'Symptom'),
+        ('diagnosis', 'Diagnosis'),
+        ('investigation', 'Investigation'),
+        ('procedure', 'Procedure'),
+        ('medicine', 'Medicine'),
+        ('advice', 'Advice'),
+    ]
+    term = models.CharField(max_length=300, db_index=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    aliases = models.TextField(blank=True)
+    specialty = models.CharField(max_length=50, blank=True)
+    icd_code = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['category', 'term']),
+            models.Index(fields=['specialty', 'term']),
+        ]
+
+    def __str__(self):
+        return f"{self.term} ({self.category})"

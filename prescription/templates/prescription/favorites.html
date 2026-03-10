@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}My Medicines — {{ doctor.display_name }}{% endblock %}
+{% block nav_doctor %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+.fav-card {
+  background: #F9FAFB;
+  border: 1px solid rgba(0,0,0,0.07);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fav-remove-btn {
+  background: none;
+  border: none;
+  color: #EF4444;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:700px;">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
+    <a href="/rx/doctor/" style="font-size:13px; color:#6B7280; text-decoration:none;">← Back</a>
+    <h1 style="font-size:22px; font-weight:700; color:#111827; margin:0;">My Medicines</h1>
+    <span style="font-size:13px; color:#9CA3AF;">Quick-add pills on the consult screen</span>
+  </div>
+
+  <!-- Add medicine from catalog -->
+  <div class="card" style="margin-bottom:24px;">
+    <div style="font-size:15px; font-weight:600; color:#374151; margin-bottom:14px;">Add Medicine</div>
+
+    <div id="add-error" class="alert alert-error" style="display:none; margin-bottom:12px;"></div>
+
+    <!-- Search catalog -->
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Search Catalog</label>
+      <div style="position:relative;">
+        <input type="text" id="cat-search" placeholder="Type medicine name..." class="input-field"
+          style="font-size:14px;" autocomplete="off" oninput="searchCatalog(this.value)">
+        <div id="cat-dropdown" style="position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #E5E7EB; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,0.12); z-index:100; display:none; max-height:200px; overflow-y:auto;"></div>
+      </div>
+      <div id="selected-med-info" style="margin-top:8px; display:none; font-size:13px; color:#1D4ED8; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:8px 12px;"></div>
+    </div>
+    <input type="hidden" id="add-catalog-id">
+
+    <!-- OR custom name -->
+    <div style="margin-bottom:14px;">
+      <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">
+        OR Custom Name <span style="color:#9CA3AF; font-weight:400;">(not in catalog)</span>
+      </label>
+      <input type="text" id="add-custom-name" placeholder="e.g. Tab Ayurvedic Remedy 500mg"
+        class="input-field" style="font-size:14px;">
+    </div>
+
+    <!-- Defaults -->
+    <div class="resp-grid-2" style="gap:12px; margin-bottom:14px;">
+      <div>
+        <label style="display:block; font-size:12px; font-weight:500; color:#6B7280; margin-bottom:4px;">Form</label>
+        <input type="text" id="add-form" placeholder="Tab / Cap / Syp" class="input-field" style="font-size:13px; padding:7px 10px;">
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; font-weight:500; color:#6B7280; margin-bottom:4px;">Dosage</label>
+        <input type="text" id="add-dosage" placeholder="1-0-1" class="input-field" style="font-size:13px; padding:7px 10px;">
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; font-weight:500; color:#6B7280; margin-bottom:4px;">Frequency</label>
+        <input type="text" id="add-frequency" placeholder="Twice daily after meals" class="input-field" style="font-size:13px; padding:7px 10px;">
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; font-weight:500; color:#6B7280; margin-bottom:4px;">Duration</label>
+        <input type="text" id="add-duration" placeholder="14 days" class="input-field" style="font-size:13px; padding:7px 10px;">
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; font-weight:500; color:#6B7280; margin-bottom:4px;">Notes</label>
+        <input type="text" id="add-notes" placeholder="After food" class="input-field" style="font-size:13px; padding:7px 10px;">
+      </div>
+    </div>
+
+    <button onclick="addFavorite()" class="btn btn-primary">Add to My Medicines</button>
+  </div>
+
+  <!-- Current favorites list -->
+  <div class="card">
+    <div style="font-size:15px; font-weight:600; color:#374151; margin-bottom:14px;">
+      My Medicines <span style="font-size:13px; font-weight:400; color:#9CA3AF;">({{ favorites|length }} saved)</span>
+    </div>
+
+    <div id="favorites-list" style="display:flex; flex-direction:column; gap:10px;">
+      {% for fav in favorites %}
+      <div class="fav-card" id="fav-{{ fav.pk }}">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:15px; font-weight:600; color:#111827; margin-bottom:4px;">{{ fav.display_name }}</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; font-size:12px; color:#6B7280;">
+            {% if fav.default_dosage %}<span>Dosage: {{ fav.default_dosage }}</span>{% endif %}
+            {% if fav.default_frequency %}<span>· {{ fav.default_frequency }}</span>{% endif %}
+            {% if fav.default_duration %}<span>· {{ fav.default_duration }}</span>{% endif %}
+            {% if fav.default_notes %}<span>· {{ fav.default_notes }}</span>{% endif %}
+          </div>
+        </div>
+        <button class="fav-remove-btn" onclick="removeFavorite({{ fav.pk }})" title="Remove">×</button>
+      </div>
+      {% empty %}
+      <div id="empty-msg" style="text-align:center; padding:30px; color:#9CA3AF; font-size:14px;">
+        No medicines saved yet. Add your commonly prescribed medicines above.
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let catTimer = null;
+
+function getCsrf() {
+  return document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function searchCatalog(q) {
+  clearTimeout(catTimer);
+  const dd = document.getElementById('cat-dropdown');
+  if (q.length < 2) { dd.style.display = 'none'; return; }
+  catTimer = setTimeout(async () => {
+    const resp = await fetch(`/pharmacy/api/catalog/?q=${encodeURIComponent(q)}`);
+    const data = await resp.json();
+    if (!data.items.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = data.items.map(m => `
+      <div onclick="selectMed(${m.id}, '${esc(m.name)}', '${esc(m.generic_name)}', '${esc(m.form)}')"
+           style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #F3F4F6;"
+           onmouseenter="this.style.background='#F9FAFB'" onmouseleave="this.style.background=''">
+        <div style="font-size:14px; font-weight:500;">${esc(m.name)}</div>
+        <div style="font-size:12px; color:#9CA3AF;">${esc(m.generic_name)} · ${esc(m.form)}</div>
+      </div>
+    `).join('');
+    dd.style.display = 'block';
+  }, 200);
+}
+
+function selectMed(id, name, generic, form) {
+  document.getElementById('add-catalog-id').value = id;
+  document.getElementById('cat-search').value = name;
+  document.getElementById('cat-dropdown').style.display = 'none';
+  const info = document.getElementById('selected-med-info');
+  info.textContent = `Selected: ${name} (${generic})`;
+  info.style.display = 'block';
+  document.getElementById('add-custom-name').value = '';
+  if (form && !document.getElementById('add-form').value) {
+    document.getElementById('add-form').value = form;
+  }
+}
+
+async function addFavorite() {
+  const catalogId = document.getElementById('add-catalog-id').value;
+  const customName = document.getElementById('add-custom-name').value.trim();
+  const errEl = document.getElementById('add-error');
+  errEl.style.display = 'none';
+
+  if (!catalogId && !customName) {
+    errEl.textContent = 'Please select a medicine from catalog or enter a custom name.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const payload = {
+    catalog_id: catalogId ? parseInt(catalogId) : null,
+    custom_name: customName,
+    default_form: document.getElementById('add-form').value.trim(),
+    default_dosage: document.getElementById('add-dosage').value.trim(),
+    default_frequency: document.getElementById('add-frequency').value.trim(),
+    default_duration: document.getElementById('add-duration').value.trim(),
+    default_notes: document.getElementById('add-notes').value.trim(),
+  };
+
+  const resp = await fetch('/rx/favorites/add/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (data.ok) {
+    // Add to list
+    const list = document.getElementById('favorites-list');
+    const emptyMsg = document.getElementById('empty-msg');
+    if (emptyMsg) emptyMsg.remove();
+
+    const div = document.createElement('div');
+    div.className = 'fav-card';
+    div.id = `fav-${data.id}`;
+    const details = [
+      payload.default_dosage ? `Dosage: ${esc(payload.default_dosage)}` : null,
+      payload.default_frequency ? `· ${esc(payload.default_frequency)}` : null,
+      payload.default_duration ? `· ${esc(payload.default_duration)}` : null,
+      payload.default_notes ? `· ${esc(payload.default_notes)}` : null,
+    ].filter(Boolean).join(' ');
+
+    div.innerHTML = `
+      <div style="flex:1;">
+        <div style="font-size:15px; font-weight:600; color:#111827; margin-bottom:4px;">${esc(data.name)}</div>
+        <div style="font-size:12px; color:#6B7280;">${details}</div>
+      </div>
+      <button class="fav-remove-btn" onclick="removeFavorite(${data.id})" title="Remove">×</button>
+    `;
+    list.appendChild(div);
+
+    // Reset form
+    document.getElementById('add-catalog-id').value = '';
+    document.getElementById('cat-search').value = '';
+    document.getElementById('add-custom-name').value = '';
+    document.getElementById('add-form').value = '';
+    document.getElementById('add-dosage').value = '';
+    document.getElementById('add-frequency').value = '';
+    document.getElementById('add-duration').value = '';
+    document.getElementById('add-notes').value = '';
+    document.getElementById('selected-med-info').style.display = 'none';
+  } else {
+    errEl.textContent = data.error || 'Could not add medicine.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function removeFavorite(pk) {
+  if (!confirm('Remove this medicine from your list?')) return;
+  const resp = await fetch(`/rx/favorites/remove/${pk}/`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': getCsrf()},
+  });
+  const data = await resp.json();
+  if (data.ok) {
+    const el = document.getElementById(`fav-${pk}`);
+    if (el) el.remove();
+    if (!document.querySelector('.fav-card')) {
+      document.getElementById('favorites-list').innerHTML =
+        '<div style="text-align:center; padding:30px; color:#9CA3AF; font-size:14px;">No medicines saved yet.</div>';
+    }
+  }
+}
+
+document.addEventListener('click', e => {
+  const dd = document.getElementById('cat-dropdown');
+  const inp = document.getElementById('cat-search');
+  if (dd && !dd.contains(e.target) && e.target !== inp) dd.style.display = 'none';
+});
+</script>
+{% endblock %}

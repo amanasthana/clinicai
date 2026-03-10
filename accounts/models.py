@@ -34,6 +34,7 @@ class StaffMember(models.Model):
     qualification = models.CharField(max_length=200, blank=True)   # "MBBS, MD"
     registration_number = models.CharField(max_length=50, blank=True)  # Medical council reg
     created_at = models.DateTimeField(auto_now_add=True)
+    show_rx_remarks = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.display_name} ({self.get_role_display()}) — {self.clinic.name}"

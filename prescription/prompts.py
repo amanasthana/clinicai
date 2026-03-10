@@ -102,6 +102,8 @@ IMPORTANT RULES:
 - DO NOT invent or assume medications not mentioned or implied by the doctor's note
 - If the doctor's note mentions specific drugs, use those exact drugs
 - If the doctor only mentions a condition without specific drugs, suggest standard first-line treatment per Indian clinical guidelines
+- MEDICINE PRIORITY ORDER (if applicable): 1) Specific drugs mentioned in note, 2) Medicines from clinic inventory if listed, 3) Doctor's preferred medicines if listed, 4) Standard Indian clinical guidelines
+- If clinic inventory or doctor preferences are provided at the end of the note, prefer those medicines when clinically appropriate
 - Always respond with valid JSON only. No markdown, no backticks, no preamble.
 """ + MULTILINGUAL_NOTE + """
 PRIVACY RULES (strictly enforced):

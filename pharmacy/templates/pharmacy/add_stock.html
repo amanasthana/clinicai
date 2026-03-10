@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Add Stock — Pharmacy{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:600px;">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+    <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">← Back</a>
+    <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Add Stock</h1>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-error" style="margin-bottom:16px;">{{ error }}</div>
+  {% endif %}
+
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" id="catalog-id-input" name="catalog_id">
+
+      <!-- Medicine search from catalog -->
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">
+          Search Medicine Catalog
+        </label>
+        <div style="position:relative;">
+          <input type="text" id="catalog-search" placeholder="Type medicine name (e.g. Metformin, Paracetamol)..."
+            class="input-field" autocomplete="off"
+            style="font-size:14px;" oninput="searchCatalog(this.value)">
+          <div id="catalog-dropdown" style="position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #E5E7EB; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,0.12); z-index:100; display:none; max-height:240px; overflow-y:auto;"></div>
+        </div>
+        <div id="selected-medicine" style="margin-top:8px; display:none; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:8px 12px; font-size:13px; color:#1D4ED8; font-weight:500;"></div>
+      </div>
+
+      <!-- OR custom name -->
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">
+          OR Custom Name <span style="color:#9CA3AF; font-weight:400;">(if not in catalog)</span>
+        </label>
+        <input type="text" name="custom_name" id="custom-name" placeholder="e.g. Tab Ayurvedic X 500mg"
+          class="input-field" style="font-size:14px;">
+      </div>
+
+      <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
+
+      <!-- Batch, Expiry, Qty, Price, Reorder -->
+      <div class="resp-grid-2" style="gap:14px; margin-bottom:16px;">
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Batch Number</label>
+          <input type="text" name="batch_number" placeholder="e.g. B2024-01" class="input-field" style="font-size:14px;">
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Expiry Date</label>
+          <input type="date" name="expiry_date" class="input-field" style="font-size:14px;">
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Quantity</label>
+          <input type="number" name="quantity" min="0" value="0" class="input-field" style="font-size:14px;">
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Unit Price (₹)</label>
+          <input type="number" name="unit_price" min="0" step="0.01" value="0" class="input-field" style="font-size:14px;">
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Reorder Level</label>
+          <input type="number" name="reorder_level" min="0" value="10" class="input-field" style="font-size:14px;">
+        </div>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; padding-top:16px; border-top:1px solid #E5E7EB;">
+        <button type="submit" class="btn btn-primary btn-lg" style="flex:1; min-width:160px;">Save Stock</button>
+        <a href="/pharmacy/" class="btn btn-secondary btn-lg" style="flex:1; min-width:120px; text-align:center;">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let searchTimer = null;
+
+function searchCatalog(q) {
+  clearTimeout(searchTimer);
+  const dropdown = document.getElementById('catalog-dropdown');
+  if (q.length < 2) { dropdown.style.display = 'none'; return; }
+  searchTimer = setTimeout(async () => {
+    const resp = await fetch(`/pharmacy/api/catalog/?q=${encodeURIComponent(q)}`);
+    const data = await resp.json();
+    if (!data.items.length) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = data.items.map(m => `
+      <div onclick="selectMedicine(${m.id}, '${escHtml(m.name)}', '${escHtml(m.generic_name)}')"
+           style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #F3F4F6; transition:background 0.1s;"
+           onmouseenter="this.style.background='#F9FAFB'" onmouseleave="this.style.background=''">
+        <div style="font-size:14px; font-weight:500; color:#111827;">${escHtml(m.name)}</div>
+        <div style="font-size:12px; color:#9CA3AF;">${escHtml(m.generic_name)} · ${escHtml(m.form)} · ${escHtml(m.manufacturer)}</div>
+      </div>
+    `).join('');
+    dropdown.style.display = 'block';
+  }, 200);
+}
+
+function selectMedicine(id, name, generic) {
+  document.getElementById('catalog-id-input').value = id;
+  document.getElementById('catalog-search').value = name;
+  document.getElementById('catalog-dropdown').style.display = 'none';
+  const sel = document.getElementById('selected-medicine');
+  sel.textContent = `Selected: ${name} (${generic})`;
+  sel.style.display = 'block';
+  document.getElementById('custom-name').value = '';
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('click', e => {
+  const dropdown = document.getElementById('catalog-dropdown');
+  const input = document.getElementById('catalog-search');
+  if (!dropdown.contains(e.target) && e.target !== input) {
+    dropdown.style.display = 'none';
+  }
+});
+</script>
+{% endblock %}

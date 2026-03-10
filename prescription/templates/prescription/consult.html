@@ -154,6 +154,40 @@
   opacity: 1;
 }
 
+/* Quick-add favorite pills */
+.fav-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.fav-pill {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:5px 12px; border-radius:20px; border:1px solid #BFDBFE;
+  background:#EFF6FF; color:#1D4ED8; font-size:12px; font-weight:500;
+  cursor:pointer; transition:background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color:transparent;
+}
+.fav-pill:hover { background:#DBEAFE; }
+.fav-pill:active { transform:scale(0.95); }
+
+/* Suggest dropdown */
+.suggest-dropdown {
+  position:absolute; top:100%; left:0; right:0; z-index:200;
+  background:#fff; border:1px solid #E5E7EB; border-radius:10px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.12); max-height:220px; overflow-y:auto;
+  display:none;
+}
+.suggest-item {
+  padding:9px 14px; cursor:pointer; border-bottom:1px solid #F9FAFB;
+  display:flex; align-items:center; gap:10px; transition:background 0.1s;
+}
+.suggest-item:hover { background:#F9FAFB; }
+.suggest-cat {
+  font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px;
+  flex-shrink:0; text-transform:uppercase; letter-spacing:0.4px;
+}
+.cat-symptom    { background:#FEF3C7; color:#92400E; }
+.cat-diagnosis  { background:#EDE9FE; color:#5B21B6; }
+.cat-investigation { background:#E0F2FE; color:#0369A1; }
+.cat-advice     { background:#DCFCE7; color:#166534; }
+.cat-medicine   { background:#FEE2E2; color:#991B1B; }
+
 /* Diff / Inv step cards hover on labels */
 #diff-list label:hover,
 #inv-immediate label:hover,
@@ -232,6 +266,7 @@
       <!-- Clinical Notes -->
       <div class="card" style="margin-bottom:16px;">
         <div style="font-size:15px; font-weight:600; margin-bottom:10px;">Clinical Notes</div>
+        <div style="position:relative;">
         <textarea
           id="clinical-note"
           class="input-field"
@@ -239,7 +274,10 @@
           placeholder="Type clinical observations, findings, and plan...
 E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add glimepiride 1mg OD before breakfast, check HbA1c after 3 months, diet advice"
           style="resize:vertical; font-size:15px; line-height:1.6;"
+          oninput="onNoteInput(this.value)"
         >{% if existing_rx %}{{ existing_rx.raw_clinical_note }}{% endif %}</textarea>
+        <div class="suggest-dropdown" id="suggest-dropdown"></div>
+        </div>
 
         <!-- Voice dictation bar -->
         <div class="voice-bar" id="voice-bar" style="display:none;">
@@ -270,6 +308,30 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
         <!-- PII ok indicator -->
         <div id="pii-ok" class="pii-ok">Privacy check passed — no patient names detected ✓</div>
 
+        {% if favorites %}
+        <!-- Quick-add favourite medicines -->
+        <div style="margin-top:12px;">
+          <div style="font-size:11px; font-weight:600; color:#9CA3AF; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+            My Medicines
+            <a href="/rx/favorites/" style="font-size:11px; color:#2563EB; font-weight:500; text-decoration:none;">Manage →</a>
+          </div>
+          <div class="fav-pills">
+            {% for fav in favorites %}
+            <button type="button" class="fav-pill"
+              data-name="{{ fav.display_name|escapejs }}"
+              data-form="{{ fav.default_form|escapejs }}"
+              data-dosage="{{ fav.default_dosage|escapejs }}"
+              data-frequency="{{ fav.default_frequency|escapejs }}"
+              data-duration="{{ fav.default_duration|escapejs }}"
+              data-notes="{{ fav.default_notes|escapejs }}"
+              onclick="addFavoriteMedicine(this)">
+              + {{ fav.display_name }}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Action row: two-mode choice -->
         <div id="generate-row" style="margin-top:12px;">
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -282,9 +344,10 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
               Differential Dx
             </button>
           </div>
-          <div style="font-size:12px; color:#9CA3AF; margin-top:8px; line-height:1.5;">
-            <strong>Quick Prescribe</strong> — go straight to prescription &nbsp;·&nbsp;
-            <strong>Differential Dx</strong> — AI ranks diagnoses → investigations → prescription
+          <div style="font-size:12px; color:#9CA3AF; margin-top:8px; line-height:1.5; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span><strong>Quick Prescribe</strong> — go straight to prescription &nbsp;·&nbsp;
+            <strong>Differential Dx</strong> — AI ranks diagnoses → investigations → prescription</span>
+            <a href="/rx/favorites/" style="font-size:12px; color:#2563EB; text-decoration:none; white-space:nowrap;">My Medicines →</a>
           </div>
         </div>
 
@@ -412,7 +475,14 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
 
           <!-- Medicines — div-based, mobile-friendly -->
           <div style="margin-bottom:16px;">
-            <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:10px;">MEDICINES</div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+              <div style="font-size:12px; font-weight:500; color:#6B7280;">MEDICINES</div>
+              <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#6B7280; cursor:pointer;">
+                Show remarks
+                <input type="checkbox" id="remarks-toggle" style="accent-color:#2563EB; width:16px; height:16px;"
+                  onchange="handleRemarksToggle(this.checked)">
+              </label>
+            </div>
             <div class="med-rows" id="medicines-table"></div>
             <button type="button" onclick="addMedicineRow()" class="btn btn-secondary btn-sm" style="margin-top:10px;">
               + Add Medicine
@@ -497,6 +567,8 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
      data-generate-url="/rx/generate/"
      data-differentials-url="/rx/differentials/"
      data-investigations-url="/rx/investigations/"
+     data-suggest-url="/rx/api/suggest/"
+     data-show-remarks="{{ show_rx_remarks|yesno:'true,false' }}"
      style="display:none;"></div>
 
 {% endblock %}
@@ -877,7 +949,7 @@ function addMedicineRow(m) {
         <label>Duration</label>
         <input class="input-field med-duration" value="${esc(m.duration)}" placeholder="7 days" style="font-size:13px; padding:7px 10px;">
       </div>
-      <div class="med-field">
+      <div class="med-field med-notes-field">
         <label>Notes</label>
         <input class="input-field med-notes" value="${esc(m.notes)}" placeholder="After food" style="font-size:13px; padding:7px 10px;">
       </div>
@@ -885,6 +957,11 @@ function addMedicineRow(m) {
     <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove">×</button>
   `;
   container.appendChild(div);
+  // Apply current remarks toggle state
+  const toggle = document.getElementById('remarks-toggle');
+  if (toggle && !toggle.checked) {
+    div.querySelectorAll('.med-notes-field').forEach(el => { el.style.display = 'none'; });
+  }
   renumberMedicines();
 }
 
@@ -1041,6 +1118,121 @@ function showLimitGate(count, limit) {
       try { recognition.start(); } catch (_) {}
     }
   };
+})();
+
+// ── Add Favorite Medicine (quick-add pill) ─────────────────────
+function addFavoriteMedicine(btn) {
+  const m = {
+    drug_name: btn.dataset.name || '',
+    dosage: btn.dataset.dosage || '',
+    frequency: btn.dataset.frequency || '',
+    duration: btn.dataset.duration || '',
+    notes: btn.dataset.notes || '',
+  };
+  // Ensure rx-output and rx-card are visible
+  document.getElementById('rx-output').style.display = 'block';
+  document.getElementById('rx-card').style.display = 'block';
+  addMedicineRow(m);
+  document.getElementById('rx-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Remarks toggle ─────────────────────────────────────────────
+function handleRemarksToggle(checked) {
+  document.querySelectorAll('#medicines-table .med-notes-field').forEach(el => {
+    el.style.display = checked ? '' : 'none';
+  });
+  // Persist preference
+  fetch('/accounts/api/preference/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify({ show_rx_remarks: checked }),
+  }).catch(() => {});
+}
+
+// ── Auto-suggest (typeahead on clinical note) ──────────────────
+let _suggestTimer = null;
+let _lastSuggestWord = '';
+
+function onNoteInput(value) {
+  clearTimeout(_suggestTimer);
+  _suggestTimer = setTimeout(() => {
+    // Extract last word being typed
+    const words = value.split(/\s+/);
+    const lastWord = words[words.length - 1];
+    if (lastWord.length >= 2 && lastWord !== _lastSuggestWord) {
+      _lastSuggestWord = lastWord;
+      fetchSuggestions(lastWord);
+    } else if (lastWord.length < 2) {
+      closeSuggestDropdown();
+    }
+  }, 250);
+}
+
+async function fetchSuggestions(q) {
+  try {
+    const resp = await fetch(`${visitData.suggestUrl}?q=${encodeURIComponent(q)}`);
+    const data = await resp.json();
+    renderSuggestions(data.items || []);
+  } catch (_) {}
+}
+
+const CAT_BADGE = {
+  symptom:       'cat-symptom',
+  diagnosis:     'cat-diagnosis',
+  investigation: 'cat-investigation',
+  advice:        'cat-advice',
+  medicine:      'cat-medicine',
+};
+
+function renderSuggestions(items) {
+  const dd = document.getElementById('suggest-dropdown');
+  if (!items.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = items.map(item => `
+    <div class="suggest-item" onclick="insertSuggestion('${esc(item.term)}')">
+      <div style="flex:1; min-width:0; font-size:14px; color:#111827;">${esc(item.term)}</div>
+      <span class="suggest-cat ${CAT_BADGE[item.category] || ''}">${item.category}</span>
+      ${item.icd_code ? `<span style="font-size:11px; color:#9CA3AF;">${esc(item.icd_code)}</span>` : ''}
+    </div>
+  `).join('');
+  dd.style.display = 'block';
+}
+
+function insertSuggestion(term) {
+  const ta = document.getElementById('clinical-note');
+  const val = ta.value;
+  // Replace the last partial word with the suggestion
+  const lastSpaceIdx = val.lastIndexOf(' ');
+  const lastNewlineIdx = val.lastIndexOf('\n');
+  const splitAt = Math.max(lastSpaceIdx, lastNewlineIdx);
+  if (splitAt >= 0) {
+    ta.value = val.slice(0, splitAt + 1) + term + ' ';
+  } else {
+    ta.value = term + ' ';
+  }
+  closeSuggestDropdown();
+  ta.focus();
+  _lastSuggestWord = '';
+}
+
+function closeSuggestDropdown() {
+  const dd = document.getElementById('suggest-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('suggest-dropdown');
+  const ta = document.getElementById('clinical-note');
+  if (dd && !dd.contains(e.target) && e.target !== ta) closeSuggestDropdown();
+});
+
+// ── Init remarks toggle state on page load ─────────────────────
+(function initRemarks() {
+  const toggle = document.getElementById('remarks-toggle');
+  if (!toggle) return;
+  const showRemarks = visitData.showRemarks === 'true';
+  toggle.checked = showRemarks;
+  // Apply initial state when rows exist
+  // (rows added later will check toggle state in addMedicineRow)
 })();
 
 // ── Save ───────────────────────────────────────────────────────

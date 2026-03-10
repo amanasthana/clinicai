@@ -18,4 +18,5 @@ urlpatterns = [
     path('admin-panel/message/<int:pk>/read/', views.mark_contact_read_view, name='mark_contact_read'),
     path('contact/', views.contact_view, name='contact'),
     path('contact/success/', views.contact_success_view, name='contact_success'),
+    path('api/preference/', views.update_preference_api, name='update_preference'),
 ]

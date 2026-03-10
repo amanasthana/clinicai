@@ -11,7 +11,8 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 
 from reception.models import Visit
-from .models import Prescription, PrescriptionMedicine
+from .models import Prescription, PrescriptionMedicine, MedicalTerm
+from pharmacy.models import DoctorFavorite
 from .services import generate_prescription, get_differentials, get_investigations, deidentify_clinical_note
 
 logger = logging.getLogger(__name__)
@@ -97,13 +98,18 @@ def consult_view(request, visit_id):
         .select_related('prescription')
     )
 
+    doctor = request.user.staff_profile
+    favorites = DoctorFavorite.objects.filter(doctor=doctor).select_related('medicine')
+
     return render(request, 'prescription/consult.html', {
         'visit': visit,
         'patient': patient,
         'clinic': clinic,
         'existing_rx': existing_rx,
         'past_visits': past_visits,
-        'doctor': request.user.staff_profile,
+        'doctor': doctor,
+        'favorites': favorites,
+        'show_rx_remarks': doctor.show_rx_remarks,
     })
 
 
@@ -146,7 +152,11 @@ def generate_prescription_api(request):
         return JsonResponse({'ok': False, 'error': 'Clinical note is empty.'}, status=400)
 
     try:
-        prescription_data = generate_prescription(raw_note, patient_age, patient_gender)
+        prescription_data = generate_prescription(
+            raw_note, patient_age, patient_gender,
+            doctor=request.user.staff_profile,
+            clinic=clinic,
+        )
         return JsonResponse({'ok': True, 'prescription': prescription_data})
     except json.JSONDecodeError as e:
         logger.error("Failed to parse AI response as JSON: %s", e)
@@ -329,3 +339,99 @@ def print_prescription_view(request, rx_id):
         'medicines': rx.medicines.all(),
         'wa_url': wa_url,
     })
+
+
+@login_required
+def suggest_terms(request):
+    """Fast local DB typeahead for medical terms."""
+    from django.db.models import Q
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse({'items': []})
+    qs = MedicalTerm.objects.filter(
+        Q(term__icontains=q) | Q(aliases__icontains=q)
+    )[:10]
+    return JsonResponse({'items': [
+        {'term': t.term, 'category': t.category, 'icd_code': t.icd_code}
+        for t in qs
+    ]})
+
+
+@login_required
+def favorites_view(request):
+    """Show doctor's favourite medicines list."""
+    doctor = request.user.staff_profile
+    favorites = DoctorFavorite.objects.filter(doctor=doctor).select_related('medicine')
+    return render(request, 'prescription/favorites.html', {
+        'favorites': favorites,
+        'doctor': doctor,
+    })
+
+
+@login_required
+@require_POST
+def add_favorite_api(request):
+    """Add a medicine to doctor's favorites."""
+    import json
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    doctor = request.user.staff_profile
+    catalog_id = data.get('catalog_id')
+    custom_name = data.get('custom_name', '').strip()
+
+    medicine = None
+    if catalog_id:
+        from pharmacy.models import MedicineCatalog
+        try:
+            medicine = MedicineCatalog.objects.get(pk=catalog_id)
+        except MedicineCatalog.DoesNotExist:
+            pass
+
+    if not medicine and not custom_name:
+        return JsonResponse({'ok': False, 'error': 'No medicine specified'}, status=400)
+
+    fav = DoctorFavorite.objects.create(
+        doctor=doctor,
+        medicine=medicine,
+        custom_name=custom_name if not medicine else '',
+        default_form=data.get('default_form', ''),
+        default_dosage=data.get('default_dosage', ''),
+        default_frequency=data.get('default_frequency', ''),
+        default_duration=data.get('default_duration', ''),
+        default_notes=data.get('default_notes', ''),
+        sort_order=DoctorFavorite.objects.filter(doctor=doctor).count(),
+    )
+    return JsonResponse({'ok': True, 'id': fav.pk, 'name': fav.display_name})
+
+
+@login_required
+@require_POST
+def remove_favorite_api(request, pk):
+    """Remove a medicine from doctor's favorites."""
+    doctor = request.user.staff_profile
+    from django.shortcuts import get_object_or_404
+    fav = get_object_or_404(DoctorFavorite, pk=pk, doctor=doctor)
+    fav.delete()
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def favorites_list_api(request):
+    """Return doctor's favorites as JSON for consult page quick-add pills."""
+    doctor = request.user.staff_profile
+    favorites = DoctorFavorite.objects.filter(doctor=doctor).select_related('medicine')
+    return JsonResponse({'items': [
+        {
+            'id': f.pk,
+            'name': f.display_name,
+            'form': f.default_form,
+            'dosage': f.default_dosage,
+            'frequency': f.default_frequency,
+            'duration': f.default_duration,
+            'notes': f.default_notes,
+        }
+        for f in favorites
+    ]})

@@ -32,6 +32,12 @@
       {% block nav_links %}
       <a href="/" class="nav-link {% block nav_reception %}{% endblock %}">Reception</a>
       <a href="/rx/doctor/" class="nav-link {% block nav_doctor %}{% endblock %}">Doctor</a>
+      {% if user.staff_profile.role == 'doctor' %}
+      <a href="/rx/favorites/" class="nav-link {% block nav_favorites %}{% endblock %}">My Medicines</a>
+      {% endif %}
+      {% if user.staff_profile.role == 'pharmacist' or user.staff_profile.role == 'admin' %}
+      <a href="/pharmacy/" class="nav-link {% block nav_pharmacy %}{% endblock %}">Pharmacy</a>
+      {% endif %}
       {% if user.staff_profile.role == 'admin' %}
       <a href="/accounts/staff/" class="nav-link {% block nav_staff %}{% endblock %}">Staff</a>
       <a href="/accounts/plan/" class="nav-link {% block nav_plan %}{% endblock %}">Plan</a>
@@ -62,6 +68,12 @@
     <span class="nm-user">{{ user.staff_profile.display_name }}</span>
     <a href="/">Reception</a>
     <a href="/rx/doctor/">Doctor</a>
+    {% if user.staff_profile.role == 'doctor' %}
+    <a href="/rx/favorites/">My Medicines</a>
+    {% endif %}
+    {% if user.staff_profile.role == 'pharmacist' or user.staff_profile.role == 'admin' %}
+    <a href="/pharmacy/">Pharmacy</a>
+    {% endif %}
     {% if user.staff_profile.role == 'admin' %}
     <a href="/accounts/staff/">Staff</a>
     <a href="/accounts/plan/">Plan &amp; Usage</a>

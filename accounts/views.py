@@ -283,3 +283,20 @@ def mark_contact_read_view(request, pk):
     msg.read = not msg.read
     msg.save()
     return redirect('accounts:admin_panel')
+
+
+@login_required
+@require_POST
+def update_preference_api(request):
+    """Update doctor preferences (e.g. show_rx_remarks)."""
+    import json
+    from django.http import JsonResponse
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+    staff = request.user.staff_profile
+    if 'show_rx_remarks' in data:
+        staff.show_rx_remarks = bool(data['show_rx_remarks'])
+        staff.save(update_fields=['show_rx_remarks'])
+    return JsonResponse({'ok': True})
