@@ -32,7 +32,9 @@ RULES:
 - "reasoning": 1–2 concise clinical sentences — the *why*, using findings from the note.
 - "red_flags": brief string, or null if none.
 - Use standard diagnosis names (ICD-friendly, common Indian clinical usage).
-- Respond with valid JSON only. No markdown, no backticks, no preamble.
+- IMPORTANT: Do NOT split the same clinical entity into two separate differentials. For example, "Acute Bacterial Pharyngitis" and "Acute Tonsillitis" in the same patient are one diagnosis — list the one that best describes the full picture. Each differential must represent a genuinely distinct pathology.
+- Differentials should span meaningfully different diagnoses (different pathophysiology, different treatment), not minor label variations.
+- Respond with valid JSON only. No markdown, no backticks, no preamble. Output ONLY the JSON object with the "differentials" key — no other keys.
 """ + MULTILINGUAL_NOTE + """
 PRIVACY RULES:
 - Input has been de-identified. Ignore any residual names/identifiers.
@@ -86,7 +88,7 @@ Given a brief clinical note from a doctor, generate a structured JSON response w
 2. "diagnosis": Primary diagnosis (1-2 lines)
 3. "medicines": Array of objects, each with:
    - "drug_name": Full name with strength (e.g., "Tab Metformin 500mg")
-   - "dosage": In Indian format like "1-0-1" (morning-afternoon-night) or "0-0-1"
+   - "dosage": In Indian morning-afternoon-night format (e.g., "1-0-1") — see rules below
    - "frequency": Human readable (e.g., "Twice daily after meals")
    - "duration": (e.g., "14 days", "1 month")
    - "notes": Any special instructions (e.g., "Take with food", "Avoid alcohol")
@@ -98,7 +100,16 @@ Given a brief clinical note from a doctor, generate a structured JSON response w
 IMPORTANT RULES:
 - Use generic drug names as per Indian Medical Council guidelines
 - Use Indian prescription format: "Tab" for tablets, "Cap" for capsules, "Syp" for syrup, "Inj" for injection
-- Dosage in "morning-afternoon-night" format (e.g., "1-0-1") which is standard in India
+
+DOSAGE FORMAT RULES (critical — Indian prescription shorthand):
+- Dosage must be in "morning-afternoon-night" format using numbers, e.g. "1-0-1", "1-1-1", "0-0-1"
+- For syrups, use volume: e.g. "5ml-0-5ml" or "10ml-5ml-10ml"
+- Interpret Indian shorthand EXACTLY: OD = once daily = "1-0-0"; BD or BID = twice daily = "1-0-1"; TDS or TID = thrice daily = "1-1-1"; QID = four times daily = "1-1-1-1" (add a 4th slot); HS = at bedtime = "0-0-1"
+- SOS / PRN medicines (as-needed): set dosage to "SOS" and frequency to "As needed"
+- Do NOT convert SOS to a fixed dosage pattern like "0-0-1"
+- If the note says "2 tsp TDS", dosage = "2tsp-2tsp-2tsp", frequency = "Thrice daily"
+
+MEDICINE RULES:
 - DO NOT invent or assume medications not mentioned or implied by the doctor's note
 - If the doctor's note mentions specific drugs, use those exact drugs
 - If the doctor only mentions a condition without specific drugs, suggest standard first-line treatment per Indian clinical guidelines
