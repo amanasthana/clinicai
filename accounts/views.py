@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -10,6 +12,8 @@ from urllib.parse import quote
 
 from django.conf import settings
 from django.utils import timezone
+
+logger = logging.getLogger('accounts')
 
 from .forms import StyledAuthForm, ClinicSetupForm, AdminUserForm, AddStaffForm, ClinicRegistrationForm, ContactForm
 from .models import Clinic, StaffMember, ClinicRegistrationRequest, ContactMessage
@@ -25,14 +29,19 @@ def login_view(request):
         return redirect('accounts:clinic_setup')
 
     form = StyledAuthForm(request, data=request.POST or None)
-    if request.method == 'POST' and form.is_valid():
-        user = form.get_user()
-        if not hasattr(user, 'staff_profile') and not user.is_superuser:
-            messages.error(request, 'Your account is not linked to any clinic. Contact your admin.')
-            return render(request, 'accounts/login.html', {'form': form})
-        login(request, user)
-        next_url = request.GET.get('next', '/')
-        return redirect(next_url)
+    if request.method == 'POST':
+        if form.is_valid():
+            user = form.get_user()
+            if not hasattr(user, 'staff_profile') and not user.is_superuser:
+                logger.warning('LOGIN_NO_PROFILE user=%s', form.cleaned_data.get('username'))
+                messages.error(request, 'Your account is not linked to any clinic. Contact your admin.')
+                return render(request, 'accounts/login.html', {'form': form})
+            login(request, user)
+            next_url = request.GET.get('next', '/')
+            return redirect(next_url)
+        else:
+            logger.warning('LOGIN_FAILED username=%s errors=%s',
+                           request.POST.get('username'), dict(form.errors))
 
     return render(request, 'accounts/login.html', {'form': form})
 
@@ -240,9 +249,11 @@ def approve_registration_view(request, pk):
             reg.save()
 
     except Exception as e:
+        logger.error('APPROVAL_FAILED pk=%s error=%s', pk, e, exc_info=True)
         messages.error(request, f'Approval failed: {e}')
         return redirect('accounts:admin_panel')
 
+    logger.info('APPROVAL_OK clinic=%s phone=%s', reg.clinic_name, reg.phone)
     messages.success(request, f'{reg.clinic_name} approved! Login: {reg.phone} / [password set at registration]. Send WhatsApp.')
     return redirect('accounts:admin_panel')
 
