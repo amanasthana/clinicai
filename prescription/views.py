@@ -330,6 +330,10 @@ def print_prescription_view(request, rx_id):
         phone_digits = ''.join(filter(str.isdigit, patient.phone))
         wa_url = f'https://wa.me/91{phone_digits}?text={quote(wa_text)}'
 
+    show_remarks = True
+    if rx.doctor:
+        show_remarks = rx.doctor.show_rx_remarks
+
     return render(request, 'prescription/print.html', {
         'rx': rx,
         'visit': rx.visit,
@@ -338,6 +342,7 @@ def print_prescription_view(request, rx_id):
         'doctor': rx.doctor,
         'medicines': rx.medicines.all(),
         'wa_url': wa_url,
+        'show_remarks': show_remarks,
     })
 
 

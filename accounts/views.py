@@ -300,3 +300,42 @@ def update_preference_api(request):
         staff.show_rx_remarks = bool(data['show_rx_remarks'])
         staff.save(update_fields=['show_rx_remarks'])
     return JsonResponse({'ok': True})
+
+
+@login_required
+def letterhead_view(request):
+    """Upload and configure clinic letterhead for prescription printing."""
+    staff = request.user.staff_profile
+    if staff.role not in ('admin', 'doctor'):
+        messages.error(request, 'Only clinic admins and doctors can manage letterhead.')
+        return redirect('reception:dashboard')
+
+    clinic = staff.clinic
+
+    if request.method == 'POST':
+        use_lh = request.POST.get('use_letterhead') == 'on'  # radio: 'on' or 'off'
+        height = int(request.POST.get('letterhead_height_mm') or 0)
+
+        update_fields = ['use_letterhead', 'letterhead_height_mm']
+        clinic.use_letterhead = use_lh
+        clinic.letterhead_height_mm = max(0, min(height, 180))
+
+        if 'letterhead_image' in request.FILES:
+            # Delete old image if present
+            if clinic.letterhead_image:
+                clinic.letterhead_image.delete(save=False)
+            clinic.letterhead_image = request.FILES['letterhead_image']
+            update_fields.append('letterhead_image')
+
+        if request.POST.get('remove_letterhead') == '1':
+            if clinic.letterhead_image:
+                clinic.letterhead_image.delete(save=False)
+            clinic.letterhead_image = None
+            clinic.use_letterhead = False
+            update_fields = ['letterhead_image', 'use_letterhead', 'letterhead_height_mm']
+
+        clinic.save(update_fields=update_fields)
+        messages.success(request, 'Letterhead settings saved.')
+        return redirect('accounts:letterhead')
+
+    return render(request, 'accounts/letterhead.html', {'clinic': clinic})

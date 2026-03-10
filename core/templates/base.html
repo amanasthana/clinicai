@@ -41,6 +41,10 @@
       {% if user.staff_profile.role == 'admin' %}
       <a href="/accounts/staff/" class="nav-link {% block nav_staff %}{% endblock %}">Staff</a>
       <a href="/accounts/plan/" class="nav-link {% block nav_plan %}{% endblock %}">Plan</a>
+      <a href="/accounts/letterhead/" class="nav-link {% block nav_letterhead %}{% endblock %}">Letterhead</a>
+      {% endif %}
+      {% if user.staff_profile.role == 'doctor' %}
+      <a href="/accounts/letterhead/" class="nav-link {% block nav_letterhead_dr %}{% endblock %}">Letterhead</a>
       {% endif %}
       {% if user.is_superuser %}
       <a href="/accounts/admin-panel/" class="nav-link" style="color:#7C3AED; font-weight:600;">Admin</a>
@@ -77,6 +81,10 @@
     {% if user.staff_profile.role == 'admin' %}
     <a href="/accounts/staff/">Staff</a>
     <a href="/accounts/plan/">Plan &amp; Usage</a>
+    <a href="/accounts/letterhead/">Letterhead</a>
+    {% endif %}
+    {% if user.staff_profile.role == 'doctor' %}
+    <a href="/accounts/letterhead/">Letterhead</a>
     {% endif %}
     {% if user.is_superuser %}
     <a href="/accounts/admin-panel/" style="color:#7C3AED; font-weight:600;">Admin Panel</a>

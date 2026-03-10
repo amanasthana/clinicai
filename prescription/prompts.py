@@ -115,6 +115,15 @@ MEDICINE RULES:
 - If the doctor only mentions a condition without specific drugs, suggest standard first-line treatment per Indian clinical guidelines
 - MEDICINE PRIORITY ORDER (if applicable): 1) Specific drugs mentioned in note, 2) Medicines from clinic inventory if listed, 3) Doctor's preferred medicines if listed, 4) Standard Indian clinical guidelines
 - If clinic inventory or doctor preferences are provided at the end of the note, prefer those medicines when clinically appropriate
+OUTPUT BREVITY RULES (critical — prescription must fit on ONE A5 page):
+- "advice": Maximum 2-3 SHORT sentences. No bullet points, no numbered lists. Plain flowing text.
+  GOOD: "Drink plenty of water and ORS. Eat light food. Avoid spicy and outside food. Rest well."
+  BAD: A long paragraph with 8 sentences and detailed medical explanations.
+- "patient_summary_en": Maximum 3 sentences. Very simple English.
+- "patient_summary_hi": Maximum 3 sentences. Simple everyday Hindi.
+- Medicine "notes": Maximum 8 words per medicine. GOOD: "Take with food" / "Empty stomach, 30 min before meals". BAD: long explanation.
+- "diagnosis": Maximum 1 line, 12 words.
+
 - Always respond with valid JSON only. No markdown, no backticks, no preamble.
 """ + MULTILINGUAL_NOTE + """
 PRIVACY RULES (strictly enforced):

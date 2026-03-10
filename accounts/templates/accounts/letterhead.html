@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Prescription Letterhead — ClinicAI{% endblock %}
+{% block nav_staff %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+.lh-preview-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  user-select: none;
+}
+.lh-preview-img {
+  display: block;
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+.lh-drag-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 3px;
+  background: #2563EB;
+  cursor: ns-resize;
+  z-index: 10;
+  touch-action: none;
+}
+.lh-drag-line::before {
+  content: '↕ Drag to set where letterhead ends';
+  position: absolute;
+  right: 8px;
+  top: -20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563EB;
+  white-space: nowrap;
+  background: #EFF6FF;
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.lh-drag-handle {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -8px;
+  width: 32px; height: 16px;
+  background: #2563EB;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: ns-resize;
+}
+.lh-drag-handle::after {
+  content: '⠿';
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: -1px;
+}
+.lh-mm-badge {
+  position: absolute;
+  left: 8px;
+  background: #2563EB;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 20px;
+  pointer-events: none;
+  z-index: 11;
+}
+.lh-shaded {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  background: rgba(37, 99, 235, 0.07);
+  pointer-events: none;
+  z-index: 5;
+  border-bottom: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:680px;">
+  <div style="margin-bottom:20px;">
+    <div style="font-size:22px; font-weight:700; color:#111;">Prescription Letterhead</div>
+    <div style="font-size:14px; color:#6B7280; margin-top:4px;">
+      Upload a photo of your blank prescription pad. We'll print prescriptions onto it.
+    </div>
+  </div>
+
+  {% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags|default:'info' }}" style="margin-bottom:16px;">{{ msg }}</div>
+  {% endfor %}
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" id="lh-form">
+    {% csrf_token %}
+    <input type="hidden" name="letterhead_height_mm" id="lh-height-input" value="{{ clinic.letterhead_height_mm }}">
+
+    <!-- Current letterhead image -->
+    {% if clinic.letterhead_image %}
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:600; color:#374151; margin-bottom:12px;">Current Letterhead</div>
+
+      <div class="lh-preview-wrap" id="lh-wrap">
+        <img src="{{ clinic.letterhead_image.url }}" class="lh-preview-img" id="lh-img" alt="Letterhead preview">
+
+        <!-- Blue shaded region = letterhead zone -->
+        <div class="lh-shaded" id="lh-shaded"></div>
+
+        <!-- Draggable line -->
+        <div class="lh-drag-line" id="lh-line">
+          <div class="lh-drag-handle"></div>
+        </div>
+        <div class="lh-mm-badge" id="lh-mm-badge">{{ clinic.letterhead_height_mm }}mm</div>
+      </div>
+
+      <div style="margin-top:10px; font-size:13px; color:#6B7280;">
+        Drag the blue line to mark where your letterhead ends and prescription content should start.
+        Currently set to <strong id="lh-mm-display">{{ clinic.letterhead_height_mm }}mm</strong> from top.
+      </div>
+
+      <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">Save Position</button>
+        <button type="submit" name="remove_letterhead" value="1" class="btn btn-secondary"
+          onclick="return confirm('Remove letterhead image?')" style="color:#EF4444; border-color:#EF4444;">
+          Remove Image
+        </button>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Upload new image -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:600; color:#374151; margin-bottom:12px;">
+        {% if clinic.letterhead_image %}Upload New Image{% else %}Upload Letterhead Image{% endif %}
+      </div>
+      <div style="font-size:13px; color:#6B7280; margin-bottom:12px; line-height:1.6;">
+        Take a clear photo of your blank prescription pad (the top portion with your clinic name and address).
+        Accepted formats: JPG, PNG. Recommended: at least 800px wide.
+      </div>
+      <input type="file" name="letterhead_image" accept="image/jpeg,image/png,image/jpg"
+             class="input-field" style="padding:8px;">
+    </div>
+
+    <!-- Letterhead mode toggle -->
+    <div class="card" style="margin-bottom:20px;">
+      <div style="font-size:13px; font-weight:600; color:#374151; margin-bottom:12px;">Print Mode</div>
+
+      <label style="display:flex; align-items:flex-start; gap:12px; cursor:pointer; margin-bottom:14px; padding:12px; border:2px solid {% if clinic.use_letterhead %}#2563EB{% else %}rgba(0,0,0,0.1){% endif %}; border-radius:10px;">
+        <input type="radio" name="use_letterhead" value="off"
+               {% if not clinic.use_letterhead %}checked{% endif %}
+               onchange="this.closest('.card').querySelectorAll('label').forEach((l,i)=>{l.style.borderColor=i===0?'#2563EB':'rgba(0,0,0,0.1)'})"
+               style="margin-top:2px; accent-color:#2563EB; flex-shrink:0;">
+        <div>
+          <div style="font-size:14px; font-weight:600; color:#111;">Digital header</div>
+          <div style="font-size:12px; color:#6B7280; margin-top:2px;">Print clinic name, address, and doctor info as part of the prescription. No pre-printed pad needed.</div>
+        </div>
+      </label>
+
+      <label style="display:flex; align-items:flex-start; gap:12px; cursor:pointer; padding:12px; border:2px solid {% if clinic.use_letterhead %}rgba(0,0,0,0.1){% else %}rgba(0,0,0,0.1){% endif %}; border-radius:10px;"
+             id="lh-mode-label">
+        <input type="radio" name="use_letterhead" value="on"
+               {% if clinic.use_letterhead %}checked{% endif %}
+               onchange="document.querySelectorAll('[name=use_letterhead]').forEach((r,i)=>{r.closest('label').style.borderColor=r.checked?'#2563EB':'rgba(0,0,0,0.1)'})"
+               style="margin-top:2px; accent-color:#2563EB; flex-shrink:0;">
+        <div>
+          <div style="font-size:14px; font-weight:600; color:#111;">My letterhead paper</div>
+          <div style="font-size:12px; color:#6B7280; margin-top:2px;">
+            Print only the prescription content (patient name, medicines, advice). Your existing letterhead on the paper provides the clinic and doctor info. Content starts below the draggable line position.
+            {% if not clinic.letterhead_image %}<br><span style="color:#D97706;">Upload an image above to enable this mode.</span>{% endif %}
+          </div>
+        </div>
+      </label>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-lg">Save Settings</button>
+    <a href="/accounts/staff/" class="btn btn-secondary btn-lg" style="margin-left:10px;">Cancel</a>
+  </form>
+</div>
+
+<script>
+(function() {
+  const img = document.getElementById('lh-img');
+  if (!img) return;
+
+  const line = document.getElementById('lh-line');
+  const shaded = document.getElementById('lh-shaded');
+  const badge = document.getElementById('lh-mm-badge');
+  const display = document.getElementById('lh-mm-display');
+  const input = document.getElementById('lh-height-input');
+  const wrap = document.getElementById('lh-wrap');
+
+  const A5_MM = 210;
+  let dragging = false;
+  let savedMM = parseInt(input.value) || 0;
+
+  function mmToY(mm) {
+    const imgH = img.clientHeight;
+    return Math.round((mm / A5_MM) * imgH);
+  }
+
+  function yToMM(y) {
+    const imgH = img.clientHeight;
+    return Math.round((y / imgH) * A5_MM);
+  }
+
+  function applyY(y) {
+    const imgH = img.clientHeight;
+    y = Math.max(10, Math.min(y, imgH - 10));
+    line.style.top = y + 'px';
+    shaded.style.height = y + 'px';
+    badge.style.top = (y + 6) + 'px';
+    const mm = yToMM(y);
+    badge.textContent = mm + 'mm';
+    if (display) display.textContent = mm + 'mm';
+    input.value = mm;
+  }
+
+  function initPosition() {
+    if (img.complete && img.naturalHeight > 0) {
+      applyY(mmToY(savedMM));
+    }
+  }
+
+  img.onload = initPosition;
+  if (img.complete) initPosition();
+  // Re-init on window resize
+  window.addEventListener('resize', () => { initPosition(); });
+
+  function getY(e) {
+    const rect = wrap.getBoundingClientRect();
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return clientY - rect.top;
+  }
+
+  line.addEventListener('mousedown', (e) => { dragging = true; e.preventDefault(); });
+  line.addEventListener('touchstart', (e) => { dragging = true; e.preventDefault(); }, { passive: false });
+
+  document.addEventListener('mousemove', (e) => { if (dragging) applyY(getY(e)); });
+  document.addEventListener('touchmove', (e) => { if (dragging) { applyY(getY(e)); e.preventDefault(); } }, { passive: false });
+
+  document.addEventListener('mouseup', () => { dragging = false; });
+  document.addEventListener('touchend', () => { dragging = false; });
+
+  // Fix radio border colors on load
+  document.querySelectorAll('[name=use_letterhead]').forEach(r => {
+    r.closest('label').style.borderColor = r.checked ? '#2563EB' : 'rgba(0,0,0,0.1)';
+  });
+})();
+</script>
+{% endblock %}

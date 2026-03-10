@@ -11,6 +11,17 @@ class Clinic(models.Model):
     phone = models.CharField(max_length=15, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Custom letterhead for printing on pre-printed prescription pads
+    letterhead_image = models.ImageField(upload_to='letterheads/', null=True, blank=True)
+    letterhead_height_mm = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='Height of the printed letterhead area in mm. Prescription content starts below this.'
+    )
+    use_letterhead = models.BooleanField(
+        default=False,
+        help_text='If True, hide digital header and start content below letterhead_height_mm.'
+    )
+
     def __str__(self):
         return self.name
 

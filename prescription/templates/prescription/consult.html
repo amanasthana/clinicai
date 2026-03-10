@@ -24,49 +24,122 @@
 }
 .pib-value { font-size: 15px; color: #374151; }
 
-/* Medicine cards — div-based (not table) */
-.med-rows { display: flex; flex-direction: column; gap: 8px; }
+/* Medicine cards — pill-based */
+.med-rows { display: flex; flex-direction: column; gap: 10px; }
 .med-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
   background: #F9FAFB;
-  border: 1px solid rgba(0,0,0,0.06);
-  border-radius: 10px;
-  padding: 10px;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 12px;
+  padding: 12px 12px 10px;
+}
+.med-row-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 .med-num-cell {
-  font-size: 13px;
+  font-size: 12px;
   color: #9CA3AF;
-  padding-top: 26px;
+  font-weight: 700;
   min-width: 18px;
   flex-shrink: 0;
-  text-align: center;
 }
-.med-fields {
+.med-drug-input {
   flex: 1;
-  display: grid;
-  grid-template-columns: 2fr 90px 1.5fr 85px 1fr;
-  gap: 6px;
-}
-.med-field label {
-  display: block;
-  font-size: 10px;
-  font-weight: 600;
-  color: #9CA3AF;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin-bottom: 3px;
+  min-width: 0;
 }
 .med-delete-btn {
   background: none;
   border: none;
   color: #EF4444;
   cursor: pointer;
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
-  padding: 20px 4px 0;
+  padding: 0 2px;
   flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+.med-delete-btn:hover { opacity: 1; }
+
+/* Pill selector groups */
+.pill-section { margin-bottom: 8px; }
+.pill-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 5px;
+}
+.pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.rx-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(0,0,0,0.12);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.1s;
+  white-space: nowrap;
+  min-height: 30px;
+  -webkit-tap-highlight-color: transparent;
+}
+.rx-pill:hover { border-color: rgba(37,99,235,0.35); background: rgba(37,99,235,0.04); }
+.rx-pill:active { transform: scale(0.95); }
+.rx-pill.selected {
+  background: #2563EB;
+  color: #fff;
+  border-color: #2563EB;
+}
+.rx-pill.pill-more {
+  color: #9CA3AF;
+  border-style: dashed;
+  font-size: 11px;
+}
+.rx-pill.pill-custom {
+  color: #6B7280;
+  border-style: dashed;
+}
+.pill-custom-input {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1.5px solid #2563EB;
+  font-size: 12px;
+  outline: none;
+  width: 100px;
+  min-height: 30px;
+  display: none;
+}
+.pill-custom-input.active { display: inline-flex; }
+
+/* Notes field */
+.med-notes-field { margin-top: 4px; }
+.med-notes-field input {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 8px;
+}
+
+@media (max-width: 640px) {
+  .rx-pill { padding: 5px 9px; font-size: 11px; min-height: 32px; }
+  .rx-actions { flex-direction: column; }
+  .rx-actions .btn { width: 100%; justify-content: center; }
+  .rx-actions-top { flex-direction: column; }
+  .rx-actions-top .btn { width: 100%; justify-content: center; }
+  #generate-row button { width: 100%; }
 }
 
 /* PII status badge */
@@ -196,26 +269,8 @@
 #inv-elective label:hover { border-color: #7C3AED !important; }
 
 @media (max-width: 640px) {
-  /* Patient info 2-up grid on mobile */
   .pib-item { flex: 1 1 calc(50% - 8px); }
   .pib-item-name { flex: 1 1 100%; }
-
-  /* Medicines stack 2-col on mobile */
-  .med-fields {
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-  }
-  /* Drug takes full row on mobile */
-  .med-field-drug { grid-column: 1 / -1; }
-
-  /* Buttons full width on mobile */
-  .rx-actions { flex-direction: column; }
-  .rx-actions .btn { width: 100%; justify-content: center; }
-  .rx-actions-top { flex-direction: column; }
-  .rx-actions-top .btn { width: 100%; justify-content: center; }
-
-  /* Generate button area */
-  #generate-row button { width: 100%; }
 }
 </style>
 {% endblock %}
@@ -926,44 +981,149 @@ function renderPrescription(rx) {
   document.getElementById('rx-output').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// ── Medicine rows ──────────────────────────────────────────────
+// ── Pill definitions ────────────────────────────────────────────
+const DOSAGE_PILLS = [
+  { v: 'SOS',     label: 'SOS' },
+  { v: '1-0-0',   label: '1-0-0' },
+  { v: '0-0-1',   label: '0-0-1' },
+  { v: '1-0-1',   label: '1-0-1' },
+  { v: '1-1-1',   label: '1-1-1' },
+  { v: '½-0-½',   label: '½-0-½' },
+  // extra (hidden behind More)
+  { v: '0-1-0',   label: '0-1-0',   extra: true },
+  { v: '2-0-0',   label: '2-0-0',   extra: true },
+  { v: '0-0-2',   label: '0-0-2',   extra: true },
+  { v: '1-1-0',   label: '1-1-0',   extra: true },
+  { v: '0-1-1',   label: '0-1-1',   extra: true },
+  { v: '½-0-0',   label: '½-0-0',   extra: true },
+  { v: '0-0-½',   label: '0-0-½',   extra: true },
+  { v: '1-0-0-1', label: '1-0-0-1', extra: true },
+];
+
+const FREQ_PILLS = [
+  { v: 'After meals',      label: 'After meals' },
+  { v: 'Before meals',     label: 'Before meals' },
+  { v: 'Empty stomach',    label: 'Empty stomach' },
+  { v: 'At bedtime',       label: 'At bedtime' },
+  { v: 'SOS/As needed',    label: 'SOS / As needed' },
+  { v: 'With food',        label: 'With food',    extra: true },
+  { v: '30 min before food', label: '30 min before food', extra: true },
+  { v: 'With milk',        label: 'With milk',    extra: true },
+  { v: 'Sublingual',       label: 'Sublingual',   extra: true },
+];
+
+const DUR_PILLS = [
+  { v: '3 days',   label: '3d' },
+  { v: '5 days',   label: '5d' },
+  { v: '7 days',   label: '7d' },
+  { v: '10 days',  label: '10d' },
+  { v: '14 days',  label: '14d' },
+  { v: '1 month',  label: '1 mo' },
+  { v: '1 day',    label: '1d',     extra: true },
+  { v: '2 days',   label: '2d',     extra: true },
+  { v: '21 days',  label: '21d',    extra: true },
+  { v: '2 months', label: '2 mo',   extra: true },
+  { v: '3 months', label: '3 mo',   extra: true },
+  { v: 'Lifelong', label: 'Lifelong', extra: true },
+];
+
+// Normalize AI frequency text to best-matching pill value
+function matchFreq(aiVal) {
+  if (!aiVal) return null;
+  const v = aiVal.toLowerCase();
+  if (v.includes('sos') || v.includes('as needed') || v.includes('prn')) return 'SOS/As needed';
+  if (v.includes('bedtime') || v.includes('night') || v.includes('hs')) return 'At bedtime';
+  if (v.includes('empty') || v.includes('fasting')) return 'Empty stomach';
+  if (v.includes('before meal') || v.includes('before food')) return 'Before meals';
+  if (v.includes('after meal') || v.includes('after food') || v.includes('with meal')) return 'After meals';
+  if (v.includes('with food') || v.includes('with milk')) return 'With food';
+  return null;
+}
+
+function matchDur(aiVal) {
+  if (!aiVal) return null;
+  const v = aiVal.toLowerCase().trim();
+  for (const p of DUR_PILLS) {
+    if (p.v.toLowerCase() === v) return p.v;
+  }
+  return null;
+}
+
+function buildPillGroup(pills, fieldName, currentVal) {
+  const matched = pills.find(p => p.v === currentVal);
+  const hasCustom = currentVal && !matched;
+
+  let html = `<div class="pill-group" data-field="${fieldName}">`;
+  for (const p of pills) {
+    const extra = p.extra ? ' pill-extra' : '';
+    const extraHide = p.extra ? ' style="display:none"' : '';
+    const sel = (p.v === currentVal) ? ' selected' : '';
+    html += `<button type="button" class="rx-pill${extra}${sel}" data-val="${esc(p.v)}"${extraHide}>${p.label}</button>`;
+  }
+  // More button
+  const anyExtra = pills.some(p => p.extra);
+  if (anyExtra) {
+    html += `<button type="button" class="rx-pill pill-more">More ▾</button>`;
+  }
+  // Custom pill + input
+  html += `<button type="button" class="rx-pill pill-custom${hasCustom ? ' selected' : ''}">Custom</button>`;
+  html += `<input type="text" class="pill-custom-input${hasCustom ? ' active' : ''}" placeholder="Type..." value="${esc(hasCustom ? currentVal : '')}">`;
+  html += `</div>`;
+  return html;
+}
+
+// ── Medicine rows ────────────────────────────────────────────────
 function addMedicineRow(m) {
   m = m || {};
+  const dosage    = m.dosage    || '';
+  const frequency = matchFreq(m.frequency) || m.frequency || '';
+  const duration  = matchDur(m.duration)   || m.duration  || '';
+  const notes     = m.notes || '';
+
   const container = document.getElementById('medicines-table');
   const div = document.createElement('div');
   div.className = 'med-row';
+  // Store current values as data attributes (read by readPrescription)
+  div.dataset.dosage    = dosage;
+  div.dataset.frequency = frequency;
+  div.dataset.duration  = duration;
+
+  const showRemarks = document.getElementById('remarks-toggle')?.checked !== false;
+
   div.innerHTML = `
-    <div class="med-num-cell"></div>
-    <div class="med-fields">
-      <div class="med-field med-field-drug">
-        <label>Drug &amp; Strength</label>
-        <input class="input-field med-drug" value="${esc(m.drug_name)}" placeholder="e.g. Tab Metformin 500mg" style="font-size:13px; padding:7px 10px;">
+    <div class="med-row-header">
+      <div class="med-num-cell"></div>
+      <div class="med-drug-input">
+        <input class="input-field med-drug" value="${esc(m.drug_name || '')}"
+               placeholder="e.g. Tab Metformin 500mg"
+               style="font-size:13px; padding:7px 10px; width:100%;">
       </div>
-      <div class="med-field">
-        <label>Dosage</label>
-        <input class="input-field med-dosage" value="${esc(m.dosage)}" placeholder="1-0-1" style="font-size:13px; padding:7px 10px;">
-      </div>
-      <div class="med-field">
-        <label>Frequency</label>
-        <input class="input-field med-frequency" value="${esc(m.frequency)}" placeholder="Twice daily" style="font-size:13px; padding:7px 10px;">
-      </div>
-      <div class="med-field">
-        <label>Duration</label>
-        <input class="input-field med-duration" value="${esc(m.duration)}" placeholder="7 days" style="font-size:13px; padding:7px 10px;">
-      </div>
-      <div class="med-field med-notes-field">
-        <label>Notes</label>
-        <input class="input-field med-notes" value="${esc(m.notes)}" placeholder="After food" style="font-size:13px; padding:7px 10px;">
-      </div>
+      <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove">×</button>
     </div>
-    <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove">×</button>
+
+    <div class="pill-section">
+      <div class="pill-label">Dosage</div>
+      ${buildPillGroup(DOSAGE_PILLS, 'dosage', dosage)}
+    </div>
+
+    <div class="pill-section">
+      <div class="pill-label">When</div>
+      ${buildPillGroup(FREQ_PILLS, 'frequency', frequency)}
+    </div>
+
+    <div class="pill-section">
+      <div class="pill-label">Duration</div>
+      ${buildPillGroup(DUR_PILLS, 'duration', duration)}
+    </div>
+
+    <div class="med-notes-field" style="display:${showRemarks ? '' : 'none'}">
+      <input class="input-field med-notes" value="${esc(notes)}"
+             placeholder="Notes (optional, e.g. Take with food)"
+             style="font-size:12px; padding:5px 10px;">
+    </div>
   `;
+
   container.appendChild(div);
-  // Apply current remarks toggle state
-  const toggle = document.getElementById('remarks-toggle');
-  if (toggle && !toggle.checked) {
-    div.querySelectorAll('.med-notes-field').forEach(el => { el.style.display = 'none'; });
-  }
   renumberMedicines();
 }
 
@@ -978,6 +1138,57 @@ function renumberMedicines() {
   });
 }
 
+// ── Pill tap handler (event delegation) ────────────────────────
+document.addEventListener('click', function(e) {
+  const pill = e.target.closest('.rx-pill');
+  if (!pill) return;
+  const group = pill.closest('.pill-group');
+  if (!group) return;
+  const row = pill.closest('.med-row');
+  if (!row) return;
+
+  // "More" pill: reveal extras
+  if (pill.classList.contains('pill-more')) {
+    group.querySelectorAll('.pill-extra').forEach(p => { p.style.display = ''; });
+    pill.remove();
+    return;
+  }
+
+  // Deselect all pills in this group
+  group.querySelectorAll('.rx-pill').forEach(p => p.classList.remove('selected'));
+
+  // "Custom" pill: show text input
+  const customInput = group.querySelector('.pill-custom-input');
+  if (pill.classList.contains('pill-custom')) {
+    pill.classList.add('selected');
+    customInput.classList.add('active');
+    customInput.focus();
+    return;
+  }
+
+  // Normal pill: select + hide custom input
+  pill.classList.add('selected');
+  if (customInput) {
+    customInput.classList.remove('active');
+    customInput.value = '';
+  }
+
+  // Update row data attribute
+  const field = group.dataset.field;
+  const val = pill.dataset.val;
+  row.dataset[field] = val;
+});
+
+// Custom input: update data attribute on input
+document.addEventListener('input', function(e) {
+  const input = e.target;
+  if (!input.classList.contains('pill-custom-input')) return;
+  const group = input.closest('.pill-group');
+  const row = input.closest('.med-row');
+  if (!group || !row) return;
+  row.dataset[group.dataset.field] = input.value;
+});
+
 // ── Read prescription from form ────────────────────────────────
 function readPrescription() {
   const medicines = [];
@@ -986,10 +1197,10 @@ function readPrescription() {
     if (drug) {
       medicines.push({
         drug_name: drug,
-        dosage:     row.querySelector('.med-dosage')?.value.trim() || '',
-        frequency:  row.querySelector('.med-frequency')?.value.trim() || '',
-        duration:   row.querySelector('.med-duration')?.value.trim() || '',
-        notes:      row.querySelector('.med-notes')?.value.trim() || '',
+        dosage:    row.dataset.dosage    || '',
+        frequency: row.dataset.frequency || '',
+        duration:  row.dataset.duration  || '',
+        notes:     row.querySelector('.med-notes')?.value.trim() || '',
       });
     }
   });
@@ -1140,7 +1351,7 @@ function addFavoriteMedicine(btn) {
 
 // ── Remarks toggle ─────────────────────────────────────────────
 function handleRemarksToggle(checked) {
-  document.querySelectorAll('#medicines-table .med-notes-field').forEach(el => {
+  document.querySelectorAll('#medicines-table .med-row .med-notes-field').forEach(el => {
     el.style.display = checked ? '' : 'none';
   });
   // Persist preference
