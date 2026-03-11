@@ -30,6 +30,11 @@ class Prescription(models.Model):
     differential_diagnoses = models.JSONField(null=True, blank=True)  # [{rank, diagnosis, probability, reasoning, red_flags}]
     investigations = models.JSONField(null=True, blank=True)          # {immediate: [...], elective: [...]}
     selected_diagnosis = models.CharField(max_length=500, blank=True) # doctor's confirmed choice from differentials
+    # Extended clinical fields
+    clinical_evaluation = models.TextField(blank=True, default='')
+    investigations_text = models.TextField(blank=True, default='')
+    validity_days = models.PositiveSmallIntegerField(default=30)
+    share_token = models.UUIDField(unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

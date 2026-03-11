@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
   <style>
   /* ═══════════════════════════════════════════════════════════════
      CLINICAI PRESCRIPTION
@@ -151,6 +152,34 @@
   .rx-sig-line     { display: block; width: 110px; border-bottom: 1.5px solid var(--navy); margin-bottom: 4px; height: 24px; }
   .rx-sig-name     { font-size: 11.5px; font-weight: 600; color: var(--navy); }
 
+  /* ─── Clinical info strip ───────────────────────────────────── */
+  .rx-clinical {
+    padding: 7px 22px 9px;
+    border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .rx-clin-row {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 12px; line-height: 1.4;
+  }
+  .rx-clin-label {
+    font-size: 10px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .5px;
+    white-space: nowrap; flex-shrink: 0; min-width: 76px;
+  }
+  .rx-clin-value { color: var(--text); font-size: 12px; }
+
+  /* ─── Investigations ─────────────────────────────────────────── */
+  .rx-inv-wrap {
+    background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 12px;
+  }
+  .rx-inv-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .7px; color: #1D4ED8; margin-bottom: 4px;
+  }
+  .rx-inv-text { font-size: 12.5px; color: #1E40AF; line-height: 1.5; }
+
   /* ─── Patient summary ────────────────────────────────────────── */
   .rx-summary-outer  { padding: 0 22px 14px; }
   .rx-summary-inner  {
@@ -183,60 +212,71 @@
     body   { background: #fff !important; -webkit-print-color-adjust: exact; color-adjust: exact; }
     .rx-toolbar { display: none !important; }
 
-    @page { size: A5 portrait; margin: 7mm 9mm 7mm 9mm; }
+    @page { size: A5 portrait; margin: 5mm 8mm 5mm 8mm; }
 
     /* Card resets */
     .rx-card {
       max-width: 100%; margin: 0; border-radius: 0;
-      box-shadow: none; font-size: 8.5pt; line-height: 1.35;
+      box-shadow: none; font-size: 7.5pt; line-height: 1.3;
     }
 
     /* Header: compact */
-    .rx-header  { padding: 8pt 12pt 7pt; }
-    .rx-clinic-name { font-size: 12.5pt; letter-spacing: -.2px; }
-    .rx-clinic-addr { font-size: 7pt; }
-    .rx-doctor-name { font-size: 8.5pt; }
-    .rx-doctor-qual { font-size: 7pt; }
+    .rx-header  { padding: 6pt 11pt 5pt; }
+    .rx-clinic-name { font-size: 11pt; letter-spacing: -.2px; }
+    .rx-clinic-addr { font-size: 6.5pt; }
+    .rx-doctor-name { font-size: 7.5pt; }
+    .rx-doctor-qual { font-size: 6.5pt; }
 
     /* Patient strip: one tight row */
-    .rx-patient  { padding: 5pt 12pt; }
-    .rx-pt-name  { font-size: 10pt; }
-    .rx-pt-meta, .rx-pt-date { font-size: 7.5pt; }
+    .rx-patient  { padding: 4pt 11pt; }
+    .rx-pt-name  { font-size: 9pt; }
+    .rx-pt-meta, .rx-pt-date { font-size: 7pt; }
 
     /* Body */
-    .rx-body { padding: 7pt 12pt 5pt; }
-    .rx-symbol-row { margin-bottom: 6pt; }
-    .rx-symbol    { font-size: 18pt; }
-    .rx-diagnosis { font-size: 8.5pt; }
+    .rx-body { padding: 5pt 11pt 4pt; }
+    .rx-symbol-row { margin-bottom: 5pt; }
+    .rx-symbol    { font-size: 16pt; }
+    .rx-diagnosis { font-size: 7.5pt; }
 
     /* ─── MEDICINE TABLE — one row per medicine ──────────────── */
     /* Hide the screen-only card layout */
     .rx-meds-screen { display: none !important; }
 
     /* Show the print table (hidden on screen) */
-    .rx-meds-print  { display: block !important; margin-bottom: 7pt; }
+    .rx-meds-print  { display: block !important; margin-bottom: 5pt; }
 
     /* Advice */
-    .rx-advice-wrap  { padding: 5pt 9pt; margin-bottom: 6pt; border-radius: 5pt; }
-    .rx-advice-label { font-size: 6.5pt; margin-bottom: 2pt; }
-    .rx-advice-text  { font-size: 7.5pt; }
+    .rx-advice-wrap  { padding: 4pt 8pt; margin-bottom: 5pt; border-radius: 4pt; }
+    .rx-advice-label { font-size: 6pt; margin-bottom: 1.5pt; }
+    .rx-advice-text  { font-size: 7pt; }
 
     /* Footer row */
-    .rx-footer-row { margin-top: 6pt; padding-top: 6pt; }
-    .rx-followup-lbl { font-size: 6.5pt; }
-    .rx-followup   { font-size: 8pt; }
-    .rx-sig-line   { width: 72pt; height: 16pt; }
-    .rx-sig-name   { font-size: 7.5pt; }
+    .rx-footer-row { margin-top: 5pt; padding-top: 5pt; }
+    .rx-followup-lbl { font-size: 6pt; }
+    .rx-followup   { font-size: 7.5pt; }
+    .rx-sig-line   { width: 68pt; height: 14pt; }
+    .rx-sig-name   { font-size: 7pt; }
+
+    /* Clinical strip */
+    .rx-clinical  { padding: 3pt 11pt 4pt; gap: 2pt; }
+    .rx-clin-row  { font-size: 6.5pt; line-height: 1.25; }
+    .rx-clin-label { font-size: 5.5pt; min-width: 48pt; }
+    .rx-clin-value { font-size: 6.5pt; }
+
+    /* Investigations */
+    .rx-inv-wrap  { padding: 3.5pt 7pt; margin-bottom: 4pt; border-radius: 3pt; }
+    .rx-inv-label { font-size: 6pt; margin-bottom: 1.5pt; }
+    .rx-inv-text  { font-size: 6.5pt; line-height: 1.25; }
 
     /* Summary */
-    .rx-summary-outer { padding: 0 12pt 8pt; }
-    .rx-summary-inner { padding: 6pt 9pt; border-radius: 5pt; }
-    .rx-summary-title { font-size: 6.5pt; margin-bottom: 3pt; }
-    .rx-summary-en    { font-size: 7.5pt; line-height: 1.35; }
-    .rx-summary-div   { margin: 4pt 0; }
-    .rx-summary-hi    { font-size: 8pt;   line-height: 1.5; }
+    .rx-summary-outer { padding: 0 11pt 6pt; }
+    .rx-summary-inner { padding: 5pt 8pt; border-radius: 4pt; }
+    .rx-summary-title { font-size: 6pt; margin-bottom: 2.5pt; }
+    .rx-summary-en    { font-size: 7pt; line-height: 1.3; }
+    .rx-summary-div   { margin: 3pt 0; }
+    .rx-summary-hi    { font-size: 7.5pt; line-height: 1.45; }
 
-    .rx-branding { padding: 4pt 12pt 5pt; font-size: 6pt; }
+    .rx-branding { padding: 3pt 11pt 4pt; font-size: 6pt; }
 
     /* Letterhead mode */
     .has-letterhead .rx-header { display: none !important; }
@@ -253,30 +293,30 @@
     border-collapse: collapse;
   }
   .rx-meds-print thead th {
-    font-size: 6.5pt;
+    font-size: 6pt;
     font-weight: 700;
     color: #9CA3AF;
     text-transform: uppercase;
     letter-spacing: .5px;
-    padding: 0 4pt 3pt;
-    border-bottom: 1pt solid #E5E7EB;
+    padding: 0 3pt 2.5pt;
+    border-bottom: .8pt solid #E5E7EB;
     text-align: left;
     white-space: nowrap;
   }
   .rx-meds-print thead th:last-child { text-align: right; }
   .rx-meds-print tbody td {
-    font-size: 8pt;
-    padding: 3.5pt 4pt;
+    font-size: 7.5pt;
+    padding: 2.5pt 3pt;
     vertical-align: middle;
-    border-bottom: .4pt solid #F3F4F6;
-    line-height: 1.3;
+    border-bottom: .3pt solid #F3F4F6;
+    line-height: 1.25;
   }
   .rx-meds-print tbody tr:last-child td { border-bottom: none; }
 
   /* Column: # */
   .rx-meds-print .col-n {
-    width: 14pt; color: #9CA3AF; font-size: 7pt; font-weight: 600;
-    vertical-align: top; padding-top: 4.5pt;
+    width: 12pt; color: #9CA3AF; font-size: 6.5pt; font-weight: 600;
+    vertical-align: top; padding-top: 3.5pt;
   }
   /* Column: Drug name */
   .rx-meds-print .col-drug {
@@ -284,8 +324,8 @@
     max-width: 0; /* allows flex shrink in table */
   }
   .rx-meds-print .col-drug .drug-note {
-    display: block; font-size: 7pt; font-weight: 400;
-    color: #9CA3AF; font-style: italic; line-height: 1.25;
+    display: block; font-size: 6.5pt; font-weight: 400;
+    color: #9CA3AF; font-style: italic; line-height: 1.2;
     margin-top: 1pt;
   }
   /* Column: Dosage badge */
@@ -296,21 +336,21 @@
   .rx-meds-print .col-dose .print-badge {
     display: inline-block;
     background: #EFF6FF; color: #2563EB;
-    border: .6pt solid #BFDBFE; border-radius: 3pt;
-    padding: 1pt 5pt;
+    border: .5pt solid #BFDBFE; border-radius: 2.5pt;
+    padding: .8pt 4pt;
     font-family: 'Courier New', monospace;
-    font-size: 7.5pt; font-weight: 700; letter-spacing: .3px;
+    font-size: 7pt; font-weight: 700; letter-spacing: .3px;
   }
   .rx-meds-print .col-dose .print-badge.sos {
     background: #FEF3C7; color: #B45309; border-color: #FCD34D;
   }
   /* Column: When */
   .rx-meds-print .col-when {
-    font-size: 7.5pt; color: #6B7280; white-space: nowrap; width: 1%;
+    font-size: 7pt; color: #6B7280; white-space: nowrap; width: 1%;
   }
   /* Column: Duration */
   .rx-meds-print .col-dur {
-    font-size: 7.5pt; font-weight: 600; color: #374151;
+    font-size: 7pt; font-weight: 600; color: #374151;
     text-align: right; white-space: nowrap; width: 1%;
   }
 
@@ -324,6 +364,18 @@
 <body>
 
 <!-- ── Toolbar ──────────────────────────────────────────────── -->
+{% if is_public %}
+<div class="rx-toolbar">
+  <button class="tb-btn tb-print" onclick="downloadPdf()">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Download PDF
+  </button>
+  <button class="tb-btn tb-hindi" id="hindi-toggle" onclick="toggleHindi()">
+    <span style="font-family:'Noto Sans Devanagari',sans-serif;font-size:15px;line-height:1;">अ</span>
+    हिंदी
+  </button>
+</div>
+{% else %}
 <div class="rx-toolbar">
   <button class="tb-btn tb-print" onclick="window.print()">
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
@@ -334,14 +386,15 @@
     Hindi
   </button>
   {% if wa_url %}
-  <a href="{{ wa_url }}" target="_blank" class="tb-btn tb-wa">
+  <button type="button" class="tb-btn tb-wa" onclick="sendPdfWhatsApp('{{ wa_url|escapejs }}')">
     <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.857L0 24l6.309-1.505A11.946 11.946 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.79 9.79 0 01-5.002-1.37l-.36-.213-3.743.892.925-3.645-.233-.374A9.77 9.77 0 012.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/></svg>
-    WhatsApp
-  </a>
+    Send PDF via WhatsApp
+  </button>
   {% endif %}
   <a href="javascript:history.back()" class="tb-btn tb-back">← Back</a>
   <a href="/rx/doctor/" class="tb-btn tb-back">Queue</a>
 </div>
+{% endif %}
 
 <!-- ── Prescription card ─────────────────────────────────────── -->
 <div class="rx-card{% if clinic.letterhead_image and clinic.use_letterhead %} has-letterhead{% endif %}">
@@ -372,6 +425,32 @@
     </div>
     <div class="rx-pt-date">{{ rx.created_at|date:"d M Y" }}{% if visit.token_number %}<br>Token&nbsp;#{{ visit.token_number }}{% endif %}</div>
   </div>
+
+  <!-- Clinical info strip (chief complaint, vitals, examination) -->
+  {% with has_cc=visit.chief_complaint has_vitals=visit.vitals_bp|add:visit.vitals_temp|add:visit.vitals_spo2|add:visit.vitals_weight has_eval=rx.clinical_evaluation %}
+  {% if has_cc or has_vitals or has_eval %}
+  <div class="rx-clinical">
+    {% if visit.chief_complaint %}
+    <div class="rx-clin-row">
+      <span class="rx-clin-label">Complaint</span>
+      <span class="rx-clin-value">{{ visit.chief_complaint }}</span>
+    </div>
+    {% endif %}
+    {% if visit.vitals_bp or visit.vitals_temp or visit.vitals_spo2 or visit.vitals_weight %}
+    <div class="rx-clin-row">
+      <span class="rx-clin-label">Vitals</span>
+      <span class="rx-clin-value">{% if visit.vitals_bp %}BP {{ visit.vitals_bp }}{% endif %}{% if visit.vitals_temp %}{% if visit.vitals_bp %} · {% endif %}T {{ visit.vitals_temp }}°F{% endif %}{% if visit.vitals_spo2 %}{% if visit.vitals_bp or visit.vitals_temp %} · {% endif %}SpO₂ {{ visit.vitals_spo2 }}{% endif %}{% if visit.vitals_weight %}{% if visit.vitals_bp or visit.vitals_temp or visit.vitals_spo2 %} · {% endif %}Wt {{ visit.vitals_weight }}{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if rx.clinical_evaluation %}
+    <div class="rx-clin-row">
+      <span class="rx-clin-label">Examination</span>
+      <span class="rx-clin-value">{{ rx.clinical_evaluation }}</span>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endwith %}
 
   <!-- Body -->
   <div class="rx-body">
@@ -462,6 +541,14 @@
       </table>
     </div>
 
+    <!-- Investigations Suggested -->
+    {% if rx.investigations_text %}
+    <div class="rx-inv-wrap">
+      <div class="rx-inv-label">Investigations Suggested</div>
+      <div class="rx-inv-text">{{ rx.investigations_text }}</div>
+    </div>
+    {% endif %}
+
     <!-- Advice -->
     {% if rx.advice %}
     <div class="rx-advice-wrap">
@@ -509,7 +596,7 @@
   </div>
   {% endif %}
 
-  <div class="rx-branding">Generated by ClinicAI &ensp;·&ensp; Valid for 30 days</div>
+  <div class="rx-branding">Generated by ClinicAI &ensp;·&ensp; Valid for {{ rx.validity_days|default:30 }} days</div>
 
 </div>
 
@@ -570,6 +657,67 @@ function toggleHindi() {
   document.body.classList.toggle('hindi-mode', _hindi);
   document.getElementById('hindi-toggle').classList.toggle('active', _hindi);
   if (_hindi) applyHindi();
+}
+
+// ── Download PDF (patient share page) ─────────────────────────
+async function downloadPdf() {
+  const btn = document.querySelector('.tb-btn.tb-print');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Preparing…</span>';
+  try {
+    const card = document.querySelector('.rx-card');
+    const opt = {
+      margin:      [4, 5, 4, 5],
+      filename:    'prescription-{{ patient.full_name|slugify }}.pdf',
+      image:       { type: 'jpeg', quality: 0.97 },
+      html2canvas: { scale: 2.5, useCORS: true, logging: false },
+      jsPDF:       { unit: 'mm', format: 'a5', orientation: 'portrait' },
+    };
+    await html2pdf().set(opt).from(card).save();
+  } catch (err) {
+    window.print();
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+}
+
+// ── Send PDF via WhatsApp ──────────────────────────────────────
+// Generates PDF client-side (no print dialog), auto-downloads it,
+// then opens WhatsApp to the patient so doctor can attach and send.
+async function sendPdfWhatsApp(waUrl) {
+  const btn = document.querySelector('.tb-wa');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Generating PDF…</span>';
+
+  try {
+    const card = document.querySelector('.rx-card');
+
+    // Temporarily hide toolbar inside card if any, show full card
+    const opt = {
+      margin:      [4, 5, 4, 5],   // top right bottom left in mm
+      filename:    'prescription-{{ patient.full_name|slugify }}.pdf',
+      image:       { type: 'jpeg', quality: 0.97 },
+      html2canvas: { scale: 2.5, useCORS: true, logging: false },
+      jsPDF:       { unit: 'mm', format: 'a5', orientation: 'portrait' },
+    };
+
+    // Generate and auto-download PDF (no dialog on most desktop browsers)
+    await html2pdf().set(opt).from(card).save();
+
+    // After PDF downloads, open WhatsApp to patient's number
+    // Doctor attaches the PDF that just downloaded to their Downloads folder
+    setTimeout(() => window.open(waUrl, '_blank'), 600);
+
+  } catch (err) {
+    // Fallback: open WhatsApp, doctor prints manually
+    window.open(waUrl, '_blank');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
 }
 </script>
 </body>

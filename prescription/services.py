@@ -87,7 +87,7 @@ def generate_prescription(raw_note: str, patient_age: int, patient_gender: str,
     Steps:
       1. De-identify the clinical note (CRITICAL — never skip)
       2. Build minimal clinical input: age + gender + safe note
-      3. Optionally append doctor favorites + clinic inventory context (NOT PII)
+      3. Optionally append doctor favorites context (NOT PII)
       4. Call Claude Haiku with structured JSON prompt
       5. Parse and validate the response
       6. Return dict ready for saving to PrescriptionMedicine rows
@@ -101,25 +101,15 @@ def generate_prescription(raw_note: str, patient_age: int, patient_gender: str,
 
     Returns:
         dict with keys: soap_note, diagnosis, medicines (list), advice,
-                        patient_summary_en, patient_summary_hi, follow_up_days
+                        patient_summary_en, patient_summary_hi, follow_up_days,
+                        clinical_evaluation, investigations_text
     """
     safe_note = deidentify_clinical_note(raw_note)
     gender_text = {'M': 'M', 'F': 'F', 'O': 'NB'}.get(patient_gender, '')
     clinical_input = f"{patient_age}{gender_text}, {safe_note}"
 
-    # Append inventory context if available (NOT PII — purely medicine names)
+    # Append doctor's preferred medicines (NOT clinic inventory — inventory is for dispensing only)
     try:
-        if clinic:
-            from pharmacy.models import PharmacyItem
-            in_stock = list(
-                PharmacyItem.objects.filter(clinic=clinic, quantity__gt=0)
-                .select_related('medicine')
-                .values_list('medicine__name', 'custom_name')[:50]
-            )
-            stock_names = [n or c for n, c in in_stock if (n or c)]
-            if stock_names:
-                clinical_input += f"\n\nClinic inventory (prefer these if appropriate): {', '.join(stock_names)}"
-
         if doctor:
             from pharmacy.models import DoctorFavorite
             favs = list(

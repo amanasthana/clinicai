@@ -263,6 +263,28 @@
 .cat-snippet    { background:#CCFBF1; color:#0F766E; }
 .cat-abbreviation { background:#FFEDD5; color:#C2410C; }
 
+/* Drug name typeahead dropdown */
+.drug-suggest-dropdown {
+  position:absolute; top:100%; left:0; right:0; z-index:300;
+  background:#fff; border:1px solid #E5E7EB; border-radius:10px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.12); max-height:200px; overflow-y:auto;
+  display:none; margin-top:2px;
+}
+.drug-suggest-item {
+  padding:8px 12px; cursor:pointer; border-bottom:1px solid #F9FAFB;
+  display:flex; align-items:center; gap:8px; transition:background 0.1s;
+  font-size:13px; color:#111827;
+}
+.drug-suggest-item:last-child { border-bottom:none; }
+.drug-suggest-item:hover { background:#F9FAFB; }
+.drug-avail-badge {
+  font-size:10px; font-weight:700; padding:2px 6px; border-radius:20px;
+  white-space:nowrap; flex-shrink:0; margin-left:auto;
+}
+.drug-avail-ok  { background:#D1FAE5; color:#065F46; }
+.drug-avail-low { background:#FEF3C7; color:#92400E; }
+.drug-avail-out { background:#FEE2E2; color:#991B1B; }
+
 /* Diff / Inv step cards hover on labels */
 #diff-list label:hover,
 #inv-immediate label:hover,
@@ -530,6 +552,13 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
             <input type="text" id="edit-diagnosis" class="input-field" placeholder="Diagnosis..." style="font-size:15px; font-weight:600;">
           </div>
 
+          <!-- Clinical Evaluation -->
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:6px;">CLINICAL EVALUATION / EXAMINATION</div>
+            <textarea id="edit-clinical-eval" class="input-field" rows="2"
+              placeholder="Examination findings, e.g. Chest clear, Abdomen soft, BP 130/90 mmHg..." style="resize:vertical; font-size:13px;"></textarea>
+          </div>
+
           <!-- Medicines — div-based, mobile-friendly -->
           <div style="margin-bottom:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
@@ -544,6 +573,13 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
             <button type="button" onclick="addMedicineRow()" class="btn btn-secondary btn-sm" style="margin-top:10px;">
               + Add Medicine
             </button>
+          </div>
+
+          <!-- Investigations Suggested -->
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:6px;">INVESTIGATIONS SUGGESTED</div>
+            <textarea id="edit-investigations" class="input-field" rows="2"
+              placeholder="e.g. CBC, LFT, RFT, HbA1c, Urine R/E, Chest X-ray..." style="resize:vertical; font-size:13px;"></textarea>
           </div>
 
           <!-- Advice -->
@@ -570,6 +606,18 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
             <div style="font-size:12px; font-weight:500; color:#6B7280;">FOLLOW-UP IN (days)</div>
             <input type="number" id="edit-followup-days" class="input-field"
               placeholder="e.g. 14" min="0" max="365" style="width:100px; font-size:14px;">
+          </div>
+
+          <!-- Validity -->
+          <div style="margin-bottom:20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div style="font-size:12px; font-weight:500; color:#6B7280; white-space:nowrap;">VALID FOR</div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;" id="validity-pills">
+              <button type="button" class="rx-pill" data-days="5" onclick="selectValidity(this)">5 days</button>
+              <button type="button" class="rx-pill" data-days="7" onclick="selectValidity(this)">7 days</button>
+              <button type="button" class="rx-pill" data-days="10" onclick="selectValidity(this)">10 days</button>
+              <button type="button" class="rx-pill" data-days="14" onclick="selectValidity(this)">14 days</button>
+              <button type="button" class="rx-pill selected" data-days="30" onclick="selectValidity(this)">30 days</button>
+            </div>
           </div>
 
           <!-- Actions -->
@@ -625,6 +673,7 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
      data-differentials-url="/rx/differentials/"
      data-investigations-url="/rx/investigations/"
      data-suggest-url="/rx/api/suggest/"
+     data-pharmacy-url="/rx/api/pharmacy-search/"
      data-show-remarks="{{ show_rx_remarks|yesno:'true,false' }}"
      style="display:none;"></div>
 
@@ -968,6 +1017,12 @@ function renderPrescription(rx) {
   document.getElementById('edit-summary-en').value = rx.patient_summary_en || '';
   document.getElementById('edit-summary-hi').value = rx.patient_summary_hi || '';
   document.getElementById('edit-followup-days').value = rx.follow_up_days || '';
+  document.getElementById('edit-clinical-eval').value = rx.clinical_evaluation || '';
+  document.getElementById('edit-investigations').value = rx.investigations_text || '';
+  // Reset validity to 30 days on fresh AI generation
+  document.querySelectorAll('#validity-pills .rx-pill').forEach(p => p.classList.remove('selected'));
+  const v30 = document.querySelector('#validity-pills [data-days="30"]');
+  if (v30) v30.classList.add('selected');
 
   const container = document.getElementById('medicines-table');
   container.innerHTML = '';
@@ -1093,10 +1148,12 @@ function addMedicineRow(m) {
   div.innerHTML = `
     <div class="med-row-header">
       <div class="med-num-cell"></div>
-      <div class="med-drug-input">
+      <div class="med-drug-input" style="position:relative;">
         <input class="input-field med-drug" value="${esc(m.drug_name || '')}"
                placeholder="e.g. Tab Metformin 500mg"
-               style="font-size:13px; padding:7px 10px; width:100%;">
+               style="font-size:13px; padding:7px 10px; width:100%;"
+               autocomplete="off">
+        <div class="drug-suggest-dropdown"></div>
       </div>
       <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove">×</button>
     </div>
@@ -1212,6 +1269,9 @@ function readPrescription() {
     patient_summary_en: document.getElementById('edit-summary-en').value.trim(),
     patient_summary_hi: document.getElementById('edit-summary-hi').value.trim(),
     follow_up_days:     parseInt(document.getElementById('edit-followup-days').value) || null,
+    clinical_evaluation: document.getElementById('edit-clinical-eval').value.trim(),
+    investigations_text: document.getElementById('edit-investigations').value.trim(),
+    validity_days:       parseInt(document.querySelector('#validity-pills .rx-pill.selected')?.dataset.days) || 30,
   };
 }
 
@@ -1458,6 +1518,66 @@ document.addEventListener('click', function(e) {
   // Apply initial state when rows exist
   // (rows added later will check toggle state in addMedicineRow)
 })();
+
+// ── Drug name pharmacy typeahead ────────────────────────────────
+let _drugSuggestTimer = null;
+
+const AVAIL_META = {
+  ok:  { cls: 'drug-avail-ok',  label: '✓ In stock' },
+  low: { cls: 'drug-avail-low', label: '⚠ Low stock' },
+  out: { cls: 'drug-avail-out', label: '✕ Out of stock' },
+};
+
+function closeDrugDropdown(input) {
+  const dd = input?.closest('.med-drug-input')?.querySelector('.drug-suggest-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+function fillDrug(input, name) {
+  input.value = name;
+  closeDrugDropdown(input);
+  input.focus();
+}
+
+async function fetchDrugSuggestions(input, q) {
+  try {
+    const resp = await fetch(`${visitData.pharmacyUrl}?q=${encodeURIComponent(q)}`);
+    const data = await resp.json();
+    const items = data.results || [];
+    const wrapper = input.closest('.med-drug-input');
+    const dd = wrapper?.querySelector('.drug-suggest-dropdown');
+    if (!dd) return;
+    if (!items.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = items.map(item => {
+      const av = item.availability ? AVAIL_META[item.availability] : null;
+      const badge = av ? `<span class="drug-avail-badge ${av.cls}">${av.label}</span>` : '';
+      return `<div class="drug-suggest-item" onmousedown="fillDrug(this.closest('.med-drug-input').querySelector('.med-drug'),'${esc(item.name)}')">${esc(item.name)}${badge}</div>`;
+    }).join('');
+    dd.style.display = 'block';
+  } catch (_) {}
+}
+
+// Event delegation for drug input events
+document.addEventListener('input', function(e) {
+  const input = e.target;
+  if (!input.classList.contains('med-drug')) return;
+  clearTimeout(_drugSuggestTimer);
+  const q = input.value.trim();
+  if (q.length < 2) { closeDrugDropdown(input); return; }
+  _drugSuggestTimer = setTimeout(() => fetchDrugSuggestions(input, q), 220);
+});
+
+document.addEventListener('blur', function(e) {
+  if (!e.target.classList.contains('med-drug')) return;
+  // Slight delay so onmousedown on dropdown item fires first
+  setTimeout(() => closeDrugDropdown(e.target), 180);
+}, true);
+
+// ── Validity selector ──────────────────────────────────────────
+function selectValidity(btn) {
+  document.querySelectorAll('#validity-pills .rx-pill').forEach(p => p.classList.remove('selected'));
+  btn.classList.add('selected');
+}
 
 // ── Save ───────────────────────────────────────────────────────
 async function savePrescription() {

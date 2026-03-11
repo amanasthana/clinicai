@@ -96,6 +96,8 @@ Given a brief clinical note from a doctor, generate a structured JSON response w
 5. "patient_summary_en": A 3-4 line summary for the patient in simple English explaining what's wrong and what medicines to take and when. Use very simple words — assume the patient has basic literacy.
 6. "patient_summary_hi": Same summary in Hindi (Devanagari script). Simple, everyday Hindi. Not medical jargon.
 7. "follow_up_days": Number of days after which patient should return (integer, or null if not applicable)
+8. "clinical_evaluation": 1-2 sentence summary of examination findings inferred or stated in the note (e.g., "Chest clear bilaterally. Abdomen soft, non-tender."). Return "" if no examination findings mentioned.
+9. "investigations_text": Comma-separated investigations to order based on diagnosis and clinical context (e.g., "CBC, LFT, RFT, HbA1c, Urine R/E"). Maximum 8 tests. Return "" if no investigations needed for this presentation.
 
 IMPORTANT RULES:
 - Use generic drug names as per Indian Medical Council guidelines
@@ -113,8 +115,10 @@ MEDICINE RULES:
 - DO NOT invent or assume medications not mentioned or implied by the doctor's note
 - If the doctor's note mentions specific drugs, use those exact drugs
 - If the doctor only mentions a condition without specific drugs, suggest standard first-line treatment per Indian clinical guidelines
-- MEDICINE PRIORITY ORDER (if applicable): 1) Specific drugs mentioned in note, 2) Medicines from clinic inventory if listed, 3) Doctor's preferred medicines if listed, 4) Standard Indian clinical guidelines
-- If clinic inventory or doctor preferences are provided at the end of the note, prefer those medicines when clinically appropriate
+- MEDICINE PRIORITY ORDER: 1) Specific drugs mentioned in note, 2) Doctor's preferred medicines if listed, 3) Standard Indian clinical guidelines (evidence-based, ICMR/NLEM preferred)
+- NEVER use clinic pharmacy inventory to choose medicines — that is for dispensing only, not for clinical decisions
+- If doctor preferences are provided at the end of the note, use those when clinically appropriate
+
 OUTPUT BREVITY RULES (critical — prescription must fit on ONE A5 page):
 - "advice": Maximum 2-3 SHORT sentences. No bullet points, no numbered lists. Plain flowing text.
   GOOD: "Drink plenty of water and ORS. Eat light food. Avoid spicy and outside food. Rest well."
@@ -123,6 +127,8 @@ OUTPUT BREVITY RULES (critical — prescription must fit on ONE A5 page):
 - "patient_summary_hi": Maximum 3 sentences. Simple everyday Hindi.
 - Medicine "notes": Maximum 8 words per medicine. GOOD: "Take with food" / "Empty stomach, 30 min before meals". BAD: long explanation.
 - "diagnosis": Maximum 1 line, 12 words.
+- "clinical_evaluation": Maximum 2 short sentences.
+- "investigations_text": Comma-separated, no explanations, max 8 tests.
 
 - Always respond with valid JSON only. No markdown, no backticks, no preamble.
 """ + MULTILINGUAL_NOTE + """

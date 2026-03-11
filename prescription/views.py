@@ -274,8 +274,16 @@ def save_prescription_api(request, visit_id):
             'differential_diagnoses': data.get('differential_diagnoses'),
             'investigations': data.get('investigations'),
             'selected_diagnosis': data.get('selected_diagnosis', ''),
+            'clinical_evaluation': rx_data.get('clinical_evaluation', ''),
+            'investigations_text': rx_data.get('investigations_text', ''),
+            'validity_days': int(rx_data.get('validity_days') or 30),
         },
     )
+
+    if not rx.share_token:
+        import uuid as _uuid
+        rx.share_token = _uuid.uuid4()
+        rx.save(update_fields=['share_token'])
 
     # Save medicines (replace existing)
     rx.medicines.all().delete()
@@ -320,15 +328,38 @@ def print_prescription_view(request, rx_id):
         from django.http import Http404
         raise Http404
 
-    # Build WhatsApp share URL (wa.me link — doctor presses Send manually)
+    # Build WhatsApp share URL with professional message
     wa_url = ''
     patient = rx.visit.patient
-    if patient.phone and (rx.patient_summary_en or rx.patient_summary_hi):
-        wa_text = rx.patient_summary_en or ''
-        if rx.patient_summary_hi:
-            wa_text += ('\n\n' if wa_text else '') + rx.patient_summary_hi
+    if patient.phone:
         phone_digits = ''.join(filter(str.isdigit, patient.phone))
-        wa_url = f'https://wa.me/91{phone_digits}?text={quote(wa_text)}'
+        if phone_digits and rx.share_token:
+            share_url = request.build_absolute_uri(f'/rx/share/{rx.share_token}/')
+            clinic_name = rx.visit.clinic.name
+            doctor_name = rx.doctor.display_name if rx.doctor else ''
+
+            lines = [
+                f'Dear {patient.full_name},',
+                '',
+                f'Your prescription from *{clinic_name}* is ready.',
+                '',
+                f'You can view and download your prescription here:',
+                share_url,
+            ]
+            if rx.follow_up_date:
+                dr_label = doctor_name if doctor_name else 'your doctor'
+                lines += [
+                    '',
+                    f'Your next follow-up with {dr_label} at {clinic_name} is on '
+                    f'*{rx.follow_up_date.strftime("%d %b %Y")}*.',
+                    'Please carry this prescription to your next visit.',
+                ]
+            lines += [
+                '',
+                f'— {clinic_name}',
+            ]
+            wa_text = '\n'.join(lines)
+            wa_url = f'https://wa.me/91{phone_digits}?text={quote(wa_text)}'
 
     show_remarks = True
     if rx.doctor:
@@ -344,6 +375,61 @@ def print_prescription_view(request, rx_id):
         'wa_url': wa_url,
         'show_remarks': show_remarks,
     })
+
+
+@login_required
+def pharmacy_search_api(request):
+    """
+    Typeahead: search clinic's pharmacy inventory + medicine catalog by name.
+    Returns availability status for inventory items.
+    Used by the drug name input on the consult screen.
+    """
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': []})
+
+    from django.db.models import Q
+    from pharmacy.models import PharmacyItem, MedicineCatalog
+
+    clinic = request.user.staff_profile.clinic
+    results = []
+    seen_names = set()
+
+    # Clinic's own inventory first (with availability status)
+    items = (
+        PharmacyItem.objects
+        .filter(clinic=clinic)
+        .filter(Q(medicine__name__icontains=q) | Q(custom_name__icontains=q))
+        .select_related('medicine')
+        .order_by('-quantity')[:10]
+    )
+    for item in items:
+        name = item.display_name
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+        if item.quantity == 0:
+            avail = 'out'
+        elif item.quantity <= item.reorder_level:
+            avail = 'low'
+        else:
+            avail = 'ok'
+        results.append({'name': name, 'availability': avail})
+
+    # Fill remaining from medicine catalog (no availability — not in this clinic's stock)
+    if len(results) < 8:
+        catalog = (
+            MedicineCatalog.objects
+            .filter(Q(name__icontains=q) | Q(generic_name__icontains=q))
+            .exclude(name__in=seen_names)[:8 - len(results)]
+        )
+        for med in catalog:
+            display = f"{med.form} {med.name}".strip() if med.form else med.name
+            if display not in seen_names:
+                seen_names.add(display)
+                results.append({'name': display, 'availability': None})
+
+    return JsonResponse({'results': results})
 
 
 @login_required
@@ -442,6 +528,25 @@ def remove_favorite_api(request, pk):
     fav = get_object_or_404(DoctorFavorite, pk=pk, doctor=doctor)
     fav.delete()
     return JsonResponse({'ok': True})
+
+
+def public_prescription_view(request, token):
+    """Public share link — no login required. Shows full prescription card."""
+    rx = get_object_or_404(Prescription, share_token=token)
+    show_remarks = True
+    if rx.doctor:
+        show_remarks = rx.doctor.show_rx_remarks
+    return render(request, 'prescription/print.html', {
+        'rx': rx,
+        'visit': rx.visit,
+        'patient': rx.visit.patient,
+        'clinic': rx.visit.clinic,
+        'doctor': rx.doctor,
+        'medicines': rx.medicines.all(),
+        'wa_url': '',   # no WA button on public view
+        'show_remarks': show_remarks,
+        'is_public': True,
+    })
 
 
 @login_required
