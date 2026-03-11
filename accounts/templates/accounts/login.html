@@ -211,7 +211,7 @@
 
       {% if form.errors %}
       <div class="alert alert-error" style="margin-bottom:20px;">
-        Invalid username or password. Please try again.
+        {% if login_hint %}{{ login_hint }}{% else %}Invalid mobile number or password. Please try again.{% endif %}
       </div>
       {% endif %}
 
@@ -219,7 +219,7 @@
         {% csrf_token %}
 
         <div class="form-group">
-          <label class="form-label" for="{{ form.username.id_for_label }}">Username</label>
+          <label class="form-label" for="{{ form.username.id_for_label }}">Mobile Number <span style="font-weight:400;color:#9CA3AF;">(10-digit login ID)</span></label>
           {{ form.username }}
         </div>
 

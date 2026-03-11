@@ -155,12 +155,12 @@
       <div style="font-size:13px; color:#6B7280;">{{ reg.doctor_name }} · {{ reg.city }}</div>
     </div>
     <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-      <span style="font-size:12px; color:#059669; font-weight:600; background:#ECFDF5; padding:3px 10px; border-radius:20px;">✓ Approved {{ reg.reviewed_at|date:"j M" }}</span>
+      <span style="font-size:12px; color:#059669; font-weight:600; background:#ECFDF5; padding:3px 10px; border-radius:20px;">✓ Approved {{ reg.reviewed_at|date:"j M"|default:"–" }}</span>
       <span style="font-size:12px; color:#6B7280; font-family:monospace; background:#F3F4F6; padding:3px 8px; border-radius:6px;">{{ reg.phone }}</span>
       <a href="{% url 'accounts:check_user' reg.phone %}" target="_blank" class="btn btn-secondary btn-sm">🔍 Check</a>
-      <form method="post" action="{% url 'accounts:reset_clinic_password' reg.pk %}" style="display:inline;" onsubmit="return confirm('Re-apply registration password for {{ reg.phone }}?');">
+      <form method="post" action="{% url 'accounts:reset_clinic_password' reg.pk %}" style="display:inline;" onsubmit="return confirm('Create/fix account for {{ reg.phone }}?');">
         {% csrf_token %}
-        <button type="submit" class="btn btn-secondary btn-sm" style="color:#D97706;">🔑 Fix Password</button>
+        <button type="submit" class="btn btn-primary btn-sm">🔧 Fix Account</button>
       </form>
       <a href="https://wa.me/91{{ reg.phone }}" target="_blank" class="btn btn-secondary btn-sm">📲 WhatsApp</a>
     </div>

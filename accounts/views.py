@@ -40,8 +40,17 @@ def login_view(request):
             next_url = request.GET.get('next', '/')
             return redirect(next_url)
         else:
-            logger.warning('LOGIN_FAILED username=%s errors=%s',
-                           request.POST.get('username'), dict(form.errors))
+            typed_username = request.POST.get('username', '').strip()
+            user_exists = (
+                User.objects.filter(username=typed_username).exists() or
+                User.objects.filter(email__iexact=typed_username).exists()
+            ) if typed_username else False
+            if typed_username and not user_exists:
+                login_hint = f'No account found for "{typed_username}". Check if the clinic was approved by the admin.'
+            else:
+                login_hint = 'Incorrect password. Please try again.'
+            logger.warning('LOGIN_FAILED username=%s user_exists=%s', typed_username, user_exists)
+            return render(request, 'accounts/login.html', {'form': form, 'login_hint': login_hint})
 
     return render(request, 'accounts/login.html', {'form': form})
 
@@ -362,19 +371,58 @@ def letterhead_view(request):
 
 @_require_POST
 def reset_clinic_password_view(request, pk):
-    """Superuser-only: re-apply password hash from a ClinicRegistrationRequest to its user."""
+    """Superuser-only: ensure the clinic account exists and password is correct."""
     if not request.user.is_superuser:
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden('Not authorized.')
 
+    from django.db import transaction
+
     reg = ClinicRegistrationRequest.objects.get(pk=pk)
+
     try:
-        user = User.objects.get(username=reg.phone)
-        user.password = reg.password_hash
-        user.save(update_fields=['password'])
-        messages.success(request, f'Password reset for {reg.phone} ({reg.doctor_name}). They can now log in with the password they set during registration.')
-    except User.DoesNotExist:
-        messages.error(request, f'No user found with username {reg.phone}. Was the approval run?')
+        with transaction.atomic():
+            # Ensure Clinic exists
+            clinic = Clinic.objects.filter(name=reg.clinic_name, city=reg.city).first()
+            if not clinic:
+                clinic = Clinic.objects.create(
+                    name=reg.clinic_name, city=reg.city,
+                    state=reg.state, phone=reg.clinic_phone,
+                )
+
+            # Ensure User exists with correct password
+            user, created = User.objects.get_or_create(
+                username=reg.phone,
+                defaults={
+                    'email': reg.email,
+                    'first_name': reg.doctor_name.split()[0] if reg.doctor_name else '',
+                    'last_name': ' '.join(reg.doctor_name.split()[1:]) if reg.doctor_name else '',
+                }
+            )
+            # Always re-apply the password hash from registration
+            user.password = reg.password_hash
+            user.save(update_fields=['password'])
+
+            # Ensure StaffMember exists
+            if not hasattr(user, 'staff_profile'):
+                StaffMember.objects.create(
+                    user=user, clinic=clinic, role='admin',
+                    display_name=reg.doctor_name,
+                    qualification=reg.qualification,
+                    registration_number=reg.registration_number,
+                )
+
+            # Mark approved if not already
+            reg.status = 'approved'
+            reg.reviewed_at = reg.reviewed_at or timezone.now()
+            reg.save()
+
+        action = 'created' if created else 'fixed'
+        messages.success(request, f'Account {action} for {reg.phone} ({reg.doctor_name}). They can now log in with their registration password.')
+    except Exception as e:
+        logger.error('FIX_ACCOUNT_FAILED pk=%s error=%s', pk, e, exc_info=True)
+        messages.error(request, f'Fix failed: {e}. Make sure migrations are up to date: python manage.py migrate')
+
     return redirect('accounts:admin_panel')
 
 
