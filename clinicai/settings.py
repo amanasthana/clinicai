@@ -94,8 +94,11 @@ STATICFILES_DIRS = [BASE_DIR / 'core' / 'static']
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files (doctor letterhead uploads)
+# On Azure App Service, /home is persistent storage (survives zip deploys).
+# Locally, use BASE_DIR/media as before.
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+import os as _os
+MEDIA_ROOT = Path('/home/media') if _os.environ.get('WEBSITE_SITE_NAME') else BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

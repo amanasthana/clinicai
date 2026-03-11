@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+echo "--- Ensuring persistent media directory ---"
+mkdir -p /home/media/letterheads
+
 echo "--- Installing packages ---"
 pip install -r /home/site/wwwroot/requirements.txt --quiet
 
