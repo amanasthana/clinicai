@@ -556,12 +556,7 @@
         <span class="en-only">Advice</span>
         <span class="hi-only" style="font-family:'Noto Sans Devanagari',sans-serif;">सलाह</span>
       </div>
-      <div class="rx-advice-text en-only">{{ rx.advice }}</div>
-      {% if rx.patient_summary_hi %}
-      <div class="rx-advice-text hi-only" style="font-family:'Noto Sans Devanagari',sans-serif;display:none;">{{ rx.patient_summary_hi }}</div>
-      {% else %}
-      <div class="rx-advice-text hi-only" style="display:none;">{{ rx.advice }}</div>
-      {% endif %}
+      <div class="rx-advice-text">{{ rx.advice }}</div>
     </div>
     {% endif %}
 
