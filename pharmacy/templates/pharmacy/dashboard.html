@@ -1,131 +1,93 @@
 {% extends "base.html" %}
 {% block title %}Pharmacy — {{ request.user.staff_profile.clinic.name }}{% endblock %}
 
-{% block extra_css %}
+{% block extra_head %}
 <style>
-/* ── Pharmacy inventory — responsive card list ─────────────────────── */
+/* Custom micro-styles that Tailwind can't handle */
+.ph-med-row { transition: background .1s; }
+.ph-med-row:hover { background: #FAFAFA; }
 
-/* Medicine master row */
-.ph-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid #F3F4F6;
-  cursor: pointer;
-  flex-wrap: wrap;
-  transition: background .12s;
+/* Three-dot dropdown */
+.ph-dropdown {
+  display: none;
+  position: absolute;
+  right: 0; top: 36px;
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  min-width: 172px;
+  z-index: 300;
+  overflow: hidden;
 }
-.ph-row:hover { background: #F9FAFB; }
-.ph-row:last-child { border-bottom: none; }
-
-.ph-name-col  { flex: 1 1 180px; display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-.ph-meta-col  { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ph-act-col   { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
-
-/* Batch expansion panel */
-.ph-batches { display: none; background: #F9FAFB; border-bottom: 1px solid #F3F4F6; }
-
-/* Batch card inside expansion */
-.ph-batch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px 9px 40px;
-  border-bottom: 1px solid #F3F4F6;
-  flex-wrap: wrap;
+.ph-dropdown.open { display: block; }
+.ph-dropdown a,
+.ph-dropdown button {
+  display: block; width: 100%;
+  padding: 10px 14px;
+  font-size: 13px; font-weight: 500;
+  color: #374151; text-align: left;
+  background: none; border: none;
+  cursor: pointer; text-decoration: none;
+  font-family: inherit;
+  transition: background .1s;
+  white-space: nowrap;
 }
-.ph-batch:last-child { border-bottom: none; }
-.ph-batch-info  { flex: 1 1 140px; min-width: 0; }
-.ph-batch-meta  { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: #374151; }
-.ph-batch-act   { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
-
-/* Status / info badges */
-.ph-badge {
-  display: inline-flex; align-items: center;
-  font-size: 11px; font-weight: 600;
-  padding: 2px 8px; border-radius: 20px; white-space: nowrap;
-}
-.ph-in-stock  { background: #D1FAE5; color: #065F46; }
-.ph-low-stock { background: #FEF3C7; color: #92400E; }
-.ph-out-stock { background: #FEE2E2; color: #991B1B; }
-.ph-use-first { background: #D1FAE5; color: #065F46; }
-.ph-near-exp  { background: #FEF3C7; color: #92400E; }
-.ph-expired   { background: #FEE2E2; color: #991B1B; }
-
-/* Toggle arrow */
-.ph-toggle {
-  font-size: 11px; color: #9CA3AF;
-  user-select: none; flex-shrink: 0; margin-top: 3px;
-  transition: transform .15s;
-}
-
-/* Mobile: stack meta + actions below name */
-@media (max-width: 640px) {
-  .ph-row     { padding: 12px; gap: 8px; }
-  .ph-name-col  { flex: 1 1 100%; }
-  .ph-meta-col  { flex: 1 1 100%; }
-  .ph-act-col   { flex: 1 1 100%; }
-
-  .ph-batch     { padding: 8px 12px 8px 24px; }
-  .ph-batch-info { flex: 1 1 100%; }
-  .ph-batch-meta { flex: 1 1 100%; }
-  .ph-batch-act  { flex: 1 1 100%; }
-}
+.ph-dropdown a:hover,
+.ph-dropdown button:hover { background: #F9FAFB; }
+.ph-dd-danger { color: #DC2626 !important; }
+.ph-dd-danger:hover { background: #FFF1F2 !important; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-container" style="max-width:960px;">
+<div class="page-container" style="max-width:800px;">
 
-  <!-- Header -->
-  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:24px;">
+  <!-- ── Page heading ── -->
+  <div class="flex items-center justify-between flex-wrap gap-3 mb-6">
     <div>
-      <h1 style="font-size:22px; font-weight:700; color:#111827; margin:0;">Pharmacy</h1>
-      <div style="font-size:14px; color:#6B7280; margin-top:3px;">Inventory management</div>
+      <h1 class="text-lg font-bold text-gray-900 m-0">Pharmacy</h1>
+      <p class="text-xs text-gray-500 mt-0.5">Inventory management</p>
     </div>
-    <a href="/pharmacy/add/" class="btn btn-primary">+ Add Stock</a>
+    <a href="/pharmacy/add/" class="btn btn-primary" style="font-size:13px;">+ Add Stock</a>
   </div>
 
-  <!-- Search -->
-  <div style="margin-bottom:20px;">
-    <input type="text" id="inv-search" placeholder="Search medicines…" class="input-field"
-      style="font-size:14px; width:100%; max-width:420px;" oninput="filterInventory(this.value)">
-  </div>
-
-  <!-- Stat cards -->
-  <div class="resp-grid-3" style="margin-bottom:24px;">
-    <div class="card" style="text-align:center; padding:18px;">
-      <div style="font-size:26px; font-weight:700; color:#059669;">{{ total_in_stock }}</div>
-      <div style="font-size:13px; color:#6B7280; margin-top:4px;">In Stock</div>
+  <!-- ── 3 Stat chips — always single row ── -->
+  <div class="flex gap-3 mb-6">
+    <div class="flex-1 rounded-xl text-center py-3 px-2" style="background:#F0FDF4; border:1px solid #BBF7D0; min-height:58px;">
+      <div class="text-xl font-bold" style="color:#059669;">{{ total_in_stock }}</div>
+      <div class="text-xs mt-0.5" style="color:#065F46;">In Stock</div>
     </div>
-    <div class="card" style="text-align:center; padding:18px;">
-      <div style="font-size:26px; font-weight:700; color:#D97706;">{{ low_stock_count }}</div>
-      <div style="font-size:13px; color:#6B7280; margin-top:4px;">Low Stock</div>
+    <div class="flex-1 rounded-xl text-center py-3 px-2" style="background:#FFFBEB; border:1px solid #FDE68A; min-height:58px;">
+      <div class="text-xl font-bold" style="color:#D97706;">{{ low_stock_count }}</div>
+      <div class="text-xs mt-0.5" style="color:#92400E;">Low Stock</div>
     </div>
-    <div class="card" style="text-align:center; padding:18px;">
-      <div style="font-size:26px; font-weight:700; color:#EF4444;">{{ out_of_stock_items|length }}</div>
-      <div style="font-size:13px; color:#6B7280; margin-top:4px;">Out of Stock</div>
+    <div class="flex-1 rounded-xl text-center py-3 px-2" style="background:#FFF1F2; border:1px solid #FECDD3; min-height:58px;">
+      <div class="text-xl font-bold" style="color:#E11D48;">{{ out_of_stock_items|length }}</div>
+      <div class="text-xs mt-0.5" style="color:#9F1239;">Out of Stock</div>
     </div>
   </div>
 
-  <!-- Low stock alerts -->
+  <!-- ── Low stock alerts ── -->
   {% if low_stock_items %}
-  <div class="card" style="margin-bottom:24px; border:1px solid #FDE68A; background:#FFFBEB;">
-    <div style="font-size:14px; font-weight:600; color:#92400E; margin-bottom:12px;">⚠ Low Stock Alerts</div>
-    <div style="display:flex; flex-direction:column; gap:8px;">
+  <div class="mb-5">
+    <div class="text-xs font-semibold mb-2 flex items-center gap-1.5" style="color:#92400E;">
+      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="#D97706" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Low Stock Alerts
+    </div>
+    <div class="flex flex-col gap-2">
       {% for item in low_stock_items %}
-      <div style="display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid #FDE68A; border-radius:10px; padding:10px 14px; flex-wrap:wrap; gap:8px;">
+      <div class="flex items-center justify-between flex-wrap gap-2 rounded-xl px-4 py-3" style="background:#FFFBEB; border:1px solid #FDE68A;">
         <div>
-          <div style="font-size:14px; font-weight:600; color:#374151;">{{ item.display_name }}</div>
-          {% if item.earliest_expiry %}<div style="font-size:12px; color:#6B7280;">Expiry: {{ item.earliest_expiry|date:"M Y" }}</div>{% endif %}
+          <div class="text-sm font-semibold text-gray-800">{{ item.display_name }}</div>
+          {% if item.earliest_expiry %}<div class="text-xs text-gray-500 mt-0.5">Expiry: {{ item.earliest_expiry|date:"M Y" }}</div>{% endif %}
         </div>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <span style="font-size:13px; font-weight:700; color:#D97706;">{{ item.total_quantity }} units</span>
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-bold" style="color:#D97706;">{{ item.total_quantity }} units</span>
           <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
             {% csrf_token %}
-            <button type="submit" class="btn btn-sm" style="background:{% if item.reorder_flagged %}#EF4444{% else %}#F59E0B{% endif %}; color:#fff; border:none;">
-              {% if item.reorder_flagged %}Flagged{% else %}Flag Reorder{% endif %}
+            <button type="submit" class="btn btn-sm" style="font-size:12px; background:{% if item.reorder_flagged %}#EF4444{% else %}#F59E0B{% endif %}; color:#fff; border:none;">
+              {% if item.reorder_flagged %}Flagged{% else %}Flag{% endif %}
             </button>
           </form>
         </div>
@@ -135,168 +97,186 @@
   </div>
   {% endif %}
 
-  <!-- Inventory list -->
-  <div class="card" style="padding:0; overflow:hidden;">
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #F3F4F6;">
-      <div style="font-size:15px; font-weight:600; color:#374151;">All Inventory</div>
-      <div style="font-size:12px; color:#9CA3AF;">Tap a medicine to see batches</div>
+  <!-- ── Inventory card ── -->
+  <div class="bg-white rounded-2xl overflow-hidden" style="border:1px solid #E5E7EB; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+
+    <!-- Card header + search -->
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+      <span class="text-sm font-semibold text-gray-700">All Inventory</span>
+      <span class="text-xs text-gray-400">Tap to expand batches</span>
+    </div>
+    <div class="px-4 py-2.5 border-b border-gray-100">
+      <div class="relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" placeholder="Search medicines…"
+          class="w-full pl-9 pr-3 py-2 text-sm rounded-xl outline-none"
+          style="background:#F9FAFB; border:1px solid #E5E7EB; font-family:inherit;"
+          oninput="filterInv(this.value)"
+          onfocus="this.style.borderColor='#2563EB'; this.style.background='#fff';"
+          onblur="this.style.borderColor='#E5E7EB'; this.style.background='#F9FAFB';">
+      </div>
     </div>
 
     {% if items %}
-    <div id="inventory-list">
+    <div id="inv-list">
       {% for item in items %}
+      {% with fefo=item.use_first_batch %}
 
-      <!-- Medicine master row -->
-      <div class="ph-row inv-row" data-name="{{ item.display_name|lower }}" data-pk="{{ item.pk }}"
-           onclick="toggleBatches({{ item.pk }})">
+      <div class="ph-item" data-name="{{ item.display_name|lower }}" id="med-{{ item.pk }}"
+           style="border-left:3px solid {% if not item.in_stock %}#EF4444{% elif item.low_stock %}#F59E0B{% else %}#10B981{% endif %}; border-bottom:1px solid #F3F4F6;">
 
-        <!-- Name + generic -->
-        <div class="ph-name-col">
-          <span class="ph-toggle" id="toggle-icon-{{ item.pk }}">▶</span>
-          <div style="min-width:0;">
-            <div style="font-weight:600; color:#111827; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              {{ item.display_name }}
-            </div>
+        <!-- ── Collapsed row (click to expand) ── -->
+        <div class="ph-med-row flex items-center gap-3 px-4 py-3 cursor-pointer"
+             onclick="toggleExpand({{ item.pk }}, event)">
+
+          <!-- Name + generic -->
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold text-gray-900 truncate">{{ item.display_name }}</div>
             {% if item.medicine and item.medicine.generic_name %}
-            <div style="font-size:12px; color:#9CA3AF;">{{ item.medicine.generic_name }}</div>
+            <div class="text-xs text-gray-400 mt-0.5">{{ item.medicine.generic_name }}</div>
             {% endif %}
           </div>
-        </div>
 
-        <!-- Qty + status + expiry -->
-        <div class="ph-meta-col" onclick="event.stopPropagation()">
-          <span style="font-size:15px; font-weight:700; color:{% if not item.in_stock %}#EF4444{% elif item.low_stock %}#D97706{% else %}#059669{% endif %};">
-            {{ item.total_quantity }}
+          <!-- Count badge -->
+          <span class="text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap"
+            style="{% if not item.in_stock %}background:#FEE2E2;color:#991B1B{% elif item.low_stock %}background:#FEF3C7;color:#92400E{% else %}background:#D1FAE5;color:#065F46{% endif %}">
+            {{ item.total_quantity }} units
           </span>
-          {% if not item.in_stock %}
-            <span class="ph-badge ph-out-stock">Out of Stock</span>
-          {% elif item.low_stock %}
-            <span class="ph-badge ph-low-stock">Low Stock</span>
-          {% else %}
-            <span class="ph-badge ph-in-stock">In Stock</span>
-          {% endif %}
+
+          <!-- Expiry -->
           {% if item.earliest_expiry %}
-          <span style="font-size:12px; color:#6B7280; white-space:nowrap;">Exp {{ item.earliest_expiry|date:"M Y" }}</span>
+          <span class="text-xs whitespace-nowrap hidden sm:inline"
+            style="color:{% if item.earliest_expiry|date:'Y-m-d' < '2026-04-13' %}#DC2626{% else %}#9CA3AF{% endif %};">
+            {{ item.earliest_expiry|date:"M Y" }}
+          </span>
           {% endif %}
-        </div>
 
-        <!-- Actions -->
-        <div class="ph-act-col" onclick="event.stopPropagation()">
-          <a href="/pharmacy/item/{{ item.pk }}/add-batch/" class="btn btn-sm btn-primary" style="font-size:12px;">+ Batch</a>
-          <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm" style="font-size:12px; background:{% if item.reorder_flagged %}#EF4444{% else %}#E5E7EB{% endif %}; color:{% if item.reorder_flagged %}#fff{% else %}#374151{% endif %}; border:none;">
-              {% if item.reorder_flagged %}Flagged{% else %}Flag{% endif %}
-            </button>
-          </form>
-          <form method="post" action="/pharmacy/item/{{ item.pk }}/delete/" style="margin:0;"
-            onsubmit="return confirm('Delete {{ item.display_name }} and all its batches?')">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm" style="font-size:12px; background:#FEE2E2; color:#B91C1C; border:none;">Delete</button>
-          </form>
-        </div>
-      </div>
+          <!-- Expand arrow -->
+          <span id="arrow-{{ item.pk }}" class="text-xs text-gray-300 flex-shrink-0">▶</span>
 
-      <!-- Batch expansion -->
-      <div class="ph-batches" id="batches-{{ item.pk }}">
-        {% with fefo=item.use_first_batch %}
-        {% if item.batches.all %}
-          {% for batch in item.batches.all %}
-          <div class="ph-batch" style="background:{% if fefo and batch.pk == fefo.pk %}#F0FDF4{% else %}#F9FAFB{% endif %};">
-
-            <!-- Batch number + badges -->
-            <div class="ph-batch-info">
-              <div style="font-size:13px; font-weight:600; color:#374151;">
-                {{ batch.batch_number|default:"No batch #" }}
-                {% if fefo and batch.pk == fefo.pk %}
-                <span class="ph-badge ph-use-first" style="margin-left:4px;">Use First</span>
-                {% endif %}
-              </div>
-              <div style="font-size:12px; color:#9CA3AF; margin-top:1px;">
-                Received {{ batch.received_date|date:"d M Y" }}
-              </div>
-            </div>
-
-            <!-- Qty · Expiry · Price -->
-            <div class="ph-batch-meta">
-              <span style="font-weight:600; color:{% if batch.quantity == 0 %}#EF4444{% else %}#374151{% endif %};">
-                {{ batch.quantity }} units
-              </span>
-              <span style="color:#D1D5DB;">·</span>
-              {% if batch.expiry_date %}
-                {% if batch.is_expired %}
-                  <span class="ph-badge ph-expired">{{ batch.expiry_date|date:"M Y" }} Expired</span>
-                {% elif batch.is_near_expiry %}
-                  <span class="ph-badge ph-near-exp">{{ batch.expiry_date|date:"M Y" }} Soon</span>
-                {% else %}
-                  <span style="font-size:13px; color:#374151;">{{ batch.expiry_date|date:"M Y" }}</span>
-                {% endif %}
-              {% else %}
-                <span style="font-size:13px; color:#9CA3AF;">No expiry</span>
-              {% endif %}
-              {% if batch.unit_price %}
-              <span style="color:#D1D5DB;">·</span>
-              <span style="font-size:13px; color:#374151;">₹{{ batch.unit_price }}</span>
-              {% endif %}
-            </div>
-
-            <!-- Edit / Delete -->
-            <div class="ph-batch-act">
-              <a href="/pharmacy/batch/{{ batch.pk }}/edit/" class="btn btn-sm btn-secondary" style="font-size:12px;">Edit</a>
-              <form method="post" action="/pharmacy/batch/{{ batch.pk }}/delete/" style="margin:0;"
-                onsubmit="return confirm('Delete batch {{ batch.batch_number|default:'N/A' }}?')">
+          <!-- ⋮ three-dot menu -->
+          <div class="relative flex-shrink-0" onclick="event.stopPropagation()">
+            <button onclick="toggleMenu({{ item.pk }})"
+              class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 border-none bg-transparent cursor-pointer text-base">⋮</button>
+            <div class="ph-dropdown" id="menu-{{ item.pk }}">
+              <a href="/pharmacy/item/{{ item.pk }}/add-batch/">
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="margin-right:8px; vertical-align:-1px; flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Batch
+              </a>
+              <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
+              <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-sm" style="font-size:12px; background:#FEE2E2; color:#B91C1C; border:none;">Delete</button>
+                <button type="submit">{% if item.reorder_flagged %}✓ Remove Flag{% else %}🚩 Flag for Reorder{% endif %}</button>
+              </form>
+              <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
+              <form method="post" action="/pharmacy/item/{{ item.pk }}/delete/" style="margin:0;"
+                onsubmit="return confirm('Delete {{ item.display_name }} and all batches?')">
+                {% csrf_token %}
+                <button type="submit" class="ph-dd-danger">Delete Medicine</button>
               </form>
             </div>
+          </div>
+        </div>
 
+        <!-- ── Expanded batch panel ── -->
+        <div id="expand-{{ item.pk }}" style="display:none; background:#F8FAFC; border-top:1px solid #F3F4F6;">
+          {% if item.batches.all %}
+          <div class="px-4 py-1.5" style="border-bottom:1px solid #F3F4F6;">
+            <span class="text-xs font-bold text-gray-400 uppercase tracking-wide">Batches · {{ item.batches.count }}</span>
+          </div>
+          {% for batch in item.batches.all %}
+          <div class="flex items-start gap-3 px-4 py-3 flex-wrap"
+               style="border-bottom:1px solid #F3F4F6; {% if forloop.last %}border-bottom:none;{% endif %} background:{% if fefo and batch.pk == fefo.pk %}#F0FDF4{% else %}transparent{% endif %};">
+
+            <!-- Batch info -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="text-sm font-semibold text-gray-700">{{ batch.batch_number|default:"No batch #" }}</span>
+                {% if fefo and batch.pk == fefo.pk %}
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#D1FAE5;color:#065F46;">Use First</span>
+                {% endif %}
+                {% if batch.is_expired %}
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEE2E2;color:#991B1B;">Expired</span>
+                {% elif batch.is_near_expiry %}
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEF3C7;color:#92400E;">Expiring Soon</span>
+                {% endif %}
+              </div>
+              <div class="flex gap-4 flex-wrap mt-1">
+                <span class="text-xs text-gray-500"><strong class="text-gray-700">{{ batch.quantity }}</strong> units</span>
+                {% if batch.expiry_date %}
+                <span class="text-xs" style="color:{% if batch.is_expired %}#DC2626{% elif batch.is_near_expiry %}#D97706{% else %}#6B7280{% endif %};">
+                  Exp {{ batch.expiry_date|date:"M Y" }}
+                </span>
+                {% endif %}
+                {% if batch.unit_price %}<span class="text-xs text-gray-500">₹{{ batch.unit_price }}/unit</span>{% endif %}
+                <span class="text-xs text-gray-400">Recd {{ batch.received_date|date:"d M Y" }}</span>
+              </div>
+            </div>
+
+            <!-- Batch actions -->
+            <div class="flex gap-2 flex-shrink-0 pt-0.5">
+              <a href="/pharmacy/batch/{{ batch.pk }}/edit/" class="btn btn-sm btn-secondary" style="font-size:12px; padding:5px 12px;">Edit</a>
+              <form method="post" action="/pharmacy/batch/{{ batch.pk }}/delete/" style="margin:0;"
+                onsubmit="return confirm('Delete this batch?')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm" style="font-size:12px; padding:5px 12px; background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;">Delete</button>
+              </form>
+            </div>
           </div>
           {% endfor %}
-        {% else %}
-          <div style="padding:12px 14px 12px 40px; color:#9CA3AF; font-size:13px;">No batches recorded.</div>
-        {% endif %}
-        {% endwith %}
-      </div>
+          {% else %}
+          <div class="px-4 py-3 text-xs text-gray-400">No batches recorded.</div>
+          {% endif %}
+        </div>
 
+      </div>
+      {% endwith %}
       {% endfor %}
     </div>
 
     {% else %}
-    <div style="text-align:center; padding:40px 20px; color:#9CA3AF;">
-      <div style="font-size:32px; margin-bottom:12px;">💊</div>
-      <div style="font-size:15px; font-weight:500; margin-bottom:8px;">No items in inventory</div>
-      <div style="font-size:13px; margin-bottom:16px;">Add your first stock item to get started.</div>
+    <div class="text-center py-12 px-4">
+      <div class="text-4xl mb-3">💊</div>
+      <div class="text-sm font-medium text-gray-700 mb-1">No medicines in inventory</div>
+      <div class="text-xs text-gray-400 mb-5">Add your first stock item to get started.</div>
       <a href="/pharmacy/add/" class="btn btn-primary">+ Add Stock</a>
     </div>
     {% endif %}
-  </div>
 
-</div>
+  </div><!-- /inventory card -->
+
+</div><!-- /page-container -->
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function filterInventory(q) {
-  q = q.toLowerCase().trim();
-  document.querySelectorAll('.inv-row').forEach(row => {
-    const match = !q || row.dataset.name.includes(q);
-    row.style.display = match ? '' : 'none';
-    const batchPanel = document.getElementById('batches-' + row.dataset.pk);
-    if (batchPanel && !match) {
-      batchPanel.style.display = 'none';
-      const icon = document.getElementById('toggle-icon-' + row.dataset.pk);
-      if (icon) icon.textContent = '▶';
-    }
-  });
+// Close menus when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.ph-dropdown') && !e.target.closest('[onclick*="toggleMenu"]')) {
+    document.querySelectorAll('.ph-dropdown.open').forEach(d => d.classList.remove('open'));
+  }
+});
+
+function toggleMenu(pk) {
+  const menu = document.getElementById('menu-' + pk);
+  const wasOpen = menu.classList.contains('open');
+  document.querySelectorAll('.ph-dropdown.open').forEach(d => d.classList.remove('open'));
+  if (!wasOpen) menu.classList.add('open');
 }
 
-function toggleBatches(pk) {
-  const panel = document.getElementById('batches-' + pk);
-  const icon  = document.getElementById('toggle-icon-' + pk);
+function toggleExpand(pk, e) {
+  const panel = document.getElementById('expand-' + pk);
+  const arrow  = document.getElementById('arrow-' + pk);
   if (!panel) return;
-  const open = panel.style.display !== 'none' && panel.style.display !== '';
+  const open = panel.style.display === 'block';
   panel.style.display = open ? 'none' : 'block';
-  if (icon) icon.textContent = open ? '▶' : '▼';
+  if (arrow) arrow.textContent = open ? '▶' : '▼';
+}
+
+function filterInv(q) {
+  q = q.toLowerCase().trim();
+  document.querySelectorAll('#inv-list .ph-item').forEach(row => {
+    row.style.display = (!q || row.dataset.name.includes(q)) ? '' : 'none';
+  });
 }
 </script>
 {% endblock %}
