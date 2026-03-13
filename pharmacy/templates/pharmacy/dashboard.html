@@ -2,7 +2,7 @@
 {% block title %}Pharmacy — {{ request.user.staff_profile.clinic.name }}{% endblock %}
 
 {% block content %}
-<div class="page-container" style="max-width:900px;">
+<div class="page-container" style="max-width:960px;">
 
   <!-- Header -->
   <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:24px;">
@@ -46,12 +46,12 @@
       <div style="display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid #FDE68A; border-radius:10px; padding:10px 14px; flex-wrap:wrap; gap:8px;">
         <div>
           <div style="font-size:14px; font-weight:600; color:#374151;">{{ item.display_name }}</div>
-          {% if item.expiry_date %}
-          <div style="font-size:12px; color:#6B7280;">Expiry: {{ item.expiry_date|date:"M Y" }}</div>
+          {% if item.earliest_expiry %}
+          <div style="font-size:12px; color:#6B7280;">Earliest expiry: {{ item.earliest_expiry|date:"M Y" }}</div>
           {% endif %}
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-size:13px; font-weight:700; color:#D97706;">Qty: {{ item.quantity }}</span>
+          <span style="font-size:13px; font-weight:700; color:#D97706;">Qty: {{ item.total_quantity }}</span>
           <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm" style="background:{% if item.reorder_flagged %}#EF4444{% else %}#F59E0B{% endif %}; color:#fff; border:none; font-size:12px;">
@@ -74,46 +74,127 @@
         <thead>
           <tr style="border-bottom:2px solid #E5E7EB;">
             <th style="text-align:left; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Medicine</th>
-            <th style="text-align:right; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Qty</th>
-            <th style="text-align:left; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Batch</th>
-            <th style="text-align:left; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Expiry</th>
-            <th style="text-align:right; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Price</th>
+            <th style="text-align:right; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Total Qty</th>
+            <th style="text-align:left; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Status</th>
+            <th style="text-align:left; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Next Expiry</th>
             <th style="text-align:center; padding:8px 10px; color:#6B7280; font-weight:600; font-size:12px; text-transform:uppercase;">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for item in items %}
-          <tr class="inv-row" style="border-bottom:1px solid #F3F4F6;"
-              data-name="{{ item.display_name|lower }}">
+          <!-- Medicine master row -->
+          <tr class="inv-row medicine-row" style="border-bottom:1px solid #F3F4F6; cursor:pointer;"
+              data-name="{{ item.display_name|lower }}"
+              onclick="toggleBatches({{ item.pk }})">
             <td style="padding:10px;">
-              <div style="font-weight:500; color:#111827;">{{ item.display_name }}</div>
-              {% if item.medicine and item.medicine.generic_name %}
-              <div style="font-size:12px; color:#9CA3AF;">{{ item.medicine.generic_name }}</div>
-              {% endif %}
-              {% if item.low_stock %}
-              <span style="font-size:11px; background:#FEF3C7; color:#92400E; padding:1px 6px; border-radius:10px; font-weight:600;">Low Stock</span>
-              {% elif not item.in_stock %}
-              <span style="font-size:11px; background:#FEE2E2; color:#991B1B; padding:1px 6px; border-radius:10px; font-weight:600;">Out of Stock</span>
-              {% endif %}
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span id="toggle-icon-{{ item.pk }}" style="font-size:11px; color:#9CA3AF; user-select:none;">▶</span>
+                <div>
+                  <div style="font-weight:600; color:#111827;">{{ item.display_name }}</div>
+                  {% if item.medicine and item.medicine.generic_name %}
+                  <div style="font-size:12px; color:#9CA3AF;">{{ item.medicine.generic_name }}</div>
+                  {% endif %}
+                </div>
+              </div>
             </td>
-            <td style="padding:10px; text-align:right; font-weight:600;
+            <td style="padding:10px; text-align:right; font-weight:700;
               color:{% if not item.in_stock %}#EF4444{% elif item.low_stock %}#D97706{% else %}#059669{% endif %};">
-              {{ item.quantity }}
+              {{ item.total_quantity }}
             </td>
-            <td style="padding:10px; color:#6B7280;">{{ item.batch_number|default:"—" }}</td>
-            <td style="padding:10px; color:#6B7280;">{% if item.expiry_date %}{{ item.expiry_date|date:"M Y" }}{% else %}—{% endif %}</td>
-            <td style="padding:10px; text-align:right; color:#374151;">{% if item.unit_price %}₹{{ item.unit_price }}{% else %}—{% endif %}</td>
-            <td style="padding:10px; text-align:center;">
-              <div style="display:flex; gap:6px; justify-content:center;">
-                <a href="/pharmacy/item/{{ item.pk }}/edit/" class="btn btn-sm btn-secondary" style="font-size:12px;">Edit</a>
-                <form method="post" action="/pharmacy/item/{{ item.pk }}/delete/" style="margin:0;"
-                  onsubmit="return confirm('Delete {{ item.display_name }}?')">
+            <td style="padding:10px;">
+              {% if not item.in_stock %}
+              <span style="font-size:11px; background:#FEE2E2; color:#991B1B; padding:2px 8px; border-radius:10px; font-weight:600;">Out of Stock</span>
+              {% elif item.low_stock %}
+              <span style="font-size:11px; background:#FEF3C7; color:#92400E; padding:2px 8px; border-radius:10px; font-weight:600;">Low Stock</span>
+              {% else %}
+              <span style="font-size:11px; background:#D1FAE5; color:#065F46; padding:2px 8px; border-radius:10px; font-weight:600;">In Stock</span>
+              {% endif %}
+            </td>
+            <td style="padding:10px; color:#6B7280; font-size:13px;">
+              {% if item.earliest_expiry %}{{ item.earliest_expiry|date:"M Y" }}{% else %}—{% endif %}
+            </td>
+            <td style="padding:10px; text-align:center;" onclick="event.stopPropagation()">
+              <div style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">
+                <a href="/pharmacy/item/{{ item.pk }}/add-batch/" class="btn btn-sm btn-primary" style="font-size:11px;">+ Batch</a>
+                <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-sm" style="font-size:12px; background:#FEE2E2; color:#B91C1C; border:none;">Delete</button>
+                  <button type="submit" class="btn btn-sm" style="font-size:11px; background:{% if item.reorder_flagged %}#EF4444{% else %}#E5E7EB{% endif %}; color:{% if item.reorder_flagged %}#fff{% else %}#374151{% endif %}; border:none;">
+                    {% if item.reorder_flagged %}Flagged{% else %}Flag{% endif %}
+                  </button>
+                </form>
+                <form method="post" action="/pharmacy/item/{{ item.pk }}/delete/" style="margin:0;"
+                  onsubmit="return confirm('Delete {{ item.display_name }} and ALL its batches?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm" style="font-size:11px; background:#FEE2E2; color:#B91C1C; border:none;">Delete</button>
                 </form>
               </div>
             </td>
           </tr>
+
+          <!-- Batch sub-rows (hidden by default) -->
+          <tr id="batches-{{ item.pk }}" style="display:none;">
+            <td colspan="5" style="padding:0 0 0 32px; background:#F9FAFB;">
+              {% with fefo=item.use_first_batch %}
+              {% if item.batches.all %}
+              <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                  <tr style="border-bottom:1px solid #E5E7EB;">
+                    <th style="text-align:left; padding:6px 10px; color:#9CA3AF; font-weight:500; font-size:11px; text-transform:uppercase;">Batch #</th>
+                    <th style="text-align:right; padding:6px 10px; color:#9CA3AF; font-weight:500; font-size:11px; text-transform:uppercase;">Qty</th>
+                    <th style="text-align:left; padding:6px 10px; color:#9CA3AF; font-weight:500; font-size:11px; text-transform:uppercase;">Expiry</th>
+                    <th style="text-align:right; padding:6px 10px; color:#9CA3AF; font-weight:500; font-size:11px; text-transform:uppercase;">Price (₹)</th>
+                    <th style="text-align:center; padding:6px 10px; color:#9CA3AF; font-weight:500; font-size:11px; text-transform:uppercase;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for batch in item.batches.all %}
+                  <tr style="border-bottom:1px solid #F3F4F6; background:{% if fefo and batch.pk == fefo.pk %}#F0FDF4{% else %}#F9FAFB{% endif %};">
+                    <td style="padding:8px 10px;">
+                      {{ batch.batch_number|default:"—" }}
+                      {% if fefo and batch.pk == fefo.pk %}
+                      <span style="font-size:10px; background:#D1FAE5; color:#065F46; padding:1px 6px; border-radius:8px; font-weight:600; margin-left:4px;">Use First</span>
+                      {% endif %}
+                    </td>
+                    <td style="padding:8px 10px; text-align:right; font-weight:600; color:{% if batch.quantity == 0 %}#EF4444{% else %}#374151{% endif %};">
+                      {{ batch.quantity }}
+                    </td>
+                    <td style="padding:8px 10px;">
+                      {% if batch.expiry_date %}
+                        {% if batch.is_expired %}
+                        <span style="color:#EF4444; font-weight:600;">{{ batch.expiry_date|date:"M Y" }} ⚠ Expired</span>
+                        {% elif batch.is_near_expiry %}
+                        <span style="color:#D97706; font-weight:600;">{{ batch.expiry_date|date:"M Y" }} ⚠ Soon</span>
+                        {% else %}
+                        <span style="color:#374151;">{{ batch.expiry_date|date:"M Y" }}</span>
+                        {% endif %}
+                      {% else %}
+                        <span style="color:#9CA3AF;">—</span>
+                      {% endif %}
+                    </td>
+                    <td style="padding:8px 10px; text-align:right; color:#374151;">
+                      {% if batch.unit_price %}₹{{ batch.unit_price }}{% else %}—{% endif %}
+                    </td>
+                    <td style="padding:8px 10px; text-align:center;">
+                      <div style="display:flex; gap:6px; justify-content:center;">
+                        <a href="/pharmacy/batch/{{ batch.pk }}/edit/" class="btn btn-sm btn-secondary" style="font-size:11px;">Edit</a>
+                        <form method="post" action="/pharmacy/batch/{{ batch.pk }}/delete/" style="margin:0;"
+                          onsubmit="return confirm('Delete batch {{ batch.batch_number|default:'N/A' }}?')">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-sm" style="font-size:11px; background:#FEE2E2; color:#B91C1C; border:none;">Delete</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% else %}
+              <div style="padding:12px 10px; color:#9CA3AF; font-size:13px;">No batches recorded.</div>
+              {% endif %}
+              {% endwith %}
+            </td>
+          </tr>
+
           {% endfor %}
         </tbody>
       </table>
@@ -135,9 +216,27 @@
 <script>
 function filterInventory(q) {
   q = q.toLowerCase();
-  document.querySelectorAll('.inv-row').forEach(row => {
-    row.style.display = row.dataset.name.includes(q) ? '' : 'none';
+  document.querySelectorAll('.medicine-row').forEach(row => {
+    const match = row.dataset.name.includes(q);
+    row.style.display = match ? '' : 'none';
+    // also hide batch rows for hidden medicine rows
+    const pk = row.getAttribute('onclick').match(/\d+/)[0];
+    const batchRow = document.getElementById('batches-' + pk);
+    if (batchRow && !match) batchRow.style.display = 'none';
   });
+}
+
+function toggleBatches(pk) {
+  const row = document.getElementById('batches-' + pk);
+  const icon = document.getElementById('toggle-icon-' + pk);
+  if (!row) return;
+  if (row.style.display === 'none') {
+    row.style.display = '';
+    if (icon) icon.textContent = '▼';
+  } else {
+    row.style.display = 'none';
+    if (icon) icon.textContent = '▶';
+  }
 }
 </script>
 {% endblock %}

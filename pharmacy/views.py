@@ -5,7 +5,7 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 from django.db.models import Q
 
-from .models import MedicineCatalog, PharmacyItem, DoctorFavorite
+from .models import MedicineCatalog, PharmacyItem, PharmacyBatch, DoctorFavorite
 
 
 def _get_clinic(request):
@@ -15,10 +15,17 @@ def _get_clinic(request):
 @login_required
 def pharmacy_dashboard(request):
     clinic = _get_clinic(request)
-    items = PharmacyItem.objects.filter(clinic=clinic).select_related('medicine').order_by('medicine__name', 'custom_name')
+    items = (
+        PharmacyItem.objects
+        .filter(clinic=clinic)
+        .select_related('medicine')
+        .prefetch_related('batches')
+        .order_by('medicine__name', 'custom_name')
+    )
+
     low_stock_items = [i for i in items if i.low_stock]
     out_of_stock_items = [i for i in items if not i.in_stock]
-    total_in_stock = items.filter(quantity__gt=0).count()
+    total_in_stock = sum(1 for i in items if i.in_stock)
     low_stock_count = len(low_stock_items)
 
     return render(request, 'pharmacy/dashboard.html', {
@@ -55,41 +62,111 @@ def add_stock_view(request):
                 'error': 'Please select a medicine from catalog or enter a custom name.'
             })
 
-        PharmacyItem.objects.create(
-            clinic=clinic,
-            medicine=medicine,
-            custom_name=custom_name if not medicine else '',
-            batch_number=batch_number,
-            expiry_date=expiry_date,
-            quantity=quantity,
-            unit_price=unit_price,
-            reorder_level=reorder_level,
-        )
+        # Check if this medicine already exists in the clinic's inventory
+        existing_item = None
+        if medicine:
+            existing_item = PharmacyItem.objects.filter(clinic=clinic, medicine=medicine).first()
+        elif custom_name:
+            existing_item = PharmacyItem.objects.filter(clinic=clinic, custom_name=custom_name).first()
+
+        if existing_item:
+            # Add a new batch to the existing item
+            PharmacyBatch.objects.create(
+                item=existing_item,
+                batch_number=batch_number,
+                expiry_date=expiry_date,
+                quantity=quantity,
+                unit_price=unit_price,
+            )
+            existing_item.reorder_level = reorder_level
+            existing_item.save(update_fields=['reorder_level', 'updated_at'])
+        else:
+            # Create new medicine master + first batch
+            item = PharmacyItem.objects.create(
+                clinic=clinic,
+                medicine=medicine,
+                custom_name=custom_name if not medicine else '',
+                reorder_level=reorder_level,
+            )
+            PharmacyBatch.objects.create(
+                item=item,
+                batch_number=batch_number,
+                expiry_date=expiry_date,
+                quantity=quantity,
+                unit_price=unit_price,
+            )
+
         return redirect('pharmacy:dashboard')
 
-    return render(request, 'pharmacy/add_stock.html', {})
+    # On GET: check if the URL has an item_id shortcut (from "Add Batch" button)
+    prefill_item = None
+    item_id = request.GET.get('item_id')
+    if item_id:
+        prefill_item = PharmacyItem.objects.filter(pk=item_id, clinic=clinic).select_related('medicine').first()
+
+    return render(request, 'pharmacy/add_stock.html', {'prefill_item': prefill_item})
 
 
 @login_required
-def edit_stock_view(request, pk):
+def add_batch_view(request, pk):
+    """POST only — adds a new batch to an existing PharmacyItem."""
     clinic = _get_clinic(request)
     item = get_object_or_404(PharmacyItem, pk=pk, clinic=clinic)
 
     if request.method == 'POST':
-        item.batch_number = request.POST.get('batch_number', '').strip()
-        item.expiry_date = request.POST.get('expiry_date') or None
-        item.quantity = int(request.POST.get('quantity', 0) or 0)
-        item.unit_price = request.POST.get('unit_price', '0') or '0'
-        item.reorder_level = int(request.POST.get('reorder_level', 10) or 10)
-        item.save()
+        batch_number = request.POST.get('batch_number', '').strip()
+        expiry_date = request.POST.get('expiry_date') or None
+        quantity = int(request.POST.get('quantity', 0) or 0)
+        unit_price = request.POST.get('unit_price', '0') or '0'
+
+        PharmacyBatch.objects.create(
+            item=item,
+            batch_number=batch_number,
+            expiry_date=expiry_date,
+            quantity=quantity,
+            unit_price=unit_price,
+        )
         return redirect('pharmacy:dashboard')
 
-    return render(request, 'pharmacy/edit_stock.html', {'item': item})
+    # GET: show a small form pre-filled with the item
+    return render(request, 'pharmacy/add_batch.html', {'item': item})
+
+
+@login_required
+def edit_batch_view(request, pk):
+    """Edit a specific PharmacyBatch."""
+    clinic = _get_clinic(request)
+    batch = get_object_or_404(PharmacyBatch, pk=pk, item__clinic=clinic)
+
+    if request.method == 'POST':
+        batch.batch_number = request.POST.get('batch_number', '').strip()
+        batch.expiry_date = request.POST.get('expiry_date') or None
+        batch.quantity = int(request.POST.get('quantity', 0) or 0)
+        batch.unit_price = request.POST.get('unit_price', '0') or '0'
+        batch.save()
+        return redirect('pharmacy:dashboard')
+
+    return render(request, 'pharmacy/edit_batch.html', {'batch': batch})
 
 
 @login_required
 @require_POST
-def delete_stock_view(request, pk):
+def delete_batch_view(request, pk):
+    """Delete a PharmacyBatch. If the item has no remaining batches the item itself is also removed."""
+    clinic = _get_clinic(request)
+    batch = get_object_or_404(PharmacyBatch, pk=pk, item__clinic=clinic)
+    item = batch.item
+    batch.delete()
+    # Clean up orphan medicine masters with no batches
+    if not item.batches.exists():
+        item.delete()
+    return redirect('pharmacy:dashboard')
+
+
+@login_required
+@require_POST
+def delete_item_view(request, pk):
+    """Delete a PharmacyItem (and all its batches via CASCADE)."""
     clinic = _get_clinic(request)
     item = get_object_or_404(PharmacyItem, pk=pk, clinic=clinic)
     item.delete()
@@ -102,7 +179,7 @@ def flag_reorder_view(request, pk):
     clinic = _get_clinic(request)
     item = get_object_or_404(PharmacyItem, pk=pk, clinic=clinic)
     item.reorder_flagged = not item.reorder_flagged
-    item.save(update_fields=['reorder_flagged'])
+    item.save(update_fields=['reorder_flagged', 'updated_at'])
     return redirect('pharmacy:dashboard')
 
 
@@ -113,15 +190,18 @@ def pharmacy_search_api(request):
     q = request.GET.get('q', '').strip()
     if len(q) < 1:
         return JsonResponse({'items': []})
-    qs = PharmacyItem.objects.filter(clinic=clinic).filter(
-        Q(medicine__name__icontains=q) | Q(custom_name__icontains=q)
-    ).select_related('medicine')[:20]
+    qs = (
+        PharmacyItem.objects
+        .filter(clinic=clinic)
+        .filter(Q(medicine__name__icontains=q) | Q(custom_name__icontains=q))
+        .select_related('medicine')
+        .prefetch_related('batches')[:20]
+    )
     results = [
         {
             'id': item.pk,
             'name': item.display_name,
-            'quantity': item.quantity,
-            'unit_price': str(item.unit_price),
+            'quantity': item.total_quantity,
             'in_stock': item.in_stock,
         }
         for item in qs

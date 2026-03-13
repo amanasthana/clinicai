@@ -401,16 +401,17 @@ def pharmacy_search_api(request):
         .filter(clinic=clinic)
         .filter(Q(medicine__name__icontains=q) | Q(custom_name__icontains=q))
         .select_related('medicine')
-        .order_by('-quantity')[:10]
+        .prefetch_related('batches')[:10]
     )
     for item in items:
         name = item.display_name
         if not name or name in seen_names:
             continue
         seen_names.add(name)
-        if item.quantity == 0:
+        total_qty = item.total_quantity
+        if total_qty == 0:
             avail = 'out'
-        elif item.quantity <= item.reorder_level:
+        elif item.low_stock:
             avail = 'low'
         else:
             avail = 'ok'

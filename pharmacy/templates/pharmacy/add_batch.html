@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Add Batch — {{ item.display_name }}{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:600px;">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+    <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">← Back</a>
+    <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Add Batch</h1>
+  </div>
+
+  <div class="card" style="margin-bottom:16px; border:1px solid #BFDBFE; background:#EFF6FF;">
+    <div style="font-size:14px; color:#1E40AF; font-weight:600; margin-bottom:4px;">Adding new batch to</div>
+    <div style="font-size:17px; font-weight:700; color:#111827;">{{ item.display_name }}</div>
+    {% if item.medicine and item.medicine.generic_name %}
+    <div style="font-size:13px; color:#6B7280; margin-top:2px;">{{ item.medicine.generic_name }}</div>
+    {% endif %}
+    <div style="font-size:13px; color:#374151; margin-top:6px;">
+      Current total stock: <strong>{{ item.total_quantity }}</strong> units
+      across <strong>{{ item.batches.count }}</strong> batch{{ item.batches.count|pluralize:"es" }}
+    </div>
+  </div>
+
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="resp-grid-2" style="gap:14px; margin-bottom:16px;">
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Batch Number <span style="color:#9CA3AF; font-weight:400;">(optional)</span></label>
+          <input type="text" name="batch_number" placeholder="e.g. B2024-01" class="input-field" style="font-size:14px;">
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Expiry Date</label>
+          <input type="date" name="expiry_date" class="input-field" style="font-size:14px;">
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Quantity <span style="color:#EF4444;">*</span></label>
+          <input type="number" name="quantity" min="0" value="0" required class="input-field" style="font-size:14px;">
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Unit Price (₹)</label>
+          <input type="number" name="unit_price" min="0" step="0.01" value="0" class="input-field" style="font-size:14px;">
+        </div>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; padding-top:16px; border-top:1px solid #E5E7EB;">
+        <button type="submit" class="btn btn-primary btn-lg" style="flex:1; min-width:160px;">Add Batch</button>
+        <a href="/pharmacy/" class="btn btn-secondary btn-lg" style="flex:1; min-width:120px; text-align:center;">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

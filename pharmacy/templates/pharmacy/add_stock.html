@@ -13,10 +13,36 @@
   <div class="alert alert-error" style="margin-bottom:16px;">{{ error }}</div>
   {% endif %}
 
+  {% if prefill_item %}
+  <!-- Shortcut: adding a new batch to an existing item -->
+  <div class="card" style="margin-bottom:16px; border:1px solid #BFDBFE; background:#EFF6FF;">
+    <div style="font-size:14px; color:#1E40AF; font-weight:600; margin-bottom:4px;">
+      Adding batch to existing medicine
+    </div>
+    <div style="font-size:16px; font-weight:700; color:#111827;">{{ prefill_item.display_name }}</div>
+    {% if prefill_item.medicine and prefill_item.medicine.generic_name %}
+    <div style="font-size:13px; color:#6B7280; margin-top:2px;">{{ prefill_item.medicine.generic_name }}</div>
+    {% endif %}
+    <div style="font-size:13px; color:#374151; margin-top:6px;">
+      Current total stock: <strong>{{ prefill_item.total_quantity }}</strong> units
+    </div>
+  </div>
+  {% endif %}
+
   <div class="card">
     <form method="post">
       {% csrf_token %}
-      <input type="hidden" id="catalog-id-input" name="catalog_id">
+      <input type="hidden" id="catalog-id-input" name="catalog_id"
+        value="{% if prefill_item and prefill_item.medicine %}{{ prefill_item.medicine.pk }}{% endif %}">
+
+      {% if prefill_item %}
+      <!-- Medicine is pre-selected — no need to show search -->
+      <input type="hidden" name="custom_name" value="{{ prefill_item.custom_name }}">
+      {% else %}
+      <!-- Step 1: choose the medicine -->
+      <div style="margin-bottom:4px;">
+        <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">Step 1 — Select Medicine</div>
+      </div>
 
       <!-- Medicine search from catalog -->
       <div style="margin-bottom:16px;">
@@ -30,6 +56,7 @@
           <div id="catalog-dropdown" style="position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #E5E7EB; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,0.12); z-index:100; display:none; max-height:240px; overflow-y:auto;"></div>
         </div>
         <div id="selected-medicine" style="margin-top:8px; display:none; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:8px 12px; font-size:13px; color:#1D4ED8; font-weight:500;"></div>
+        <div id="existing-item-banner" style="margin-top:8px; display:none; background:#FEF3C7; border:1px solid #FDE68A; border-radius:8px; padding:8px 12px; font-size:13px; color:#92400E;"></div>
       </div>
 
       <!-- OR custom name -->
@@ -38,15 +65,18 @@
           OR Custom Name <span style="color:#9CA3AF; font-weight:400;">(if not in catalog)</span>
         </label>
         <input type="text" name="custom_name" id="custom-name" placeholder="e.g. Tab Ayurvedic X 500mg"
-          class="input-field" style="font-size:14px;">
+          class="input-field" style="font-size:14px;" oninput="checkCustomName(this.value)">
+        <div id="custom-existing-banner" style="margin-top:8px; display:none; background:#FEF3C7; border:1px solid #FDE68A; border-radius:8px; padding:8px 12px; font-size:13px; color:#92400E;"></div>
       </div>
 
       <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
+      <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">Step 2 — Batch Details</div>
+      {% endif %}
 
       <!-- Batch, Expiry, Qty, Price, Reorder -->
       <div class="resp-grid-2" style="gap:14px; margin-bottom:16px;">
         <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Batch Number</label>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Batch Number <span style="color:#9CA3AF; font-weight:400;">(optional)</span></label>
           <input type="text" name="batch_number" placeholder="e.g. B2024-01" class="input-field" style="font-size:14px;">
         </div>
         <div>
@@ -54,8 +84,8 @@
           <input type="date" name="expiry_date" class="input-field" style="font-size:14px;">
         </div>
         <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Quantity</label>
-          <input type="number" name="quantity" min="0" value="0" class="input-field" style="font-size:14px;">
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Quantity <span style="color:#EF4444;">*</span></label>
+          <input type="number" name="quantity" min="0" value="0" required class="input-field" style="font-size:14px;">
         </div>
         <div>
           <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Unit Price (₹)</label>
@@ -63,7 +93,7 @@
         </div>
         <div>
           <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Reorder Level</label>
-          <input type="number" name="reorder_level" min="0" value="10" class="input-field" style="font-size:14px;">
+          <input type="number" name="reorder_level" min="0" value="{{ prefill_item.reorder_level|default:10 }}" class="input-field" style="font-size:14px;">
         </div>
       </div>
 
@@ -80,6 +110,8 @@
 {% block extra_js %}
 <script>
 let searchTimer = null;
+// Inventory lookup cache: catalogId → existing item info
+const existingItemsMap = {};
 
 function searchCatalog(q) {
   clearTimeout(searchTimer);
@@ -101,7 +133,7 @@ function searchCatalog(q) {
   }, 200);
 }
 
-function selectMedicine(id, name, generic) {
+async function selectMedicine(id, name, generic) {
   document.getElementById('catalog-id-input').value = id;
   document.getElementById('catalog-search').value = name;
   document.getElementById('catalog-dropdown').style.display = 'none';
@@ -109,6 +141,49 @@ function selectMedicine(id, name, generic) {
   sel.textContent = `Selected: ${name} (${generic})`;
   sel.style.display = 'block';
   document.getElementById('custom-name').value = '';
+
+  // Check if this medicine already exists in inventory
+  const banner = document.getElementById('existing-item-banner');
+  try {
+    const resp = await fetch(`/pharmacy/api/search/?q=${encodeURIComponent(name)}`);
+    const data = await resp.json();
+    const match = data.items.find(i => i.name.toLowerCase() === name.toLowerCase());
+    if (match) {
+      banner.innerHTML = `⚠ <strong>${escHtml(name)}</strong> is already in your inventory (${match.quantity} units). Adding here will create a new batch for it.`;
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+  } catch(e) {
+    banner.style.display = 'none';
+  }
+}
+
+let customTimer = null;
+function checkCustomName(val) {
+  const banner = document.getElementById('custom-existing-banner');
+  clearTimeout(customTimer);
+  if (val.trim().length < 2) { banner.style.display = 'none'; return; }
+  // Clear catalog selection when typing custom name
+  document.getElementById('catalog-id-input').value = '';
+  const sel = document.getElementById('selected-medicine');
+  if (sel) sel.style.display = 'none';
+
+  customTimer = setTimeout(async () => {
+    try {
+      const resp = await fetch(`/pharmacy/api/search/?q=${encodeURIComponent(val)}`);
+      const data = await resp.json();
+      const match = data.items.find(i => i.name.toLowerCase() === val.trim().toLowerCase());
+      if (match) {
+        banner.innerHTML = `⚠ <strong>${escHtml(match.name)}</strong> is already in your inventory. Adding here will create a new batch for it.`;
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    } catch(e) {
+      banner.style.display = 'none';
+    }
+  }, 300);
 }
 
 function escHtml(s) {
@@ -118,6 +193,7 @@ function escHtml(s) {
 document.addEventListener('click', e => {
   const dropdown = document.getElementById('catalog-dropdown');
   const input = document.getElementById('catalog-search');
+  if (!dropdown || !input) return;
   if (!dropdown.contains(e.target) && e.target !== input) {
     dropdown.style.display = 'none';
   }

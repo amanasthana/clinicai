@@ -16,13 +16,10 @@ class MedicineCatalog(models.Model):
 
 
 class PharmacyItem(models.Model):
+    """Medicine master — one per drug per clinic."""
     clinic = models.ForeignKey('accounts.Clinic', on_delete=models.CASCADE, related_name='pharmacy_items')
     medicine = models.ForeignKey(MedicineCatalog, on_delete=models.CASCADE, null=True, blank=True)
     custom_name = models.CharField(max_length=250, blank=True)
-    batch_number = models.CharField(max_length=50, blank=True)
-    expiry_date = models.DateField(null=True, blank=True)
-    quantity = models.PositiveIntegerField(default=0)
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     reorder_level = models.PositiveIntegerField(default=10)
     reorder_flagged = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -35,15 +32,62 @@ class PharmacyItem(models.Model):
         return self.medicine.name if self.medicine else self.custom_name
 
     @property
+    def total_quantity(self):
+        return sum(b.quantity for b in self.batches.all())
+
+    @property
     def in_stock(self):
-        return self.quantity > 0
+        return self.total_quantity > 0
 
     @property
     def low_stock(self):
-        return 0 < self.quantity <= self.reorder_level
+        return 0 < self.total_quantity <= self.reorder_level
+
+    @property
+    def earliest_expiry(self):
+        """Earliest expiry date among batches that have stock."""
+        batches = [b for b in self.batches.all() if b.quantity > 0 and b.expiry_date]
+        return min((b.expiry_date for b in batches), default=None)
+
+    @property
+    def use_first_batch(self):
+        """The batch to dispense first (FEFO — soonest expiry with stock)."""
+        batches = [b for b in self.batches.all() if b.quantity > 0 and b.expiry_date]
+        return min(batches, key=lambda b: b.expiry_date, default=None)
 
     def __str__(self):
         return self.display_name
+
+
+class PharmacyBatch(models.Model):
+    """One purchase lot for a medicine."""
+    item = models.ForeignKey(PharmacyItem, on_delete=models.CASCADE, related_name='batches')
+    batch_number = models.CharField(max_length=50, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    quantity = models.PositiveIntegerField(default=0)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    received_date = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['expiry_date']  # FEFO order
+
+    @property
+    def is_near_expiry(self):
+        if not self.expiry_date:
+            return False
+        from django.utils import timezone
+        return (self.expiry_date - timezone.now().date()).days <= 60
+
+    @property
+    def is_expired(self):
+        if not self.expiry_date:
+            return False
+        from django.utils import timezone
+        return self.expiry_date < timezone.now().date()
+
+    def __str__(self):
+        return f"{self.item.display_name} — Batch {self.batch_number or 'N/A'}"
 
 
 class DoctorFavorite(models.Model):
