@@ -10,8 +10,10 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
+from accounts.permissions import require_permission
+
 from reception.models import Visit
-from .models import Prescription, PrescriptionMedicine, MedicalTerm
+from .models import Prescription, PrescriptionMedicine, MedicalTerm, DrugInteraction
 from pharmacy.models import DoctorFavorite
 from .services import generate_prescription, get_differentials, get_investigations, deidentify_clinical_note
 
@@ -51,7 +53,7 @@ def _check_rate_limit(user_id: int) -> bool:
     return True
 
 
-@login_required
+@require_permission('can_prescribe')
 def doctor_queue_view(request):
     """
     Doctor's view: today's waiting patients.
@@ -78,7 +80,7 @@ def doctor_queue_view(request):
     })
 
 
-@login_required
+@require_permission('can_prescribe')
 def consult_view(request, visit_id):
     """
     Main prescription/consultation screen.
@@ -113,7 +115,7 @@ def consult_view(request, visit_id):
     })
 
 
-@login_required
+@require_permission('can_prescribe')
 @require_POST
 def generate_prescription_api(request):
     """
@@ -235,7 +237,7 @@ def investigations_api(request):
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 
-@login_required
+@require_permission('can_prescribe')
 @require_POST
 def save_prescription_api(request, visit_id):
     """
@@ -315,7 +317,7 @@ def save_prescription_api(request, visit_id):
     })
 
 
-@login_required
+@require_permission('can_prescribe')
 def print_prescription_view(request, rx_id):
     """
     Print-ready prescription view.
@@ -377,7 +379,7 @@ def print_prescription_view(request, rx_id):
     })
 
 
-@login_required
+@require_permission('can_prescribe')
 def pharmacy_search_api(request):
     """
     Typeahead: search clinic's pharmacy inventory + medicine catalog by name.
@@ -395,11 +397,16 @@ def pharmacy_search_api(request):
     results = []
     seen_names = set()
 
-    # Clinic's own inventory first (with availability status)
+    # Clinic's own inventory first (with availability status + expiry)
     items = (
         PharmacyItem.objects
         .filter(clinic=clinic)
-        .filter(Q(medicine__name__icontains=q) | Q(custom_name__icontains=q))
+        .filter(
+            Q(medicine__name__icontains=q) |
+            Q(medicine__generic_name__icontains=q) |
+            Q(custom_name__icontains=q) |
+            Q(custom_generic_name__icontains=q)
+        )
         .select_related('medicine')
         .prefetch_related('batches')[:10]
     )
@@ -415,7 +422,13 @@ def pharmacy_search_api(request):
             avail = 'low'
         else:
             avail = 'ok'
-        results.append({'name': name, 'availability': avail})
+        expiry = item.earliest_expiry
+        results.append({
+            'name': name,
+            'availability': avail,
+            'expiry': expiry.strftime('%b %Y') if expiry else None,
+            'generic': item.display_generic or None,
+        })
 
     # Fill remaining from medicine catalog (no availability — not in this clinic's stock)
     if len(results) < 8:
@@ -428,7 +441,7 @@ def pharmacy_search_api(request):
             display = f"{med.form} {med.name}".strip() if med.form else med.name
             if display not in seen_names:
                 seen_names.add(display)
-                results.append({'name': display, 'availability': None})
+                results.append({'name': display, 'availability': None, 'expiry': None, 'generic': med.generic_name or None})
 
     return JsonResponse({'results': results})
 
@@ -470,7 +483,7 @@ def suggest_terms(request):
     return JsonResponse({'results': results})
 
 
-@login_required
+@require_permission('can_prescribe')
 def favorites_view(request):
     """Show doctor's favourite medicines list."""
     doctor = request.user.staff_profile
@@ -551,6 +564,86 @@ def public_prescription_view(request, token):
 
 
 @login_required
+def scan_bill_api(request):
+    """
+    POST multipart: 'image' file field.
+    Sends image to Claude Haiku vision and returns extracted medicine lines.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST required'}, status=405)
+
+    import base64
+    from django.conf import settings as django_settings
+    from anthropic import Anthropic
+
+    image_file = request.FILES.get('image')
+    if not image_file:
+        return JsonResponse({'ok': False, 'error': 'No image uploaded.'}, status=400)
+
+    image_data = image_file.read()
+    image_b64 = base64.standard_b64encode(image_data).decode('utf-8')
+    content_type = image_file.content_type or 'image/jpeg'
+    # Only allow image types that Claude supports
+    allowed_types = ('image/jpeg', 'image/png', 'image/gif', 'image/webp')
+    if content_type not in allowed_types:
+        content_type = 'image/jpeg'
+
+    SCAN_BILL_PROMPT = (
+        'You are reading a pharmaceutical purchase invoice or bill. '
+        'Extract each medicine line item and return a JSON array. '
+        'Each element must have these fields:\n'
+        '  name (string): medicine name as written\n'
+        '  batch_number (string): batch number, empty string if not found\n'
+        '  expiry_date (string): in YYYY-MM format, empty string if not found\n'
+        '  quantity (integer): quantity purchased\n'
+        '  unit_price (float): price per unit\n'
+        '  confidence (string): "high" if all fields are clearly legible, "low" if any field is unclear or missing\n'
+        'Return ONLY the JSON array, no other text. Example:\n'
+        '[{"name":"Paracetamol 500mg","batch_number":"B001","expiry_date":"2025-06","quantity":100,"unit_price":1.5,"confidence":"high"}]'
+    )
+
+    try:
+        api_key = getattr(django_settings, 'ANTHROPIC_API_KEY', '')
+        if not api_key:
+            return JsonResponse({'ok': False, 'error': 'AI not configured.'}, status=500)
+
+        client = Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=2000,
+            messages=[{
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'image',
+                        'source': {
+                            'type': 'base64',
+                            'media_type': content_type,
+                            'data': image_b64,
+                        },
+                    },
+                    {'type': 'text', 'text': SCAN_BILL_PROMPT},
+                ],
+            }],
+        )
+        raw_text = response.content[0].text.strip()
+        # Strip markdown code fences if present
+        if raw_text.startswith('```'):
+            raw_text = '\n'.join(raw_text.split('\n')[1:])
+        if raw_text.endswith('```'):
+            raw_text = '\n'.join(raw_text.split('\n')[:-1])
+        items = json.loads(raw_text)
+        return JsonResponse({'ok': True, 'items': items})
+
+    except json.JSONDecodeError as e:
+        logger.error('scan_bill: JSON parse error: %s', e)
+        return JsonResponse({'ok': False, 'error': 'Could not parse AI response. Try a clearer photo.'}, status=500)
+    except Exception as e:
+        logger.error('scan_bill: error: %s', e)
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+@login_required
 def favorites_list_api(request):
     """Return doctor's favorites as JSON for consult page quick-add pills."""
     doctor = request.user.staff_profile
@@ -567,3 +660,53 @@ def favorites_list_api(request):
         }
         for f in favorites
     ]})
+
+
+@require_permission('can_prescribe')
+def check_interactions_api(request):
+    """
+    POST /rx/api/interactions/
+    Body: {"drugs": ["Tab Metformin 500mg", "Tab Ciprofloxacin 500mg", ...]}
+    Returns list of interaction alerts for the current drug list.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    try:
+        body = json.loads(request.body)
+        drugs = body.get('drugs', [])
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    if len(drugs) < 2:
+        return JsonResponse({'alerts': []})
+
+    # Normalise drug names to lowercase for matching
+    drug_names_lower = [d.lower() for d in drugs if d.strip()]
+
+    # Fetch all interactions — small table so fine to load all
+    all_interactions = DrugInteraction.objects.all()
+
+    alerts = []
+    seen = set()
+    for interaction in all_interactions:
+        k1 = interaction.drug1_keyword.lower()
+        k2 = interaction.drug2_keyword.lower()
+        # Check if both keywords appear in ANY drug in the list
+        drugs_with_k1 = [d for d in drug_names_lower if k1 in d]
+        drugs_with_k2 = [d for d in drug_names_lower if k2 in d]
+        if drugs_with_k1 and drugs_with_k2:
+            key = tuple(sorted([k1, k2]))
+            if key not in seen:
+                seen.add(key)
+                alerts.append({
+                    'drug1': interaction.drug1_keyword,
+                    'drug2': interaction.drug2_keyword,
+                    'severity': interaction.severity,
+                    'effect': interaction.effect,
+                    'mechanism': interaction.mechanism,
+                })
+
+    # Sort: major first
+    severity_order = {'major': 0, 'moderate': 1, 'minor': 2}
+    alerts.sort(key=lambda a: severity_order.get(a['severity'], 9))
+    return JsonResponse({'alerts': alerts})

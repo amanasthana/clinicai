@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Access Denied — ClinicAI{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width: 520px; text-align: center; padding-top: 60px;">
+
+  <div style="width: 64px; height: 64px; background: #FEF2F2; border-radius: 50%;
+              display: flex; align-items: center; justify-content: center;
+              margin: 0 auto 24px auto; font-size: 28px; color: #DC2626;">
+    &#9888;
+  </div>
+
+  <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 12px 0;">
+    You don't have access to this section
+  </h1>
+
+  <p style="font-size: 15px; color: #6B7280; line-height: 1.6; margin: 0 0 8px 0;">
+    Your account does not have the permission needed to view this page.
+  </p>
+
+  {% if required_permission %}
+  <p style="font-size: 13px; color: #9CA3AF; margin: 0 0 32px 0;">
+    Required permission: <code style="background:#F3F4F6; padding:2px 6px; border-radius:4px; font-family:monospace;">{{ required_permission }}</code>
+  </p>
+  {% else %}
+  <p style="margin-bottom: 32px;"></p>
+  {% endif %}
+
+  <p style="font-size: 14px; color: #6B7280; margin: 0 0 32px 0;">
+    If you think this is a mistake, ask your clinic admin to update your access settings.
+  </p>
+
+  <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+    <button onclick="history.back()" class="btn btn-secondary">
+      Go Back
+    </button>
+    <a href="/" class="btn btn-primary">
+      Reception Dashboard
+    </a>
+  </div>
+
+</div>
+{% endblock %}

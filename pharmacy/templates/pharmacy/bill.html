@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Bill {{ bill.bill_number }} — {{ clinic.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+@media print {
+  nav, .no-print { display: none !important; }
+  .page-container { max-width: 100% !important; padding: 0 !important; }
+  body { font-size: 12pt; }
+}
+.bill-table { width: 100%; border-collapse: collapse; }
+.bill-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 8px 0;
+  border-bottom: 1px solid #E5E7EB;
+}
+.bill-table td {
+  font-size: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F3F4F6;
+  color: #374151;
+}
+.bill-table tr:last-child td { border-bottom: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:640px;">
+
+  <!-- Print + back controls -->
+  <div class="no-print" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+    <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">Back to Pharmacy</a>
+    <button onclick="window.print()"
+      style="padding:10px 20px; background:#111827; color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit;">
+      Print bill
+    </button>
+  </div>
+
+  <!-- Bill card -->
+  <div style="background:#fff; border:1px solid #E5E7EB; border-radius:16px; overflow:hidden;">
+
+    <!-- Header -->
+    <div style="padding:20px 24px; border-bottom:1px solid #E5E7EB;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+        <div>
+          <div style="font-size:18px; font-weight:700; color:#111827;">{{ clinic.name }}</div>
+          {% if clinic.address %}<div style="font-size:13px; color:#6B7280;">{{ clinic.address }}</div>{% endif %}
+          {% if clinic.phone %}<div style="font-size:13px; color:#6B7280;">Ph: {{ clinic.phone }}</div>{% endif %}
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:18px; font-weight:700; color:#111827;">BILL</div>
+          <div style="font-size:13px; color:#6B7280; margin-top:2px;">{{ bill.bill_number }}</div>
+          <div style="font-size:13px; color:#6B7280;">{{ bill.created_at|date:"d M Y, g:i A" }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Patient info -->
+    <div style="padding:14px 24px; border-bottom:1px solid #E5E7EB; background:#F9FAFB;">
+      <div style="font-size:15px; font-weight:600; color:#111827;">{{ patient.full_name }}</div>
+      <div style="font-size:13px; color:#6B7280;">
+        Token {{ visit.token_number }}
+        {% if patient.phone %} &middot; {{ patient.phone }}{% endif %}
+        {% if patient.age %} &middot; {{ patient.age }}y{% endif %}
+      </div>
+    </div>
+
+    <!-- Item table -->
+    <div style="padding:16px 24px;">
+      <table class="bill-table">
+        <thead>
+          <tr>
+            <th>Medicine</th>
+            <th style="text-align:right;">Qty</th>
+            <th style="text-align:right;">Rate</th>
+            <th style="text-align:right;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in dispensed_items %}
+          <tr>
+            <td>
+              <div style="font-weight:500;">{{ item.pharmacy_item.display_name }}</div>
+              {% if item.is_substitute %}
+              <div style="font-size:11px; color:#D97706;">(substitute)</div>
+              {% endif %}
+              {% if item.notes %}<div style="font-size:12px; color:#9CA3AF;">{{ item.notes }}</div>{% endif %}
+            </td>
+            <td style="text-align:right;">{{ item.quantity_dispensed }}</td>
+            <td style="text-align:right;">Rs {{ item.unit_price }}</td>
+            <td style="text-align:right; font-weight:600;">Rs {% widthratio item.quantity_dispensed 1 item.unit_price %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Totals -->
+    <div style="padding:14px 24px; border-top:1px solid #E5E7EB; background:#F9FAFB;">
+      <div style="display:flex; justify-content:space-between; font-size:14px; color:#374151; margin-bottom:6px;">
+        <span>Subtotal</span>
+        <span>Rs {{ bill.subtotal }}</span>
+      </div>
+      {% if bill.discount_percent %}
+      <div style="display:flex; justify-content:space-between; font-size:14px; color:#374151; margin-bottom:6px;">
+        <span>Discount ({{ bill.discount_percent }}%)</span>
+        <span style="color:#059669;">- Rs {% widthratio bill.subtotal bill.discount_percent 100 %}</span>
+      </div>
+      {% endif %}
+      <div style="display:flex; justify-content:space-between; font-size:18px; font-weight:700; color:#111827; border-top:1px solid #D1D5DB; padding-top:10px; margin-top:6px;">
+        <span>Total</span>
+        <span>Rs {{ bill.final_amount }}</span>
+      </div>
+      <div style="font-size:13px; color:#6B7280; margin-top:6px;">
+        Payment: {{ bill.get_payment_mode_display }}
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:12px 24px; border-top:1px solid #E5E7EB; text-align:center;">
+      <div style="font-size:12px; color:#9CA3AF;">Thank you. Please retain this bill for your records.</div>
+    </div>
+
+  </div>
+
+  <div class="no-print" style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+    <a href="/pharmacy/" class="btn btn-secondary" style="flex:1; text-align:center;">Back to Pharmacy</a>
+    <a href="/" class="btn btn-primary" style="flex:1; text-align:center;">Reception</a>
+  </div>
+
+</div>
+{% endblock %}

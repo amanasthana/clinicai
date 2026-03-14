@@ -20,6 +20,7 @@ class PharmacyItem(models.Model):
     clinic = models.ForeignKey('accounts.Clinic', on_delete=models.CASCADE, related_name='pharmacy_items')
     medicine = models.ForeignKey(MedicineCatalog, on_delete=models.CASCADE, null=True, blank=True)
     custom_name = models.CharField(max_length=250, blank=True)
+    custom_generic_name = models.CharField(max_length=250, blank=True, help_text="Generic/active ingredient for custom medicines (e.g. Clindamycin 1% w/w)")
     reorder_level = models.PositiveIntegerField(default=10)
     reorder_flagged = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -30,6 +31,13 @@ class PharmacyItem(models.Model):
     @property
     def display_name(self):
         return self.medicine.name if self.medicine else self.custom_name
+
+    @property
+    def display_generic(self):
+        """Generic/composition name — from catalog or custom entry."""
+        if self.medicine:
+            return self.medicine.generic_name
+        return self.custom_generic_name
 
     @property
     def total_quantity(self):
@@ -77,7 +85,16 @@ class PharmacyBatch(models.Model):
         if not self.expiry_date:
             return False
         from django.utils import timezone
-        return (self.expiry_date - timezone.now().date()).days <= 60
+        return (self.expiry_date - timezone.now().date()).days <= 90
+
+    @property
+    def is_approaching_expiry(self):
+        """Expiring in 3–6 months — orange warning tier."""
+        if not self.expiry_date:
+            return False
+        from django.utils import timezone
+        days = (self.expiry_date - timezone.now().date()).days
+        return 90 < days <= 180
 
     @property
     def is_expired(self):
@@ -88,6 +105,49 @@ class PharmacyBatch(models.Model):
 
     def __str__(self):
         return f"{self.item.display_name} — Batch {self.batch_number or 'N/A'}"
+
+
+class DispensedItem(models.Model):
+    """One line item dispensed to a patient for a visit."""
+    visit = models.ForeignKey('reception.Visit', on_delete=models.CASCADE, related_name='dispensed_items')
+    prescription_med = models.ForeignKey(
+        'prescription.PrescriptionMedicine', on_delete=models.SET_NULL, null=True, blank=True
+    )
+    pharmacy_item = models.ForeignKey(PharmacyItem, on_delete=models.PROTECT)
+    batch = models.ForeignKey(PharmacyBatch, on_delete=models.PROTECT)
+    quantity_dispensed = models.PositiveIntegerField()
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    is_substitute = models.BooleanField(default=False)
+    notes = models.CharField(max_length=200, blank=True)
+    dispensed_by = models.ForeignKey('accounts.StaffMember', on_delete=models.SET_NULL, null=True)
+    dispensed_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.pharmacy_item.display_name} x{self.quantity_dispensed} — Visit {self.visit_id}"
+
+
+class PharmacyBill(models.Model):
+    """Final bill for a visit's dispensed medicines."""
+    PAYMENT_CHOICES = [('cash', 'Cash'), ('card', 'Card'), ('upi', 'UPI')]
+    visit = models.OneToOneField('reception.Visit', on_delete=models.CASCADE, related_name='pharmacy_bill')
+    clinic = models.ForeignKey('accounts.Clinic', on_delete=models.CASCADE)
+    bill_number = models.CharField(max_length=30, unique=True)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_percent = models.PositiveSmallIntegerField(default=0)
+    final_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    payment_mode = models.CharField(max_length=10, choices=PAYMENT_CHOICES, default='cash')
+    created_by = models.ForeignKey('accounts.StaffMember', on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @staticmethod
+    def generate_bill_number(clinic_id):
+        from django.utils import timezone
+        today = timezone.now().strftime('%Y%m%d')
+        count = PharmacyBill.objects.filter(created_at__date=timezone.now().date()).count() + 1
+        return f"BILL-{today}-{count:04d}"
+
+    def __str__(self):
+        return f"{self.bill_number} — {self.visit.patient.full_name}"
 
 
 class DoctorFavorite(models.Model):

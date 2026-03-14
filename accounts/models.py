@@ -34,10 +34,10 @@ class StaffMember(models.Model):
         ('pharmacist', 'Pharmacist'),
         ('admin', 'Clinic Admin'),
     ]
-    user = models.OneToOneField(
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='staff_profile',
+        related_name='staff_memberships',
     )
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='staff')
     role = models.CharField(max_length=16, choices=ROLE_CHOICES)
@@ -46,6 +46,16 @@ class StaffMember(models.Model):
     registration_number = models.CharField(max_length=50, blank=True)  # Medical council reg
     created_at = models.DateTimeField(auto_now_add=True)
     show_rx_remarks = models.BooleanField(default=True)
+
+    # Permission flags — set automatically from role preset, can be overridden per staff member
+    can_register_patients = models.BooleanField(default=False)
+    can_prescribe         = models.BooleanField(default=False)
+    can_view_pharmacy     = models.BooleanField(default=False)
+    can_edit_inventory    = models.BooleanField(default=False)
+    can_dispense_bill     = models.BooleanField(default=False)
+    can_view_analytics    = models.BooleanField(default=False)
+    can_manage_staff      = models.BooleanField(default=False)
+    updated_at            = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.display_name} ({self.get_role_display()}) — {self.clinic.name}"

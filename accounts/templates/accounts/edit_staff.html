@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Edit Staff — {{ sm.display_name }}{% endblock %}
+{% block nav_staff %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .perm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 600px) { .perm-grid { grid-template-columns: 1fr; } }
+  .perm-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 14px; border: 1px solid #E5E7EB; border-radius: 8px;
+    background: #FAFAFA; cursor: pointer; transition: background .15s;
+  }
+  .perm-row:hover { background: #EFF6FF; border-color: #BFDBFE; }
+  .perm-row.active { background: #EFF6FF; border-color: #3B82F6; }
+  .perm-row input[type=checkbox] { margin-top: 2px; accent-color: #2563EB; width: 16px; height: 16px; flex-shrink: 0; }
+  .perm-label { font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 2px; }
+  .perm-desc { font-size: 12px; color: #6B7280; line-height: 1.4; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width: 680px;">
+  <a href="/accounts/staff/" style="font-size: 14px; color: #6B7280; text-decoration: none;">
+    &larr; Back to Staff
+  </a>
+  <h1 class="page-title" style="margin-top: 16px;">Edit Staff Member</h1>
+  <p class="page-subtitle">{{ clinic.name }}</p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <!-- Section 1: Basic info -->
+    <div class="card" style="margin-bottom: 16px;">
+      <h2 style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 16px 0;">Basic Information</h2>
+
+      <div class="form-group">
+        <label class="form-label">Display Name *</label>
+        <input type="text" name="display_name" value="{{ sm.display_name }}" class="form-control" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Role *</label>
+        <select name="role" id="role-select" class="form-control" onchange="updatePreview()">
+          <option value="doctor" {% if sm.role == 'doctor' %}selected{% endif %}>Doctor</option>
+          <option value="receptionist" {% if sm.role == 'receptionist' %}selected{% endif %}>Receptionist</option>
+          <option value="pharmacist" {% if sm.role == 'pharmacist' %}selected{% endif %}>Pharmacist</option>
+          <option value="admin" {% if sm.role == 'admin' %}selected{% endif %}>Clinic Admin</option>
+        </select>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label class="form-label">Qualification</label>
+          <input type="text" name="qualification" value="{{ sm.qualification }}" class="form-control" placeholder="MBBS, MD...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Registration Number</label>
+          <input type="text" name="registration_number" value="{{ sm.registration_number }}" class="form-control">
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Permission flags -->
+    <div class="card" style="margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
+        <h2 style="font-size: 15px; font-weight: 700; color: #111827; margin: 0;">What this person can do</h2>
+        <button type="button" onclick="resetToRole()" class="btn btn-secondary btn-sm">
+          Reset to role defaults
+        </button>
+      </div>
+      <p style="font-size: 13px; color: #6B7280; margin: 0 0 16px 0;">
+        These are set automatically when you choose a role, but you can adjust them here for this person.
+      </p>
+
+      <div class="perm-grid">
+
+        <label class="perm-row {% if sm.can_register_patients %}active{% endif %}" id="row_can_register_patients">
+          <input type="checkbox" name="can_register_patients" id="cb_can_register_patients"
+                 {% if sm.can_register_patients %}checked{% endif %}
+                 onchange="syncRowStyle('can_register_patients')">
+          <div>
+            <div class="perm-label">Register patients</div>
+            <div class="perm-desc">Register and manage patients, handle the reception queue</div>
+          </div>
+        </label>
+
+        <label class="perm-row {% if sm.can_prescribe %}active{% endif %}" id="row_can_prescribe">
+          <input type="checkbox" name="can_prescribe" id="cb_can_prescribe"
+                 {% if sm.can_prescribe %}checked{% endif %}
+                 onchange="syncRowStyle('can_prescribe')">
+          <div>
+            <div class="perm-label">Write prescriptions</div>
+            <div class="perm-desc">Access the doctor queue, write prescriptions, use AI suggestions</div>
+          </div>
+        </label>
+
+        <label class="perm-row {% if sm.can_view_pharmacy %}active{% endif %}" id="row_can_view_pharmacy">
+          <input type="checkbox" name="can_view_pharmacy" id="cb_can_view_pharmacy"
+                 {% if sm.can_view_pharmacy %}checked{% endif %}
+                 onchange="syncRowStyle('can_view_pharmacy')">
+          <div>
+            <div class="perm-label">View pharmacy</div>
+            <div class="perm-desc">View pharmacy inventory and stock levels</div>
+          </div>
+        </label>
+
+        <label class="perm-row {% if sm.can_edit_inventory %}active{% endif %}" id="row_can_edit_inventory">
+          <input type="checkbox" name="can_edit_inventory" id="cb_can_edit_inventory"
+                 {% if sm.can_edit_inventory %}checked{% endif %}
+                 onchange="syncRowStyle('can_edit_inventory')">
+          <div>
+            <div class="perm-label">Edit inventory</div>
+            <div class="perm-desc">Add medicines, update stock, manage batches and expiry</div>
+          </div>
+        </label>
+
+        <label class="perm-row {% if sm.can_dispense_bill %}active{% endif %}" id="row_can_dispense_bill">
+          <input type="checkbox" name="can_dispense_bill" id="cb_can_dispense_bill"
+                 {% if sm.can_dispense_bill %}checked{% endif %}
+                 onchange="syncRowStyle('can_dispense_bill')">
+          <div>
+            <div class="perm-label">Dispense and bill</div>
+            <div class="perm-desc">Dispense medicines to patients and generate bills</div>
+          </div>
+        </label>
+
+        <label class="perm-row {% if sm.can_view_analytics %}active{% endif %}" id="row_can_view_analytics">
+          <input type="checkbox" name="can_view_analytics" id="cb_can_view_analytics"
+                 {% if sm.can_view_analytics %}checked{% endif %}
+                 onchange="syncRowStyle('can_view_analytics')">
+          <div>
+            <div class="perm-label">View analytics</div>
+            <div class="perm-desc">View clinic analytics and prescription reports</div>
+          </div>
+        </label>
+
+        <label class="perm-row {% if sm.can_manage_staff %}active{% endif %}" id="row_can_manage_staff">
+          <input type="checkbox" name="can_manage_staff" id="cb_can_manage_staff"
+                 {% if sm.can_manage_staff %}checked{% endif %}
+                 onchange="syncRowStyle('can_manage_staff')">
+          <div>
+            <div class="perm-label">Manage staff</div>
+            <div class="perm-desc">Add, edit, or remove staff members and manage their access</div>
+          </div>
+        </label>
+
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <a href="/accounts/staff/" class="btn btn-secondary">Cancel</a>
+    </div>
+
+  </form>
+</div>
+
+{% block extra_js %}
+<script>
+const ROLE_PERMISSIONS = {{ role_permissions_json|safe }};
+const ALL_FLAGS = ['can_register_patients','can_prescribe','can_view_pharmacy','can_edit_inventory','can_dispense_bill','can_view_analytics','can_manage_staff'];
+
+function syncRowStyle(flag) {
+  const cb = document.getElementById('cb_' + flag);
+  const row = document.getElementById('row_' + flag);
+  if (cb && row) {
+    if (cb.checked) row.classList.add('active');
+    else row.classList.remove('active');
+  }
+}
+
+function updatePreview() {
+  // No automatic flag change on role change — user must click "Reset to role defaults"
+}
+
+function resetToRole() {
+  const role = document.getElementById('role-select').value;
+  const preset = ROLE_PERMISSIONS[role] || {};
+  ALL_FLAGS.forEach(function(flag) {
+    const cb = document.getElementById('cb_' + flag);
+    if (cb) {
+      cb.checked = !!preset[flag];
+      syncRowStyle(flag);
+    }
+  });
+}
+</script>
+{% endblock %}
+{% endblock %}

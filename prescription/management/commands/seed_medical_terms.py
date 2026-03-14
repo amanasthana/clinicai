@@ -7,7 +7,7 @@ class Command(BaseCommand):
     help = 'Seed medical terms (symptoms, diagnoses, investigations, advice, snippets, abbreviations)'
 
     def handle(self, *args, **options):
-        if MedicalTerm.objects.count() >= 800:
+        if MedicalTerm.objects.count() >= 1000:
             self.stdout.write('Already seeded (>= 800 terms). Skipping.')
             return
 
@@ -233,6 +233,107 @@ class Command(BaseCommand):
             t('thyroid review', 'snippet',
               'thyroid follow up, hypothyroid review, TSH review, thyroxine review',
               weight=90),
+        ]
+
+        # ── CLINICAL PHRASES — Chief Complaints (weight 88) ──────────────────────────
+        items += [
+            t('Fever since 3 days', 'snippet', 'fever 3 days, 3 din se bukhar, three days fever, c/o fever 3 days', weight=88),
+            t('Fever since 1 week', 'snippet', 'fever 1 week, ek hafte se bukhar, week long fever, prolonged fever', weight=88),
+            t('High grade fever since 2 days', 'snippet', 'high fever 2 days, tez bukhar 2 din, high temperature fever', weight=88),
+            t('Intermittent fever since 5 days', 'snippet', 'intermittent fever, aata jaata bukhar, on off fever', weight=88),
+            t('Fever with chills and rigors', 'snippet', 'fever chills, bukhar kaanpna, rigor chills fever, malaria fever', weight=88),
+            t('Fever with body ache', 'snippet', 'fever body pain, bukhar badan dard, dengue like fever, viral fever', weight=88),
+            t('Cough since 5 days', 'snippet', 'cough 5 days, 5 din se khansi, five days cough', weight=88),
+            t('Dry cough since 1 week', 'snippet', 'dry cough week, sukhi khansi, non productive cough, irritating cough', weight=88),
+            t('Productive cough with sputum', 'snippet', 'wet cough, balgam wali khansi, productive cough, sputum cough', weight=88),
+            t('Sore throat since 2 days', 'snippet', 'throat pain 2 days, gala dard 2 din, throat complaint 2 days', weight=88),
+            t('Vomiting since yesterday', 'snippet', 'vomiting since 1 day, kal se ulti, yesterday vomiting started', weight=88),
+            t('Loose stools since 2 days', 'snippet', 'loose motion 2 days, diarrhoea 2 days, dast 2 din, running stomach', weight=88),
+            t('Burning urination since 3 days', 'snippet', 'dysuria 3 days, peshab mein jalan 3 din, UTI complaint 3 days', weight=88),
+            t('Headache since morning', 'snippet', 'headache today morning, sir dard subah se, morning headache onset', weight=88),
+            t('Headache since 3 days', 'snippet', 'headache 3 days, 3 din se sir dard, persistent headache', weight=88),
+            t('Back pain since 1 week', 'snippet', 'low back pain 1 week, kamar dard 1 hafte se, back ache 1 week', weight=88),
+            t('Knee pain since 2 weeks', 'snippet', 'knee pain 2 weeks, ghutne mein dard, joint pain knee 2 weeks', weight=88),
+            t('Epigastric pain since morning', 'snippet', 'epigastric pain, stomach pain upper, acidity pain morning, pet ke upar dard', weight=88),
+            t('Swelling of feet since 3 days', 'snippet', 'pedal edema, foot swelling, pair mein sujan 3 din, ankle swelling', weight=88),
+            t('Breathlessness on exertion', 'snippet', 'DOE, exertional dyspnoea, breathless on effort, sans phoolna chalte chalte', weight=88),
+            t('Chest pain since morning', 'snippet', 'chest pain today, seene mein dard subah se, cardiac complaint today', weight=88),
+            t('Rash since 2 days', 'snippet', 'skin rash 2 days, daane 2 din se, itching rash, allergic rash', weight=88),
+            t('Ear pain since yesterday', 'snippet', 'earache, kan dard kal se, otalgia yesterday, ear complaint', weight=88),
+            t('Eye redness since 2 days', 'snippet', 'red eye, aankhein laal 2 din, conjunctivitis complaint, eye complaint', weight=88),
+        ]
+
+        # ── CLINICAL EXAMINATION FINDINGS (weight 87) ────────────────────────
+        items += [
+            t('Abdomen soft, non-tender', 'snippet', 'soft abdomen non tender, pet naram, abdominal exam normal, no tenderness', weight=87),
+            t('Abdomen soft, mild epigastric tenderness', 'snippet', 'epigastric tenderness, mild stomach pain on press, upper abdomen tender', weight=87),
+            t('No organomegaly', 'snippet', 'no hepatosplenomegaly, no liver spleen enlargement, organomegaly absent', weight=87),
+            t('Mild hepatomegaly', 'snippet', 'liver enlarged mild, hepatomegaly present, liver palpable 2cm', weight=87),
+            t('Bowel sounds present, normal', 'snippet', 'BS present, bowel sounds normal, intestinal sounds audible', weight=87),
+            t('Throat congested, tonsils not enlarged', 'snippet', 'throat red tonsils normal, gala laal tonsil theek, pharynx congested', weight=87),
+            t('Tonsils enlarged, Grade 2', 'snippet', 'tonsils 2+, tonsillitis, gala tonsil bada, tonsillar hypertrophy', weight=87),
+            t('Chest clear, bilateral air entry equal', 'snippet', 'lungs clear, B/L air entry equal, no wheeze crept, chest bilateral clear', weight=87),
+            t('Bilateral rhonchi present', 'snippet', 'wheeze bilateral, B/L rhonchi, bronchospasm findings, asthma exam', weight=87),
+            t('Crepitations bilateral lower zones', 'snippet', 'B/L basal crepitations, lower zone crepts, chest infection findings', weight=87),
+            t('CVS: S1 S2 heard, no murmur', 'snippet', 'heart sounds normal, S1 S2 present no murmur, CVS normal exam', weight=87),
+            t('CNS: no focal deficit, GCS 15/15', 'snippet', 'CNS normal, no neurological deficit, GCS full, no focal neuro', weight=87),
+            t('Mild dehydration', 'snippet', 'mildly dehydrated, skin turgor reduced, dehydration mild, dry mucosa', weight=87),
+            t('No signs of meningeal irritation', 'snippet', 'no neck stiffness, no Kernig Brudzinski, meningeal signs absent', weight=87),
+            t('Pallor present', 'snippet', 'pallor +, anaemia pallor, paleness present, conjunctival pallor', weight=87),
+            t('No pallor, icterus, cyanosis, clubbing', 'snippet', 'PICCLED negative, no pallor icterus cyanosis clubbing lymphadenopathy oedema', weight=87),
+            t('Bilateral pitting pedal oedema', 'snippet', 'pedal edema bilateral, B/L pitting oedema feet, ankle oedema bilateral', weight=87),
+            t('No pedal oedema', 'snippet', 'no foot swelling, oedema absent, no ankle swelling', weight=87),
+            t('Pulse regular, good volume', 'snippet', 'pulse regular good volume, PR regular, normal pulse character', weight=87),
+            t('BP within normal limits', 'snippet', 'BP normal, blood pressure normal, BP WNL, normotensive', weight=87),
+        ]
+
+        # ── COMORBIDITIES (weight 90) ─────────────────────────────────────────
+        items += [
+            t('Type 2 Diabetes Mellitus', 'diagnosis', 'T2DM, diabetes type 2, DM type 2, sugar disease type 2, madhumeh', weight=90, icd_code='E11'),
+            t('Type 1 Diabetes Mellitus', 'diagnosis', 'T1DM, diabetes type 1, juvenile diabetes, insulin dependent diabetes', weight=85, icd_code='E10'),
+            t('Diabetes Mellitus on Insulin', 'diagnosis', 'DM insulin, insulin dependent DM, insulin treated diabetes', weight=88, icd_code='E11'),
+            t('Diabetes Mellitus with Neuropathy', 'diagnosis', 'diabetic neuropathy, DM neuropathy, peripheral neuropathy diabetes', weight=88, icd_code='E11.4'),
+            t('Diabetes Mellitus with Nephropathy', 'diagnosis', 'diabetic nephropathy, DM kidney disease, diabetic kidney', weight=88, icd_code='E11.2'),
+            t('Diabetes Mellitus with Retinopathy', 'diagnosis', 'diabetic retinopathy, DM eye disease, diabetic eye', weight=85, icd_code='E11.3'),
+            t('Essential Hypertension', 'diagnosis', 'primary hypertension, HTN essential, high BP essential, BP high', weight=90, icd_code='I10'),
+            t('Hypertension on medication', 'diagnosis', 'controlled HTN, HTN on antihypertensives, BP on treatment', weight=88, icd_code='I10'),
+            t('Hypertension with Diabetes', 'diagnosis', 'HTN DM both, hypertension diabetes comorbidity, sugar and BP', weight=90, icd_code='I10'),
+            t('Hypothyroidism on Levothyroxine', 'diagnosis', 'hypothyroid on thyroxine, TSH high on treatment, thyroid on eltroxin', weight=90, icd_code='E03.9'),
+            t('Hyperthyroidism', 'diagnosis', 'overactive thyroid, thyrotoxicosis, hyperthyroid, TSH low', weight=85, icd_code='E05'),
+            t('Bronchial Asthma', 'diagnosis', 'asthma, bronchospasm, allergic asthma, childhood asthma, inhaler user', weight=90, icd_code='J45'),
+            t('Bronchial Asthma on Inhalers', 'diagnosis', 'asthma on inhaler, controlled asthma, asthma on steroid inhaler', weight=88, icd_code='J45'),
+            t('Chronic Kidney Disease Stage 3', 'diagnosis', 'CKD stage 3, renal impairment moderate, GFR 30-60, chronic renal failure', weight=85, icd_code='N18.3'),
+            t('Chronic Kidney Disease Stage 4', 'diagnosis', 'CKD stage 4, severe renal impairment, GFR 15-30', weight=80, icd_code='N18.4'),
+            t('Ischaemic Heart Disease', 'diagnosis', 'IHD, coronary artery disease, CAD, heart disease ischaemic', weight=90, icd_code='I25'),
+            t('Post PTCA / Stenting', 'diagnosis', 'post angioplasty, post stenting, CAD post intervention, PTCA done', weight=88, icd_code='Z95.5'),
+            t('Post CABG', 'diagnosis', 'post bypass surgery, after open heart surgery, CABG done', weight=85, icd_code='Z95.1'),
+            t('Hypothyroidism', 'diagnosis', 'low thyroid, underactive thyroid, thyroid deficiency, TSH elevated', weight=90, icd_code='E03.9'),
+            t('Dyslipidaemia', 'diagnosis', 'high cholesterol, hyperlipidaemia, elevated lipids, cholesterol disorder', weight=88, icd_code='E78'),
+            t('Obesity', 'diagnosis', 'obese patient, high BMI, overweight, mota patient, adiposity', weight=88, icd_code='E66'),
+            t('Anaemia', 'diagnosis', 'haemoglobin low, Hb low, anaemic patient, iron deficiency anaemia', weight=90, icd_code='D64'),
+            t('Iron Deficiency Anaemia', 'diagnosis', 'IDA, iron deficiency, low haemoglobin iron, ferritin low', weight=88, icd_code='D50'),
+            t('COPD', 'diagnosis', 'chronic obstructive lung disease, emphysema, chronic bronchitis, COPD', weight=88, icd_code='J44'),
+            t('Epilepsy on Anti-epileptics', 'diagnosis', 'epilepsy on medication, seizure disorder treated, AED therapy', weight=85, icd_code='G40'),
+            t('Depression', 'diagnosis', 'major depression, depressive disorder, depressed mood, sadness illness', weight=85, icd_code='F32'),
+            t('Anxiety Disorder', 'diagnosis', 'GAD, anxiety disorder, generalised anxiety, tension disorder', weight=85, icd_code='F41'),
+        ]
+
+        # ── PAST TREATMENT HISTORY (weight 87) ───────────────────────────────
+        items += [
+            t('h/o chemotherapy', 'snippet', 'history of chemo, underwent chemotherapy, chemo history, on chemo', weight=87),
+            t('Undergoing chemotherapy — cycle [X]', 'snippet', 'on chemotherapy cycle, chemo cycle ongoing, receiving chemotherapy', weight=87),
+            t('Completed 6 cycles chemotherapy', 'snippet', 'chemo completed 6 cycles, post chemotherapy, finished chemo', weight=87),
+            t('On maintenance chemotherapy', 'snippet', 'maintenance chemo, low dose chemo maintenance, oral chemo maintenance', weight=87),
+            t('h/o surgery [organ] [year]', 'snippet', 'history of surgery, previous operation, past surgical history', weight=87),
+            t('h/o appendicectomy', 'snippet', 'appendix removed, appendicectomy done, past appendix surgery', weight=87),
+            t('h/o cholecystectomy', 'snippet', 'gallbladder removed, cholecystectomy done, lap chole history', weight=87),
+            t('h/o LSCS [year]', 'snippet', 'previous C-section, past caesarean, h/o caesarean delivery', weight=87),
+            t('h/o angioplasty / stenting', 'snippet', 'past PTCA, history of angioplasty, stent placed history', weight=87),
+            t('On dialysis', 'snippet', 'haemodialysis patient, on HD, dialysis dependent, renal replacement therapy', weight=87),
+            t('On long-term steroids', 'snippet', 'chronic steroid use, long term corticosteroids, steroid dependent', weight=87),
+            t('h/o tuberculosis — completed treatment', 'snippet', 'past TB, h/o TB treatment completed, ATT completed, TB cured', weight=87),
+            t('h/o COVID-19 — recovered', 'snippet', 'past COVID, h/o corona, COVID recovered, post COVID history', weight=87),
+            t('h/o hospitalisation for [reason]', 'snippet', 'previous hospital admission, h/o hospital, admitted for', weight=87),
         ]
 
         # ── SYMPTOMS (weight 70-100) ───────────────────────────────────────

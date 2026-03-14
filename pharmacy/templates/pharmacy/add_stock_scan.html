@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}Scan Purchase Invoice — Pharmacy{% endblock %}
+
+{% block extra_head %}
+<style>
+.scan-row {
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.scan-row.low-conf {
+  background: #FEFCE8;
+  border-color: #FDE68A;
+}
+.scan-row input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+.scan-row input:focus { border-color: #2563EB; }
+.scan-row .field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+.verified-checkbox {
+  display: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:700px;">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+    <a href="/pharmacy/add/" style="font-size:13px; color:#6B7280; text-decoration:none;">Back to Add Stock</a>
+    <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Scan Purchase Invoice</h1>
+  </div>
+
+  <!-- Upload section -->
+  <div id="upload-section" class="card" style="margin-bottom:20px;">
+    <div style="font-size:14px; font-weight:600; color:#374151; margin-bottom:8px;">Upload purchase invoice</div>
+    <div style="font-size:13px; color:#6B7280; margin-bottom:16px;">
+      Printed and typed bills are read accurately. Handwritten bills may have errors — review every line before saving.
+    </div>
+    <form id="scan-form">
+      {% csrf_token %}
+      <div style="margin-bottom:16px;">
+        <input type="file" id="bill-image" name="image" accept="image/*"
+          style="display:block; width:100%; padding:10px; border:2px dashed #D1D5DB; border-radius:10px; font-size:14px; font-family:inherit; cursor:pointer; box-sizing:border-box;"
+          onchange="previewImage(this)">
+      </div>
+      <div id="image-preview" style="display:none; margin-bottom:16px;">
+        <img id="preview-img" src="" alt="Invoice preview"
+          style="max-width:100%; max-height:300px; border-radius:10px; border:1px solid #E5E7EB; object-fit:contain;">
+      </div>
+      <button type="button" id="scan-btn" onclick="scanBill()" disabled
+        style="width:100%; padding:12px; background:#2563EB; color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; opacity:0.5;"
+        >
+        Read bill
+      </button>
+    </form>
+    <div id="scan-error" style="display:none; margin-top:12px; background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:10px; font-size:13px; color:#DC2626;"></div>
+  </div>
+
+  <!-- Results section (hidden until scan) -->
+  <div id="results-section" style="display:none;">
+    <div style="font-size:14px; font-weight:700; color:#374151; margin-bottom:4px;">Detected medicines</div>
+    <div style="font-size:13px; color:#6B7280; margin-bottom:14px;">
+      Review each line carefully before saving.
+      Lines highlighted in yellow need your attention.
+    </div>
+
+    <div id="scan-rows"></div>
+
+    <div id="low-conf-notice" style="display:none; background:#FEF9C3; border:1px solid #FDE68A; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#92400E;">
+      Some lines need review. Mark them as verified before you can save.
+    </div>
+
+    <button type="button" id="save-btn" onclick="saveAll()"
+      style="width:100%; padding:14px; background:#059669; color:#fff; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer; font-family:inherit;">
+      Save all to inventory
+    </button>
+    <div id="save-error" style="display:none; margin-top:12px; background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:10px; font-size:13px; color:#DC2626;"></div>
+    <div id="save-progress" style="display:none; margin-top:12px; font-size:13px; color:#6B7280; text-align:center;"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let scannedItems = [];
+
+function previewImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('preview-img').src = e.target.result;
+    document.getElementById('image-preview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = false;
+  btn.style.opacity = '1';
+}
+
+async function scanBill() {
+  const input = document.getElementById('bill-image');
+  if (!input.files[0]) return;
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.textContent = 'Reading bill...';
+  document.getElementById('scan-error').style.display = 'none';
+
+  const fd = new FormData();
+  fd.append('image', input.files[0]);
+  fd.append('csrfmiddlewaretoken', CSRF);
+
+  try {
+    const resp = await fetch('/rx/api/scan-bill/', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!data.ok) {
+      showScanError(data.error || 'Could not read the bill. Try a clearer photo.');
+      btn.disabled = false;
+      btn.textContent = 'Read bill';
+      return;
+    }
+    scannedItems = data.items || [];
+    renderRows(scannedItems);
+    document.getElementById('results-section').style.display = 'block';
+    document.getElementById('results-section').scrollIntoView({behavior: 'smooth'});
+    btn.textContent = 'Read bill again';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  } catch(e) {
+    showScanError('Network error. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Read bill';
+  }
+}
+
+function renderRows(items) {
+  const container = document.getElementById('scan-rows');
+  container.innerHTML = '';
+  let hasLowConf = false;
+  items.forEach((item, idx) => {
+    const isLow = item.confidence === 'low';
+    if (isLow) hasLowConf = true;
+    const div = document.createElement('div');
+    div.className = 'scan-row' + (isLow ? ' low-conf' : '');
+    div.id = 'scan-row-' + idx;
+    div.dataset.idx = idx;
+    div.innerHTML = `
+      ${isLow ? `<div style="font-size:12px; font-weight:600; color:#B45309; margin-bottom:10px;">Please verify this line</div>` : ''}
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div style="grid-column:1/-1;">
+          <div class="field-label">Medicine name</div>
+          <input type="text" data-field="name" value="${escHtml(item.name||'')}" oninput="checkRow(${idx})">
+        </div>
+        <div>
+          <div class="field-label">Batch number</div>
+          <input type="text" data-field="batch_number" value="${escHtml(item.batch_number||'')}" oninput="checkRow(${idx})">
+        </div>
+        <div>
+          <div class="field-label">Expiry (YYYY-MM)</div>
+          <input type="text" data-field="expiry_date" placeholder="2025-06" value="${escHtml(item.expiry_date||'')}" oninput="checkRow(${idx})">
+        </div>
+        <div>
+          <div class="field-label">Quantity</div>
+          <input type="number" data-field="quantity" value="${parseInt(item.quantity)||0}" min="0" oninput="checkRow(${idx})">
+        </div>
+        <div>
+          <div class="field-label">Unit price (Rs)</div>
+          <input type="number" data-field="unit_price" value="${parseFloat(item.unit_price)||0}" min="0" step="0.01" oninput="checkRow(${idx})">
+        </div>
+      </div>
+      ${isLow ? `
+      <div style="margin-top:12px; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="verified-${idx}" class="verified-checkbox" onchange="checkAllVerified()">
+        <label for="verified-${idx}" style="font-size:13px; font-weight:600; color:#374151; cursor:pointer;">
+          I have reviewed and verified this line
+        </label>
+      </div>
+      ` : ''}
+    `;
+    container.appendChild(div);
+  });
+  document.getElementById('low-conf-notice').style.display = hasLowConf ? 'block' : 'none';
+  checkAllVerified();
+}
+
+function checkRow(idx) {
+  // Mark row as edited
+}
+
+function checkAllVerified() {
+  const saveBtn = document.getElementById('save-btn');
+  const checkboxes = document.querySelectorAll('.verified-checkbox');
+  let allChecked = true;
+  checkboxes.forEach(cb => { if (!cb.checked) allChecked = false; });
+  saveBtn.disabled = !allChecked && checkboxes.length > 0;
+  saveBtn.style.opacity = saveBtn.disabled ? '0.5' : '1';
+  saveBtn.style.cursor = saveBtn.disabled ? 'not-allowed' : 'pointer';
+}
+
+function getRowData(idx) {
+  const row = document.getElementById('scan-row-' + idx);
+  if (!row) return null;
+  const get = f => row.querySelector(`[data-field="${f}"]`).value.trim();
+  return {
+    name: get('name'),
+    batch_number: get('batch_number'),
+    expiry_date: get('expiry_date'),
+    quantity: parseInt(get('quantity')) || 0,
+    unit_price: parseFloat(get('unit_price')) || 0,
+  };
+}
+
+async function saveAll() {
+  document.getElementById('save-error').style.display = 'none';
+  const rows = document.querySelectorAll('.scan-row');
+  const saveBtn = document.getElementById('save-btn');
+  const progress = document.getElementById('save-progress');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
+  progress.style.display = 'block';
+
+  let savedCount = 0;
+  let errors = [];
+
+  for (let idx = 0; idx < scannedItems.length; idx++) {
+    const data = getRowData(idx);
+    if (!data || !data.name) continue;
+    progress.textContent = `Saving ${idx + 1} of ${scannedItems.length}...`;
+
+    try {
+      // Convert expiry_date YYYY-MM to YYYY-MM-01 for the date field
+      let expiryStr = '';
+      if (data.expiry_date && data.expiry_date.match(/^\d{4}-\d{2}$/)) {
+        expiryStr = data.expiry_date + '-01';
+      } else if (data.expiry_date) {
+        expiryStr = data.expiry_date;
+      }
+
+      const fd = new FormData();
+      fd.append('csrfmiddlewaretoken', CSRF);
+      fd.append('custom_name', data.name);
+      fd.append('batch_number', data.batch_number);
+      fd.append('expiry_date', expiryStr);
+      fd.append('quantity', data.quantity);
+      fd.append('unit_price', data.unit_price);
+      fd.append('reorder_level', 10);
+
+      const resp = await fetch('/pharmacy/add/', { method: 'POST', body: fd });
+      // add/ redirects on success (302), which fetch follows
+      if (resp.ok || resp.redirected) {
+        savedCount++;
+      } else {
+        errors.push(data.name);
+      }
+    } catch(e) {
+      errors.push(data.name);
+    }
+  }
+
+  progress.style.display = 'none';
+  if (errors.length) {
+    document.getElementById('save-error').textContent = 'Could not save: ' + errors.join(', ');
+    document.getElementById('save-error').style.display = 'block';
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save all to inventory';
+  } else {
+    progress.textContent = `Saved ${savedCount} medicines. Redirecting...`;
+    progress.style.display = 'block';
+    setTimeout(() => { window.location.href = '/pharmacy/'; }, 800);
+  }
+}
+
+function showScanError(msg) {
+  const el = document.getElementById('scan-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

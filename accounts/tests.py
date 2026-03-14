@@ -1,3 +1,653 @@
-from django.test import TestCase
+"""
+Tests for multi-clinic support (Phase 5) and regression for existing features.
+"""
+import json
+from django.test import TestCase, Client
+from django.contrib.auth.models import User
+from django.utils import timezone
 
-# Create your tests here.
+from accounts.models import Clinic, StaffMember
+from accounts.permissions import set_permissions_from_role
+
+
+def make_clinic(name, city='Mumbai'):
+    return Clinic.objects.create(name=name, address='1 Test Rd', city=city, phone='9000000099')
+
+
+def make_user(username, password='testpass123'):
+    return User.objects.create_user(username=username, password=password)
+
+
+def make_membership(user, clinic, role='doctor', display_name='Dr. Test'):
+    sm = StaffMember.objects.create(
+        user=user, clinic=clinic, role=role, display_name=display_name,
+    )
+    set_permissions_from_role(sm)
+    sm.save()
+    return sm
+
+
+# ---------------------------------------------------------------------------
+# Model — multiple memberships per user
+# ---------------------------------------------------------------------------
+
+class MultiClinicModelTest(TestCase):
+
+    def test_user_can_have_two_memberships(self):
+        user = make_user('multiclinic_doc')
+        c1 = make_clinic('Clinic A')
+        c2 = make_clinic('Clinic B')
+        make_membership(user, c1)
+        make_membership(user, c2)
+        self.assertEqual(StaffMember.objects.filter(user=user).count(), 2)
+
+    def test_each_membership_has_correct_clinic(self):
+        user = make_user('multicheck_doc')
+        c1 = make_clinic('Clinic Alpha')
+        c2 = make_clinic('Clinic Beta')
+        make_membership(user, c1, display_name='Dr. Alpha')
+        make_membership(user, c2, display_name='Dr. Beta')
+        clinics = set(StaffMember.objects.filter(user=user).values_list('clinic__name', flat=True))
+        self.assertIn('Clinic Alpha', clinics)
+        self.assertIn('Clinic Beta', clinics)
+
+    def test_two_users_at_same_clinic(self):
+        clinic = make_clinic('Shared Clinic')
+        u1 = make_user('doc1_shared')
+        u2 = make_user('doc2_shared')
+        make_membership(u1, clinic, role='doctor')
+        make_membership(u2, clinic, role='receptionist')
+        self.assertEqual(StaffMember.objects.filter(clinic=clinic).count(), 2)
+
+
+# ---------------------------------------------------------------------------
+# Middleware — staff_profile is set on request.user
+# ---------------------------------------------------------------------------
+
+class ActiveClinicMiddlewareTest(TestCase):
+
+    def test_middleware_sets_staff_profile_for_single_clinic_user(self):
+        user = make_user('mw_single')
+        clinic = make_clinic('MW Clinic')
+        make_membership(user, clinic, display_name='Dr. MW')
+        client = Client()
+        client.login(username='mw_single', password='testpass123')
+        resp = client.get('/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_middleware_falls_back_to_first_clinic_without_session(self):
+        user = make_user('mw_fallback')
+        c1 = make_clinic('MWC First')
+        c2 = make_clinic('MWC Second')
+        make_membership(user, c1, display_name='Dr. First')
+        make_membership(user, c2, display_name='Dr. Second')
+        client = Client()
+        client.login(username='mw_fallback', password='testpass123')
+        resp = client.get('/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_superuser_still_reaches_admin_panel(self):
+        User.objects.create_superuser('mw_super', 'super@test.com', 'superpass')
+        client = Client()
+        client.login(username='mw_super', password='superpass')
+        resp = client.get('/accounts/admin-panel/')
+        self.assertEqual(resp.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# Switch clinic
+# ---------------------------------------------------------------------------
+
+class SwitchClinicViewTest(TestCase):
+
+    def setUp(self):
+        self.user = make_user('switcher_doc')
+        self.c1 = make_clinic('Switch Clinic 1')
+        self.c2 = make_clinic('Switch Clinic 2')
+        self.m1 = make_membership(self.user, self.c1, display_name='Dr. Switch')
+        self.m2 = make_membership(self.user, self.c2, display_name='Dr. Switch')
+        self.client = Client()
+        self.client.login(username='switcher_doc', password='testpass123')
+
+    def test_switch_sets_session_to_new_membership(self):
+        self.client.post('/accounts/switch-clinic/', {'staff_id': self.m2.pk, 'next': '/'})
+        self.assertEqual(self.client.session.get('active_staff_id'), self.m2.pk)
+
+    def test_switch_redirects_to_next_param(self):
+        resp = self.client.post('/accounts/switch-clinic/', {'staff_id': self.m2.pk, 'next': '/pharmacy/'})
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/pharmacy/', resp['Location'])
+
+    def test_cannot_switch_to_other_users_membership(self):
+        other_user = make_user('other_switcher')
+        c3 = make_clinic('Other Switch Clinic')
+        other_membership = make_membership(other_user, c3)
+        self.client.post('/accounts/switch-clinic/', {'staff_id': other_membership.pk, 'next': '/'})
+        self.assertNotEqual(self.client.session.get('active_staff_id'), other_membership.pk)
+
+    def test_switch_requires_login(self):
+        anon = Client()
+        resp = anon.post('/accounts/switch-clinic/', {'staff_id': self.m2.pk, 'next': '/'})
+        self.assertIn(resp.status_code, [302, 403])
+
+
+# ---------------------------------------------------------------------------
+# Add clinic
+# ---------------------------------------------------------------------------
+
+class AddClinicViewTest(TestCase):
+
+    def setUp(self):
+        self.user = make_user('addclinic_doc')
+        self.clinic = make_clinic('Original Clinic')
+        make_membership(self.user, self.clinic, role='doctor', display_name='Dr. Add')
+        self.client = Client()
+        self.client.login(username='addclinic_doc', password='testpass123')
+
+    def test_add_clinic_page_loads(self):
+        resp = self.client.get('/accounts/add-clinic/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_add_clinic_creates_new_clinic(self):
+        # add_clinic_view creates a brand-new clinic — no other clinic data exposed
+        self.client.post('/accounts/add-clinic/', {
+            'clinic_name': 'New Branch Clinic',
+            'city': 'Pune',
+            'clinic_phone': '9000000088',
+            'address': '5 MG Road',
+            'display_name': 'Dr. Add',
+            'role': 'doctor',
+        })
+        self.assertTrue(Clinic.objects.filter(name='New Branch Clinic').exists())
+
+    def test_add_clinic_links_membership_to_current_user(self):
+        self.client.post('/accounts/add-clinic/', {
+            'clinic_name': 'Branch Two',
+            'city': 'Nashik',
+            'display_name': 'Dr. Add',
+            'role': 'doctor',
+        })
+        new_clinic = Clinic.objects.filter(name='Branch Two').first()
+        self.assertIsNotNone(new_clinic)
+        self.assertTrue(StaffMember.objects.filter(user=self.user, clinic=new_clinic).exists())
+
+    def test_add_clinic_does_not_expose_other_clinics(self):
+        # The GET response must not contain other customers' clinic names
+        other_clinic = make_clinic('Secret Other Clinic')
+        resp = self.client.get('/accounts/add-clinic/')
+        self.assertNotContains(resp, 'Secret Other Clinic')
+
+    def test_add_clinic_requires_login(self):
+        anon = Client()
+        resp = anon.get('/accounts/add-clinic/')
+        self.assertIn(resp.status_code, [302, 403])
+
+
+# ---------------------------------------------------------------------------
+# Clinic isolation — active clinic scopes all data correctly
+# ---------------------------------------------------------------------------
+
+class ClinicIsolationTest(TestCase):
+
+    def setUp(self):
+        from reception.models import Patient, Visit
+
+        self.user = make_user('isolation_doc')
+        self.c1 = make_clinic('Isolation Clinic 1')
+        self.c2 = make_clinic('Isolation Clinic 2')
+        self.m1 = make_membership(self.user, self.c1, role='admin', display_name='Dr. Iso')
+        self.m2 = make_membership(self.user, self.c2, role='admin', display_name='Dr. Iso')
+
+        self.p1 = Patient.objects.create(
+            clinic=self.c1, full_name='Patient One', phone='9100000001', gender='M', age=30,
+        )
+        Visit.objects.create(
+            clinic=self.c1, patient=self.p1, token_number=1,
+            visit_date=timezone.now().date(),
+        )
+        self.p2 = Patient.objects.create(
+            clinic=self.c2, full_name='Patient Two', phone='9200000002', gender='F', age=25,
+        )
+        Visit.objects.create(
+            clinic=self.c2, patient=self.p2, token_number=1,
+            visit_date=timezone.now().date(),
+        )
+        self.client = Client()
+        self.client.login(username='isolation_doc', password='testpass123')
+
+    def _switch(self, membership):
+        self.client.post('/accounts/switch-clinic/', {'staff_id': membership.pk, 'next': '/'})
+
+    def test_clinic1_queue_shows_only_clinic1_patients(self):
+        self._switch(self.m1)
+        names = [v['name'] for v in self.client.get('/api/queue/').json().get('queue', [])]
+        self.assertIn('Patient One', names)
+        self.assertNotIn('Patient Two', names)
+
+    def test_clinic2_queue_shows_only_clinic2_patients(self):
+        self._switch(self.m2)
+        names = [v['name'] for v in self.client.get('/api/queue/').json().get('queue', [])]
+        self.assertIn('Patient Two', names)
+        self.assertNotIn('Patient One', names)
+
+    def test_pharmacy_search_scoped_to_active_clinic(self):
+        from pharmacy.models import PharmacyItem, PharmacyBatch
+        item = PharmacyItem.objects.create(clinic=self.c1, custom_name='IsolationDrug')
+        PharmacyBatch.objects.create(item=item, quantity=10, unit_price=5)
+
+        self._switch(self.m1)
+        r1 = self.client.get('/pharmacy/api/search/?q=IsolationDrug').json()
+        self.assertEqual(len(r1['items']), 1)
+
+        self._switch(self.m2)
+        r2 = self.client.get('/pharmacy/api/search/?q=IsolationDrug').json()
+        self.assertEqual(len(r2['items']), 0)
+
+
+# ---------------------------------------------------------------------------
+# Regression — existing features survive multi-clinic changes
+# ---------------------------------------------------------------------------
+
+class RegressionReceptionAfterMultiClinicTest(TestCase):
+
+    def setUp(self):
+        self.clinic = make_clinic('Regression Reception Clinic')
+        self.user = make_user('reg_reception')
+        make_membership(self.user, self.clinic, role='admin', display_name='Reg Staff')
+        self.client = Client()
+        self.client.login(username='reg_reception', password='testpass123')
+
+    def test_reception_dashboard_loads(self):
+        self.assertEqual(self.client.get('/').status_code, 200)
+
+    def test_queue_api_works(self):
+        resp = self.client.get('/api/queue/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('queue', resp.json())
+
+    def test_patient_search_api_works(self):
+        self.assertEqual(self.client.get('/api/patient/search/?phone=9000000001').status_code, 200)
+
+    def test_analytics_view_loads_for_admin(self):
+        self.assertEqual(self.client.get('/analytics/').status_code, 200)
+
+
+class RegressionPrescriptionAfterMultiClinicTest(TestCase):
+
+    def setUp(self):
+        self.clinic = make_clinic('Regression Rx Clinic')
+        self.user = make_user('reg_doctor')
+        make_membership(self.user, self.clinic, role='doctor', display_name='Dr. Reg')
+        self.client = Client()
+        self.client.login(username='reg_doctor', password='testpass123')
+
+    def test_doctor_queue_loads(self):
+        self.assertEqual(self.client.get('/rx/doctor/').status_code, 200)
+
+    def test_drug_interaction_api_still_works(self):
+        # Seed one interaction so we can assert it fires
+        from prescription.models import DrugInteraction
+        DrugInteraction.objects.create(
+            drug1_keyword='azithromycin', drug2_keyword='warfarin',
+            severity='major', effect='Elevated INR / bleeding risk',
+        )
+        resp = self.client.post(
+            '/rx/api/interactions/',
+            data=json.dumps({'drugs': ['Tab Warfarin 5mg', 'Tab Azithromycin 500mg']}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn('alerts', data)
+        self.assertGreater(len(data['alerts']), 0)
+
+    def test_analytics_view_loads_for_doctor(self):
+        self.assertEqual(self.client.get('/analytics/').status_code, 200)
+
+# ===========================================================================
+# RBAC Tests
+# ===========================================================================
+
+from accounts.permissions import ROLE_PERMISSIONS, ALL_PERMISSION_FLAGS, set_permissions_from_role
+
+
+# ---------------------------------------------------------------------------
+# RolePermissionPresetTest
+# ---------------------------------------------------------------------------
+
+class RolePermissionPresetTest(TestCase):
+
+    def test_doctor_gets_all_flags_true(self):
+        preset = ROLE_PERMISSIONS['doctor']
+        for flag in ALL_PERMISSION_FLAGS:
+            self.assertTrue(preset[flag], f"doctor should have {flag}=True")
+
+    def test_admin_gets_all_flags_true(self):
+        preset = ROLE_PERMISSIONS['admin']
+        for flag in ALL_PERMISSION_FLAGS:
+            self.assertTrue(preset[flag], f"admin should have {flag}=True")
+
+    def test_receptionist_only_gets_can_register_patients(self):
+        preset = ROLE_PERMISSIONS['receptionist']
+        self.assertTrue(preset['can_register_patients'])
+        self.assertFalse(preset['can_prescribe'])
+        self.assertFalse(preset['can_view_pharmacy'])
+        self.assertFalse(preset['can_edit_inventory'])
+        self.assertFalse(preset['can_dispense_bill'])
+        self.assertFalse(preset['can_view_analytics'])
+        self.assertFalse(preset['can_manage_staff'])
+
+    def test_pharmacist_gets_correct_flags(self):
+        preset = ROLE_PERMISSIONS['pharmacist']
+        self.assertFalse(preset['can_register_patients'])
+        self.assertFalse(preset['can_prescribe'])
+        self.assertTrue(preset['can_view_pharmacy'])
+        self.assertTrue(preset['can_edit_inventory'])
+        self.assertTrue(preset['can_dispense_bill'])
+        self.assertFalse(preset['can_view_analytics'])
+        self.assertFalse(preset['can_manage_staff'])
+
+    def test_set_permissions_from_role_applies_correctly(self):
+        clinic = make_clinic('Preset Test Clinic')
+        user = make_user('preset_test_doc')
+        sm = StaffMember.objects.create(
+            user=user, clinic=clinic, role='receptionist', display_name='Preset Test'
+        )
+        # All flags should be False at creation (defaults)
+        self.assertFalse(sm.can_prescribe)
+        # Now apply preset
+        set_permissions_from_role(sm)
+        sm.save()
+        sm.refresh_from_db()
+        self.assertTrue(sm.can_register_patients)
+        self.assertFalse(sm.can_prescribe)
+        self.assertFalse(sm.can_manage_staff)
+
+    def test_set_permissions_from_role_doctor(self):
+        clinic = make_clinic('Preset Doctor Clinic')
+        user = make_user('preset_test_doc2')
+        sm = StaffMember.objects.create(
+            user=user, clinic=clinic, role='doctor', display_name='Preset Doctor'
+        )
+        set_permissions_from_role(sm)
+        sm.save()
+        sm.refresh_from_db()
+        self.assertTrue(sm.can_prescribe)
+        self.assertTrue(sm.can_manage_staff)
+        self.assertTrue(sm.can_view_analytics)
+
+
+# ---------------------------------------------------------------------------
+# RequirePermissionDecoratorTest
+# ---------------------------------------------------------------------------
+
+class RequirePermissionDecoratorTest(TestCase):
+
+    def setUp(self):
+        self.clinic = make_clinic('Decorator Test Clinic')
+
+    def test_allowed_user_gets_200(self):
+        user = make_user('dec_allowed')
+        make_membership(user, self.clinic, role='doctor')
+        c = Client()
+        c.login(username='dec_allowed', password='testpass123')
+        resp = c.get('/rx/doctor/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_disallowed_user_gets_403(self):
+        user = make_user('dec_denied')
+        make_membership(user, self.clinic, role='receptionist')
+        c = Client()
+        c.login(username='dec_denied', password='testpass123')
+        resp = c.get('/rx/doctor/')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_unauthenticated_gets_302(self):
+        c = Client()
+        resp = c.get('/rx/doctor/')
+        self.assertEqual(resp.status_code, 302)
+
+    def test_superuser_always_gets_200(self):
+        User.objects.create_superuser('dec_super', 'sup@test.com', 'superpass')
+        c = Client()
+        c.login(username='dec_super', password='superpass')
+        # superuser has no staff_profile but should pass decorator
+        resp = c.get('/accounts/admin-panel/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_403_page_contains_meaningful_content(self):
+        user = make_user('dec_403content')
+        make_membership(user, self.clinic, role='receptionist')
+        c = Client()
+        c.login(username='dec_403content', password='testpass123')
+        resp = c.get('/rx/doctor/')
+        self.assertEqual(resp.status_code, 403)
+        self.assertContains(resp, "access", status_code=403)
+
+
+# ---------------------------------------------------------------------------
+# StaffManagementViewTest
+# ---------------------------------------------------------------------------
+
+class StaffManagementViewTest(TestCase):
+
+    def setUp(self):
+        self.clinic = make_clinic('Staff Mgmt Clinic')
+        self.admin_user = make_user('mgmt_admin')
+        self.admin_sm = make_membership(self.admin_user, self.clinic, role='admin', display_name='Admin User')
+        self.client = Client()
+        self.client.login(username='mgmt_admin', password='testpass123')
+
+    def test_staff_list_accessible_with_can_manage_staff(self):
+        resp = self.client.get('/accounts/staff/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_receptionist_gets_403_on_staff_list(self):
+        user = make_user('mgmt_recept')
+        make_membership(user, self.clinic, role='receptionist', display_name='Recept User')
+        c = Client()
+        c.login(username='mgmt_recept', password='testpass123')
+        resp = c.get('/accounts/staff/')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_add_staff_page_loads_for_admin(self):
+        resp = self.client.get('/accounts/staff/add/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_edit_staff_saves_flags_correctly(self):
+        target_user = make_user('mgmt_target')
+        sm = make_membership(target_user, self.clinic, role='receptionist', display_name='Target Staff')
+        resp = self.client.post(f'/accounts/staff/{sm.pk}/edit/', {
+            'display_name': 'Target Staff',
+            'role': 'receptionist',
+            'qualification': '',
+            'registration_number': '',
+            'can_register_patients': 'on',
+            'can_view_analytics': 'on',
+        })
+        self.assertEqual(resp.status_code, 302)
+        sm.refresh_from_db()
+        self.assertTrue(sm.can_register_patients)
+        self.assertTrue(sm.can_view_analytics)
+        self.assertFalse(sm.can_prescribe)
+
+    def test_edit_staff_role_change_applies_preset_on_reset(self):
+        target_user = make_user('mgmt_preset_target')
+        sm = make_membership(target_user, self.clinic, role='receptionist', display_name='Preset Target')
+        resp = self.client.post(f'/accounts/staff/{sm.pk}/edit/', {
+            'display_name': 'Preset Target',
+            'role': 'pharmacist',
+            'qualification': '',
+            'registration_number': '',
+            'reset_to_role': '1',
+        })
+        self.assertEqual(resp.status_code, 302)
+        sm.refresh_from_db()
+        # pharmacist preset
+        self.assertTrue(sm.can_view_pharmacy)
+        self.assertTrue(sm.can_edit_inventory)
+        self.assertFalse(sm.can_prescribe)
+        self.assertFalse(sm.can_register_patients)
+
+    def test_delete_staff_removes_membership_not_user(self):
+        target_user = make_user('mgmt_delete_target')
+        sm = make_membership(target_user, self.clinic, role='receptionist', display_name='Delete Target')
+        pk = sm.pk
+        user_pk = target_user.pk
+        resp = self.client.post(f'/accounts/staff/{pk}/delete/')
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(StaffMember.objects.filter(pk=pk).exists())
+        from django.contrib.auth.models import User as _User
+        self.assertTrue(_User.objects.filter(pk=user_pk).exists())
+
+    def test_cannot_edit_staff_from_another_clinic(self):
+        other_clinic = make_clinic('Other Clinic Edit Test')
+        other_user = make_user('mgmt_other_clinic_user')
+        other_sm = make_membership(other_user, other_clinic, role='doctor', display_name='Other Doc')
+        resp = self.client.get(f'/accounts/staff/{other_sm.pk}/edit/')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_cannot_delete_yourself(self):
+        resp = self.client.post(f'/accounts/staff/{self.admin_sm.pk}/delete/')
+        self.assertEqual(resp.status_code, 302)
+        # Should still exist
+        self.assertTrue(StaffMember.objects.filter(pk=self.admin_sm.pk).exists())
+
+
+# ---------------------------------------------------------------------------
+# RBACReceptionTest
+# ---------------------------------------------------------------------------
+
+class RBACReceptionTest(TestCase):
+
+    def setUp(self):
+        self.clinic = make_clinic('RBAC Reception Clinic')
+
+    def test_receptionist_can_access_reception_dashboard(self):
+        user = make_user('rbac_recept_ok')
+        make_membership(user, self.clinic, role='receptionist', display_name='Recept OK')
+        c = Client()
+        c.login(username='rbac_recept_ok', password='testpass123')
+        self.assertEqual(c.get('/').status_code, 200)
+
+    def test_receptionist_gets_403_on_doctor_queue(self):
+        user = make_user('rbac_recept_rx')
+        make_membership(user, self.clinic, role='receptionist', display_name='Recept Rx')
+        c = Client()
+        c.login(username='rbac_recept_rx', password='testpass123')
+        self.assertEqual(c.get('/rx/doctor/').status_code, 403)
+
+    def test_receptionist_gets_403_on_pharmacy(self):
+        user = make_user('rbac_recept_ph')
+        make_membership(user, self.clinic, role='receptionist', display_name='Recept Ph')
+        c = Client()
+        c.login(username='rbac_recept_ph', password='testpass123')
+        self.assertEqual(c.get('/pharmacy/').status_code, 403)
+
+
+# ---------------------------------------------------------------------------
+# RBACPrescriptionTest
+# ---------------------------------------------------------------------------
+
+class RBACPrescriptionTest(TestCase):
+
+    def setUp(self):
+        self.clinic = make_clinic('RBAC Rx Clinic')
+
+    def test_doctor_can_access_doctor_queue(self):
+        user = make_user('rbac_doc_ok')
+        make_membership(user, self.clinic, role='doctor', display_name='Doc OK')
+        c = Client()
+        c.login(username='rbac_doc_ok', password='testpass123')
+        self.assertEqual(c.get('/rx/doctor/').status_code, 200)
+
+    def test_receptionist_gets_403_on_doctor_queue(self):
+        user = make_user('rbac_recept_dq')
+        make_membership(user, self.clinic, role='receptionist', display_name='Recept DQ')
+        c = Client()
+        c.login(username='rbac_recept_dq', password='testpass123')
+        self.assertEqual(c.get('/rx/doctor/').status_code, 403)
+
+    def test_flag_override_receptionist_with_can_prescribe_true_can_access_doctor_queue(self):
+        user = make_user('rbac_recept_override')
+        sm = make_membership(user, self.clinic, role='receptionist', display_name='Recept Override')
+        # Override the flag manually
+        sm.can_prescribe = True
+        sm.save()
+        c = Client()
+        c.login(username='rbac_recept_override', password='testpass123')
+        self.assertEqual(c.get('/rx/doctor/').status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# RBACPharmacyTest
+# ---------------------------------------------------------------------------
+
+class RBACPharmacyTest(TestCase):
+
+    def setUp(self):
+        self.clinic = make_clinic('RBAC Pharmacy Clinic')
+
+    def test_pharmacist_can_access_pharmacy_dashboard(self):
+        user = make_user('rbac_pharm_ok')
+        make_membership(user, self.clinic, role='pharmacist', display_name='Pharm OK')
+        c = Client()
+        c.login(username='rbac_pharm_ok', password='testpass123')
+        self.assertEqual(c.get('/pharmacy/').status_code, 200)
+
+    def test_pharmacist_gets_403_on_reception_dashboard(self):
+        user = make_user('rbac_pharm_recept')
+        make_membership(user, self.clinic, role='pharmacist', display_name='Pharm Recept')
+        c = Client()
+        c.login(username='rbac_pharm_recept', password='testpass123')
+        self.assertEqual(c.get('/').status_code, 403)
+
+    def test_receptionist_gets_403_on_pharmacy(self):
+        user = make_user('rbac_recept_pharm')
+        make_membership(user, self.clinic, role='receptionist', display_name='Recept Pharm')
+        c = Client()
+        c.login(username='rbac_recept_pharm', password='testpass123')
+        self.assertEqual(c.get('/pharmacy/').status_code, 403)
+
+    def test_can_edit_inventory_false_blocks_add_stock_for_pharmacist(self):
+        user = make_user('rbac_pharm_no_inv')
+        sm = make_membership(user, self.clinic, role='pharmacist', display_name='Pharm No Inv')
+        # Revoke edit inventory flag
+        sm.can_edit_inventory = False
+        sm.save()
+        c = Client()
+        c.login(username='rbac_pharm_no_inv', password='testpass123')
+        self.assertEqual(c.get('/pharmacy/add/').status_code, 403)
+
+
+# ---------------------------------------------------------------------------
+# RBACAnalyticsTest
+# ---------------------------------------------------------------------------
+
+class RBACAnalyticsTest(TestCase):
+
+    def setUp(self):
+        self.clinic = make_clinic('RBAC Analytics Clinic')
+
+    def test_doctor_can_access_analytics(self):
+        user = make_user('rbac_analytics_doc')
+        make_membership(user, self.clinic, role='doctor', display_name='Analytics Doc')
+        c = Client()
+        c.login(username='rbac_analytics_doc', password='testpass123')
+        self.assertEqual(c.get('/analytics/').status_code, 200)
+
+    def test_receptionist_gets_403_on_analytics(self):
+        user = make_user('rbac_analytics_recept')
+        make_membership(user, self.clinic, role='receptionist', display_name='Analytics Recept')
+        c = Client()
+        c.login(username='rbac_analytics_recept', password='testpass123')
+        self.assertEqual(c.get('/analytics/').status_code, 403)
+
+    def test_receptionist_with_can_view_analytics_true_can_access_analytics(self):
+        user = make_user('rbac_analytics_override')
+        sm = make_membership(user, self.clinic, role='receptionist', display_name='Analytics Override')
+        sm.can_view_analytics = True
+        sm.save()
+        c = Client()
+        c.login(username='rbac_analytics_override', password='testpass123')
+        self.assertEqual(c.get('/analytics/').status_code, 200)

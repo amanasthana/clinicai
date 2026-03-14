@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+{% block title %}Dispense Medicines — {{ patient.full_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.med-row {
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.med-row.not-stocked {
+  border-color: #FCA5A5;
+  background: #FFF5F5;
+}
+.qty-control {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  overflow: hidden;
+  width: fit-content;
+}
+.qty-btn {
+  width: 44px;
+  height: 44px;
+  background: #F9FAFB;
+  border: none;
+  font-size: 20px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+.qty-btn:hover { background: #F3F4F6; }
+.qty-input {
+  width: 60px;
+  height: 44px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-left: 1px solid #D1D5DB;
+  border-right: 1px solid #D1D5DB;
+  outline: none;
+  font-family: inherit;
+}
+.pay-btn {
+  flex: 1;
+  padding: 14px 16px;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  color: #374151;
+  transition: all .15s;
+}
+.pay-btn.active {
+  border-color: #2563EB;
+  background: #EFF6FF;
+  color: #1D4ED8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:700px;">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+    <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">Back to Pharmacy</a>
+    <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Dispense Medicines</h1>
+  </div>
+
+  <!-- Patient info -->
+  <div style="background:#F8FAFC; border:1px solid #E5E7EB; border-radius:12px; padding:14px 16px; margin-bottom:20px;">
+    <div style="font-size:16px; font-weight:700; color:#111827;">{{ patient.full_name }}</div>
+    <div style="font-size:13px; color:#6B7280; margin-top:2px;">
+      Token {{ visit.token_number }}
+      {% if patient.age %} &middot; {{ patient.age }}y{% endif %}
+      {% if patient.gender %} {{ patient.get_gender_display }}{% endif %}
+    </div>
+    {% if existing_rx %}
+    <div style="font-size:12px; color:#059669; margin-top:4px; font-weight:500;">Prescription available</div>
+    {% else %}
+    <div style="font-size:12px; color:#D97706; margin-top:4px;">No prescription found for this visit. You can still record dispensed medicines manually.</div>
+    {% endif %}
+  </div>
+
+  {% if already_billed %}
+  <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:12px; padding:14px 16px; margin-bottom:16px;">
+    <div style="font-size:14px; font-weight:600; color:#065F46;">This visit has already been billed.</div>
+    <a href="{% url 'pharmacy:bill' visit.pharmacy_bill.pk %}" style="font-size:13px; color:#059669;">View bill</a>
+  </div>
+  {% else %}
+
+  <form id="dispense-form">
+    {% csrf_token %}
+
+    <!-- Medicines from prescription -->
+    {% if medicine_rows %}
+    <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px;">From Prescription</div>
+    <div id="med-list">
+      {% for row in medicine_rows %}
+      <div class="med-row {% if not row.in_stock %}not-stocked{% endif %}" id="row-{{ row.prescription_med_id }}">
+        <input type="hidden" class="f-pm-id" value="{{ row.prescription_med_id }}">
+        <input type="hidden" class="f-item-id" value="{{ row.item_id|default:'' }}">
+        <input type="hidden" class="f-batch-id" value="{{ row.batch_id|default:'' }}">
+        <input type="hidden" class="f-unit-price" value="{{ row.unit_price }}">
+        <input type="hidden" class="f-substitute" value="false">
+
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:15px; font-weight:600; color:#111827;">{{ row.drug_name }}</div>
+            <div style="font-size:12px; color:#6B7280; margin-top:2px;">{{ row.dosage }} &middot; {{ row.duration }}</div>
+            {% if row.in_stock %}
+            <div style="font-size:12px; color:#059669; margin-top:2px;">In stock — {{ row.stock_qty }} units at Rs {{ row.unit_price }}/unit</div>
+            {% else %}
+            <div style="font-size:12px; color:#DC2626; margin-top:2px;">
+              Not in stock —
+              <a href="#" onclick="loadAlternatives({{ row.item_id|default:'null' }}, {{ row.prescription_med_id }}); return false;"
+                 style="color:#2563EB;">find alternatives</a>
+            </div>
+            {% if not row.item_id %}
+            <div style="font-size:12px; color:#9CA3AF; margin-top:2px;">Medicine not found in pharmacy inventory</div>
+            {% endif %}
+            {% endif %}
+          </div>
+
+          <div>
+            <div style="font-size:11px; color:#9CA3AF; margin-bottom:6px; text-align:center;">Quantity</div>
+            <div class="qty-control">
+              <button type="button" class="qty-btn" onclick="changeQty(this, -1)">-</button>
+              <input type="number" class="qty-input f-qty" value="{{ row.suggested_qty }}" min="0">
+              <button type="button" class="qty-btn" onclick="changeQty(this, 1)">+</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alternatives panel (hidden by default) -->
+        <div class="alt-panel" id="alt-{{ row.prescription_med_id }}" style="display:none; margin-top:12px; border-top:1px solid #E5E7EB; padding-top:12px;">
+          <div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:8px;">Available alternatives:</div>
+          <div class="alt-list"></div>
+        </div>
+
+        <!-- Notes -->
+        <div style="margin-top:10px;">
+          <input type="text" class="f-notes" placeholder="Notes (optional)" maxlength="200"
+            style="width:100%; padding:8px 10px; border:1px solid #E5E7EB; border-radius:8px; font-size:13px; font-family:inherit; outline:none; box-sizing:border-box;">
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="background:#FFF7ED; border:1px solid #FED7AA; border-radius:12px; padding:14px 16px; margin-bottom:16px; font-size:14px; color:#92400E;">
+      No prescription found for this visit. You can still record dispensed medicines manually.
+    </div>
+    {% endif %}
+
+    <!-- Manual add section -->
+    <div style="margin-top:16px; margin-bottom:20px;">
+      <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px;">Add Medicine Manually</div>
+      <div style="position:relative;">
+        <input type="text" id="manual-search" placeholder="Search pharmacy stock..." autocomplete="off"
+          style="width:100%; padding:10px 14px; border:1px solid #E5E7EB; border-radius:10px; font-size:14px; font-family:inherit; outline:none; box-sizing:border-box;"
+          oninput="searchInventory(this.value)"
+          onfocus="this.style.borderColor='#2563EB'" onblur="this.style.borderColor='#E5E7EB'">
+        <div id="manual-dropdown" style="position:absolute; left:0; right:0; top:100%; background:#fff; border:1px solid #E5E7EB; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,.12); z-index:50; display:none; max-height:220px; overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <!-- Discount -->
+    <div style="background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:16px; margin-bottom:16px;">
+      <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:8px;">Discount (%)</label>
+      <input type="number" id="discount-pct" min="0" max="100" value="0"
+        style="width:100px; padding:10px; border:1px solid #D1D5DB; border-radius:8px; font-size:15px; font-family:inherit; outline:none;"
+        oninput="updateTotal()">
+    </div>
+
+    <!-- Payment mode -->
+    <div style="background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:16px; margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:500; color:#374151; margin-bottom:10px;">Payment method</div>
+      <div style="display:flex; gap:10px;">
+        <button type="button" class="pay-btn active" data-mode="cash" onclick="selectPayment('cash')">Cash</button>
+        <button type="button" class="pay-btn" data-mode="card" onclick="selectPayment('card')">Card</button>
+        <button type="button" class="pay-btn" data-mode="upi" onclick="selectPayment('UPI')">UPI</button>
+      </div>
+    </div>
+
+    <!-- Total summary -->
+    <div style="background:#F8FAFC; border:1px solid #E5E7EB; border-radius:12px; padding:16px; margin-bottom:20px;">
+      <div style="display:flex; justify-content:space-between; font-size:14px; color:#374151; margin-bottom:6px;">
+        <span>Subtotal</span>
+        <span id="subtotal-display">Rs 0.00</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:14px; color:#374151; margin-bottom:6px;">
+        <span>Discount</span>
+        <span id="discount-display">Rs 0.00</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:17px; font-weight:700; color:#111827; border-top:1px solid #E5E7EB; padding-top:10px;">
+        <span>Total</span>
+        <span id="total-display">Rs 0.00</span>
+      </div>
+    </div>
+
+    <div id="dispense-error" style="display:none; background:#FEF2F2; border:1px solid #FECACA; border-radius:10px; padding:12px; margin-bottom:16px; font-size:14px; color:#DC2626;"></div>
+
+    <button type="button" onclick="submitDispense()"
+      style="width:100%; padding:16px; background:#2563EB; color:#fff; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer; font-family:inherit;">
+      Confirm and generate bill
+    </button>
+  </form>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const VISIT_ID = '{{ visit.id }}';
+const CSRF_TOKEN = '{{ csrf_token }}';
+let paymentMode = 'cash';
+
+function changeQty(btn, delta) {
+  const input = btn.parentElement.querySelector('.qty-input');
+  const val = parseInt(input.value) || 0;
+  input.value = Math.max(0, val + delta);
+  updateTotal();
+}
+
+function selectPayment(mode) {
+  paymentMode = mode.toLowerCase();
+  document.querySelectorAll('.pay-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === paymentMode);
+  });
+}
+
+function getRows() {
+  return Array.from(document.querySelectorAll('#med-list .med-row'));
+}
+
+function updateTotal() {
+  let subtotal = 0;
+  getRows().forEach(row => {
+    const qty = parseInt(row.querySelector('.f-qty').value) || 0;
+    const price = parseFloat(row.querySelector('.f-unit-price').value) || 0;
+    subtotal += qty * price;
+  });
+  const discountPct = parseInt(document.getElementById('discount-pct').value) || 0;
+  const discountAmt = subtotal * discountPct / 100;
+  const total = subtotal - discountAmt;
+  document.getElementById('subtotal-display').textContent = 'Rs ' + subtotal.toFixed(2);
+  document.getElementById('discount-display').textContent = 'Rs ' + discountAmt.toFixed(2);
+  document.getElementById('total-display').textContent = 'Rs ' + total.toFixed(2);
+}
+
+async function loadAlternatives(itemId, pmId) {
+  if (!itemId) return;
+  const panel = document.getElementById('alt-' + pmId);
+  if (!panel) return;
+  panel.style.display = 'block';
+  panel.querySelector('.alt-list').innerHTML = '<div style="font-size:13px; color:#9CA3AF;">Loading...</div>';
+  try {
+    const resp = await fetch('/pharmacy/api/alternatives/' + itemId + '/');
+    const data = await resp.json();
+    if (!data.alternatives || !data.alternatives.length) {
+      panel.querySelector('.alt-list').innerHTML = '<div style="font-size:13px; color:#9CA3AF;">No alternatives found in stock.</div>';
+      return;
+    }
+    panel.querySelector('.alt-list').innerHTML = data.alternatives.map(a => `
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:8px; background:#F8FAFC; border-radius:8px; margin-bottom:6px;">
+        <div>
+          <div style="font-size:13px; font-weight:600; color:#111827;">${escHtml(a.name)}</div>
+          <div style="font-size:11px; color:#9CA3AF;">${escHtml(a.generic||'')} &middot; ${a.stock_qty} units &middot; Rs ${a.unit_price}/unit</div>
+        </div>
+        <button type="button" onclick="useAlternative(${pmId}, ${a.id}, ${a.batch_id}, '${a.unit_price}', '${escHtml(a.name)}')"
+          style="padding:6px 14px; background:#2563EB; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">
+          Use this
+        </button>
+      </div>
+    `).join('');
+  } catch(e) {
+    panel.querySelector('.alt-list').innerHTML = '<div style="font-size:13px; color:#DC2626;">Could not load alternatives.</div>';
+  }
+}
+
+function useAlternative(pmId, itemId, batchId, unitPrice, itemName) {
+  const row = document.getElementById('row-' + pmId);
+  if (!row) return;
+  row.querySelector('.f-item-id').value = itemId;
+  row.querySelector('.f-batch-id').value = batchId;
+  row.querySelector('.f-unit-price').value = unitPrice;
+  row.querySelector('.f-substitute').value = 'true';
+  row.classList.remove('not-stocked');
+  const nameEl = row.querySelector('.med-row > div > div > div:first-child');
+  row.querySelector('div[style*="color:#DC2626"]').style.display = 'none';
+  const altPanel = document.getElementById('alt-' + pmId);
+  if (altPanel) altPanel.style.display = 'none';
+  updateTotal();
+}
+
+let searchTimer = null;
+function searchInventory(q) {
+  clearTimeout(searchTimer);
+  const dropdown = document.getElementById('manual-dropdown');
+  if (q.length < 2) { dropdown.style.display = 'none'; return; }
+  searchTimer = setTimeout(async () => {
+    const resp = await fetch('/pharmacy/api/search/?q=' + encodeURIComponent(q));
+    const data = await resp.json();
+    if (!data.items || !data.items.length) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = data.items.map(i => `
+      <div onclick="addManualItem(${i.id})"
+           style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #F3F4F6;"
+           onmouseenter="this.style.background='#F9FAFB'" onmouseleave="this.style.background=''">
+        <div style="font-size:14px; font-weight:500; color:#111827;">${escHtml(i.name)}</div>
+        <div style="font-size:12px; color:#9CA3AF;">${i.in_stock ? i.quantity + ' units in stock' : 'Out of stock'}</div>
+      </div>
+    `).join('');
+    dropdown.style.display = 'block';
+  }, 200);
+}
+
+async function addManualItem(itemId) {
+  document.getElementById('manual-dropdown').style.display = 'none';
+  document.getElementById('manual-search').value = '';
+  // Fetch item details including batch info
+  try {
+    const resp = await fetch('/pharmacy/api/alternatives/' + itemId + '/?self=1');
+    // Re-use alternatives endpoint; for manual add we just need batch info directly
+  } catch(e) {}
+  // Build a row — we need the full item data, let's use a special endpoint or just re-fetch
+  // For simplicity: add a generic row and let server validate
+  addManualRow(itemId);
+}
+
+async function addManualRow(itemId) {
+  // Fetch from search to get stock info
+  const resp = await fetch('/pharmacy/api/search/?q=' + encodeURIComponent(itemId));
+  // Better: we stored data in the dropdown — let's use a different approach
+  // Actually fetch the item page for details
+  // Simplest: use an ajax call to get item+batch data
+  try {
+    const r = await fetch('/pharmacy/api/item-detail/?id=' + itemId);
+    if (!r.ok) throw new Error('not found');
+    const d = await r.json();
+    appendManualRow(d);
+  } catch(e) {
+    // Fallback: just add a partial row
+    appendManualRow({id: itemId, name: 'Medicine #' + itemId, batch_id: null, unit_price: '0', stock_qty: 0});
+  }
+}
+
+function appendManualRow(d) {
+  const list = document.getElementById('med-list') || document.querySelector('#dispense-form');
+  const container = document.getElementById('med-list');
+  const div = document.createElement('div');
+  div.className = 'med-row';
+  div.innerHTML = `
+    <input type="hidden" class="f-pm-id" value="">
+    <input type="hidden" class="f-item-id" value="${d.id}">
+    <input type="hidden" class="f-batch-id" value="${d.batch_id||''}">
+    <input type="hidden" class="f-unit-price" value="${d.unit_price||0}">
+    <input type="hidden" class="f-substitute" value="false">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:15px; font-weight:600; color:#111827;">${escHtml(d.name)}</div>
+        <div style="font-size:12px; color:#6B7280; margin-top:2px;">Manual addition &middot; Rs ${d.unit_price||0}/unit</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:#9CA3AF; margin-bottom:6px; text-align:center;">Quantity</div>
+        <div class="qty-control">
+          <button type="button" class="qty-btn" onclick="changeQty(this, -1)">-</button>
+          <input type="number" class="qty-input f-qty" value="1" min="0">
+          <button type="button" class="qty-btn" onclick="changeQty(this, 1)">+</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <input type="text" class="f-notes" placeholder="Notes (optional)" maxlength="200"
+        style="width:100%; padding:8px 10px; border:1px solid #E5E7EB; border-radius:8px; font-size:13px; font-family:inherit; outline:none; box-sizing:border-box;">
+    </div>
+  `;
+  if (container) {
+    container.appendChild(div);
+  }
+  updateTotal();
+}
+
+async function submitDispense() {
+  const rows = getRows();
+  const items = [];
+  for (const row of rows) {
+    const qty = parseInt(row.querySelector('.f-qty').value) || 0;
+    if (qty <= 0) continue;
+    const batchId = row.querySelector('.f-batch-id').value;
+    if (!batchId) {
+      showError('Some medicines have no batch selected. Remove them or find alternatives.');
+      return;
+    }
+    items.push({
+      prescription_med_id: row.querySelector('.f-pm-id').value || null,
+      pharmacy_item_id: row.querySelector('.f-item-id').value,
+      batch_id: parseInt(batchId),
+      qty: qty,
+      is_substitute: row.querySelector('.f-substitute').value === 'true',
+      notes: row.querySelector('.f-notes').value,
+    });
+  }
+  if (!items.length) {
+    showError('No medicines with quantity greater than 0.');
+    return;
+  }
+  const discount = parseInt(document.getElementById('discount-pct').value) || 0;
+  const btn = document.querySelector('button[onclick="submitDispense()"]');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  try {
+    const resp = await fetch('/pharmacy/dispense/' + VISIT_ID + '/confirm/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+      body: JSON.stringify({items, discount, payment_mode: paymentMode}),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      window.location.href = '/pharmacy/bill/' + data.bill_id + '/';
+    } else {
+      showError(data.error || 'Something went wrong. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Confirm and generate bill';
+    }
+  } catch(e) {
+    showError('Network error. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Confirm and generate bill';
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('dispense-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('click', e => {
+  const dd = document.getElementById('manual-dropdown');
+  const inp = document.getElementById('manual-search');
+  if (dd && inp && !dd.contains(e.target) && e.target !== inp) dd.style.display = 'none';
+});
+
+// Initialize total
+updateTotal();
+</script>
+{% endblock %}

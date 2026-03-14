@@ -18,4 +18,6 @@ urlpatterns = [
     path('favorites/remove/<int:pk>/', views.remove_favorite_api, name='remove_favorite'),
     path('favorites/list/', views.favorites_list_api, name='favorites_list'),
     path('share/<uuid:token>/', views.public_prescription_view, name='public_print'),
+    path('api/interactions/', views.check_interactions_api, name='check_interactions'),
+    path('api/scan-bill/', views.scan_bill_api, name='scan_bill'),
 ]

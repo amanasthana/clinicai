@@ -30,26 +30,64 @@
     <!-- Desktop links -->
     <div class="nav-desktop-links" style="display:flex; align-items:center; gap:20px; margin-left:auto;">
       {% block nav_links %}
+      {% if user.staff_profile.can_register_patients %}
       <a href="/" class="nav-link {% block nav_reception %}{% endblock %}">Reception</a>
+      {% endif %}
+      {% if user.staff_profile.can_prescribe %}
       <a href="/rx/doctor/" class="nav-link {% block nav_doctor %}{% endblock %}">Doctor</a>
-      {% if user.staff_profile.role == 'doctor' %}
       <a href="/rx/favorites/" class="nav-link {% block nav_favorites %}{% endblock %}">My Medicines</a>
       {% endif %}
-      {% if user.staff_profile.role == 'pharmacist' or user.staff_profile.role == 'admin' %}
+      {% if user.staff_profile.can_view_pharmacy %}
       <a href="/pharmacy/" class="nav-link {% block nav_pharmacy %}{% endblock %}">Pharmacy</a>
       {% endif %}
-      {% if user.staff_profile.role == 'admin' %}
+      {% if user.staff_profile.can_view_analytics %}
+      <a href="/analytics/" class="nav-link {% block nav_analytics %}{% endblock %}" title="Clinical Analytics">Analytics</a>
+      {% endif %}
+      {% if user.staff_profile.can_manage_staff %}
       <a href="/accounts/staff/" class="nav-link {% block nav_staff %}{% endblock %}">Staff</a>
       <a href="/accounts/plan/" class="nav-link {% block nav_plan %}{% endblock %}">Plan</a>
       <a href="/accounts/letterhead/" class="nav-link {% block nav_letterhead %}{% endblock %}">Letterhead</a>
-      {% endif %}
-      {% if user.staff_profile.role == 'doctor' %}
-      <a href="/accounts/letterhead/" class="nav-link {% block nav_letterhead_dr %}{% endblock %}">Letterhead</a>
       {% endif %}
       {% if user.is_superuser %}
       <a href="/accounts/admin-panel/" class="nav-link" style="color:#7C3AED; font-weight:600;">Admin</a>
       {% endif %}
       {% endblock %}
+
+      <!-- Clinic switcher — shows for all logged-in non-superusers -->
+      {% if not user.is_superuser and user.staff_profile %}
+      <div style="position:relative; display:inline-block;" id="clinic-switcher-wrap">
+        <button onclick="document.getElementById('clinic-switcher-menu').classList.toggle('open')"
+          style="background:#F3F4F6; border:1px solid #E5E7EB; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:500; color:#374151; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:6px; max-width:160px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
+          {{ user.staff_profile.clinic.name }}
+          <span style="font-size:10px; color:#9CA3AF; flex-shrink:0;">&#9660;</span>
+        </button>
+        <div id="clinic-switcher-menu" style="display:none; position:absolute; right:0; top:calc(100% + 6px); background:#fff; border:1px solid #E5E7EB; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12); min-width:220px; z-index:400; overflow:hidden;">
+          {% if user.all_clinic_memberships|length > 1 %}
+          <div style="padding:8px 12px; font-size:11px; font-weight:700; color:#9CA3AF; text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid #F3F4F6;">Switch clinic</div>
+          {% for sm in user.all_clinic_memberships %}
+          <form method="post" action="/accounts/switch-clinic/" style="margin:0;">
+            {% csrf_token %}
+            <input type="hidden" name="staff_id" value="{{ sm.pk }}">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit"
+              style="display:block; width:100%; padding:10px 12px; font-size:13px; text-align:left; background:{% if sm.pk == user.staff_profile.pk %}#EFF6FF{% else %}transparent{% endif %}; border:none; cursor:pointer; font-family:inherit; font-weight:{% if sm.pk == user.staff_profile.pk %}600{% else %}400{% endif %}; color:{% if sm.pk == user.staff_profile.pk %}#1D4ED8{% else %}#374151{% endif %};">
+              {{ sm.clinic.name }}
+              <div style="font-size:11px; color:#9CA3AF; font-weight:400;">{{ sm.get_role_display }}</div>
+            </button>
+          </form>
+          {% endfor %}
+          <div style="border-top:1px solid #F3F4F6; padding:6px;">
+          {% else %}
+          <div style="padding:6px;">
+          {% endif %}
+            <a href="/accounts/add-clinic/"
+              style="display:block; padding:8px 12px; font-size:13px; color:#2563EB; font-weight:500; text-decoration:none;">
+              Add another clinic
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endif %}
 
       <span style="font-size:13px; color:#6B7280;">
         {{ user.staff_profile.display_name }}
@@ -70,20 +108,41 @@
   <!-- Mobile nav panel -->
   <div class="nav-mobile-panel" id="nav-mobile-panel">
     <span class="nm-user">{{ user.staff_profile.display_name }}</span>
+    {% if not user.is_superuser and user.staff_profile %}
+    <div style="font-size:12px; color:#9CA3AF; padding:4px 20px 8px 20px; border-bottom:1px solid #F3F4F6; margin-bottom:4px;">
+      {{ user.staff_profile.clinic.name }}
+    </div>
+    {% if user.all_clinic_memberships|length > 1 %}
+    {% for sm in user.all_clinic_memberships %}
+    <form method="post" action="/accounts/switch-clinic/" style="margin:0;">
+      {% csrf_token %}
+      <input type="hidden" name="staff_id" value="{{ sm.pk }}">
+      <input type="hidden" name="next" value="/">
+      <button type="submit" style="display:block; width:100%; padding:8px 20px; font-size:13px; text-align:left; background:none; border:none; cursor:pointer; font-family:inherit; color:{% if sm.pk == user.staff_profile.pk %}#1D4ED8{% else %}#374151{% endif %}; font-weight:{% if sm.pk == user.staff_profile.pk %}600{% else %}400{% endif %};">
+        {{ sm.clinic.name }}
+      </button>
+    </form>
+    {% endfor %}
+    {% endif %}
+    <a href="/accounts/add-clinic/" style="font-size:13px; color:#2563EB; font-weight:500; padding:8px 20px; display:block;">Add another clinic</a>
+    <div style="border-bottom:1px solid #F3F4F6; margin:4px 0 8px 0;"></div>
+    {% endif %}
+    {% if user.staff_profile.can_register_patients %}
     <a href="/">Reception</a>
+    {% endif %}
+    {% if user.staff_profile.can_prescribe %}
     <a href="/rx/doctor/">Doctor</a>
-    {% if user.staff_profile.role == 'doctor' %}
     <a href="/rx/favorites/">My Medicines</a>
     {% endif %}
-    {% if user.staff_profile.role == 'pharmacist' or user.staff_profile.role == 'admin' %}
+    {% if user.staff_profile.can_view_pharmacy %}
     <a href="/pharmacy/">Pharmacy</a>
     {% endif %}
-    {% if user.staff_profile.role == 'admin' %}
+    {% if user.staff_profile.can_view_analytics %}
+    <a href="/analytics/">Analytics</a>
+    {% endif %}
+    {% if user.staff_profile.can_manage_staff %}
     <a href="/accounts/staff/">Staff</a>
     <a href="/accounts/plan/">Plan &amp; Usage</a>
-    <a href="/accounts/letterhead/">Letterhead</a>
-    {% endif %}
-    {% if user.staff_profile.role == 'doctor' %}
     <a href="/accounts/letterhead/">Letterhead</a>
     {% endif %}
     {% if user.is_superuser %}
@@ -117,6 +176,21 @@
   {% block extra_js %}{% endblock %}
 
   <script>
+  // Close clinic switcher on outside click
+  document.addEventListener('click', function(e) {
+    const wrap = document.getElementById('clinic-switcher-wrap');
+    const menu = document.getElementById('clinic-switcher-menu');
+    if (wrap && menu && !wrap.contains(e.target)) {
+      menu.classList.remove('open');
+    }
+  });
+  // Make 'open' class control display
+  document.addEventListener('DOMContentLoaded', function() {
+    const style = document.createElement('style');
+    style.textContent = '#clinic-switcher-menu.open { display: block !important; }';
+    document.head.appendChild(style);
+  });
+
   function toggleMobileNav() {
     const panel = document.getElementById('nav-mobile-panel');
     panel.classList.toggle('open');

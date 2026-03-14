@@ -60,6 +60,32 @@ class PrescriptionMedicine(models.Model):
         return f"{self.drug_name} — {self.dosage} for {self.duration}"
 
 
+class DrugInteraction(models.Model):
+    """
+    Clinically significant drug-drug interaction pairs.
+    Matching is done by case-insensitive substring: if drug1_keyword appears
+    in a typed drug name AND drug2_keyword appears in another typed drug name,
+    the interaction fires.
+    """
+    SEVERITY_CHOICES = [
+        ('major', 'Major — avoid combination'),
+        ('moderate', 'Moderate — monitor closely'),
+        ('minor', 'Minor — use with caution'),
+    ]
+    drug1_keyword = models.CharField(max_length=100, db_index=True)
+    drug2_keyword = models.CharField(max_length=100, db_index=True)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='moderate')
+    effect = models.CharField(max_length=300, help_text="What happens (e.g. 'Increased bleeding risk')")
+    mechanism = models.CharField(max_length=200, blank=True, help_text="Brief mechanism")
+
+    class Meta:
+        unique_together = [['drug1_keyword', 'drug2_keyword']]
+        indexes = [models.Index(fields=['drug1_keyword']), models.Index(fields=['drug2_keyword'])]
+
+    def __str__(self):
+        return f"{self.drug1_keyword} + {self.drug2_keyword} [{self.severity}]"
+
+
 class MedicalTerm(models.Model):
     CATEGORY_CHOICES = [
         ('symptom', 'Symptom'),

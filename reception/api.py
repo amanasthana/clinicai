@@ -9,10 +9,11 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.permissions import require_permission
 from .models import Patient, Visit, next_token_for_clinic
 
 
-@login_required
+@require_permission('can_register_patients')
 def patient_search_api(request):
     """
     Search patients by phone number.
@@ -55,7 +56,7 @@ def patient_search_api(request):
         return JsonResponse({'found': False, 'phone': phone})
 
 
-@login_required
+@require_permission('can_register_patients')
 def queue_api(request):
     """Return today's queue as JSON for live updates.
 
@@ -74,11 +75,11 @@ def queue_api(request):
 
     if status_filter == 'all':
         pass  # include everything
-    elif status_filter in ('waiting', 'in_consultation', 'done', 'no_show'):
+    elif status_filter in ('waiting', 'in_consultation', 'done', 'no_show', 'cancelled'):
         qs = qs.filter(status=status_filter)
     else:
         # default: active only
-        qs = qs.exclude(status__in=['done', 'no_show'])
+        qs = qs.exclude(status__in=['done', 'no_show', 'cancelled'])
 
     data = []
     for v in qs:
@@ -96,7 +97,7 @@ def queue_api(request):
     return JsonResponse({'queue': data, 'status_filter': status_filter})
 
 
-@login_required
+@require_permission('can_register_patients')
 @require_POST
 def visit_status_api(request, pk):
     """Update visit status (waiting → in_consultation → done)."""
@@ -120,3 +121,29 @@ def visit_status_api(request, pk):
     visit.save()
 
     return JsonResponse({'ok': True, 'status': visit.status})
+
+
+@require_permission('can_register_patients')
+@require_POST
+def cancel_visit_api(request, pk):
+    """Cancel a visit with a reason (distinct from no-show)."""
+    try:
+        clinic = request.user.staff_profile.clinic
+        visit = Visit.objects.get(id=pk, clinic=clinic)
+    except Visit.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Visit not found'}, status=404)
+
+    if visit.status in ('done', 'cancelled', 'no_show'):
+        return JsonResponse({'ok': False, 'error': 'Visit already finalised'}, status=400)
+
+    data = json.loads(request.body)
+    reason = data.get('reason', '').strip()
+    valid_reasons = dict(Visit.CANCELLATION_REASON_CHOICES).keys()
+    if reason not in valid_reasons:
+        return JsonResponse({'ok': False, 'error': 'Invalid cancellation reason'}, status=400)
+
+    visit.status = 'cancelled'
+    visit.cancellation_reason = reason
+    visit.save(update_fields=['status', 'cancellation_reason'])
+
+    return JsonResponse({'ok': True, 'status': 'cancelled', 'reason': reason})

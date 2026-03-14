@@ -62,6 +62,14 @@
   transition: opacity 0.1s;
 }
 .med-delete-btn:hover { opacity: 1; }
+.med-brand-btn {
+  flex-shrink:0; width:30px; height:30px;
+  border:1px solid #BFDBFE; background:#EFF6FF;
+  border-radius:8px; cursor:pointer; font-size:13px;
+  display:flex; align-items:center; justify-content:center;
+  transition:background 0.1s; -webkit-tap-highlight-color:transparent;
+}
+.med-brand-btn:hover { background:#DBEAFE; }
 
 /* Pill selector groups */
 .pill-section { margin-bottom: 8px; }
@@ -573,6 +581,9 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
             <button type="button" onclick="addMedicineRow()" class="btn btn-secondary btn-sm" style="margin-top:10px;">
               + Add Medicine
             </button>
+
+            <!-- Drug interaction alerts -->
+            <div id="interaction-alerts" style="display:none; margin-top:12px;"></div>
           </div>
 
           <!-- Investigations Suggested -->
@@ -1152,9 +1163,11 @@ function addMedicineRow(m) {
         <input class="input-field med-drug" value="${esc(m.drug_name || '')}"
                placeholder="e.g. Tab Metformin 500mg"
                style="font-size:13px; padding:7px 10px; width:100%;"
-               autocomplete="off">
+               autocomplete="off"
+               oninput="scheduleInteractionCheck()">
         <div class="drug-suggest-dropdown"></div>
       </div>
+      <button type="button" class="med-brand-btn" onclick="pickBrand(this)" title="Browse clinic inventory">📦</button>
       <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove">×</button>
     </div>
 
@@ -1187,12 +1200,70 @@ function addMedicineRow(m) {
 function removeMedicineRow(btn) {
   btn.closest('.med-row').remove();
   renumberMedicines();
+  scheduleInteractionCheck();
 }
 
 function renumberMedicines() {
   document.querySelectorAll('#medicines-table .med-num-cell').forEach((el, i) => {
     el.textContent = i + 1;
   });
+}
+
+// ── Drug interaction checker ────────────────────────────────────
+let _ixTimer = null;
+function scheduleInteractionCheck() {
+  clearTimeout(_ixTimer);
+  _ixTimer = setTimeout(runInteractionCheck, 600);
+}
+
+async function runInteractionCheck() {
+  const drugs = [];
+  document.querySelectorAll('#medicines-table .med-drug').forEach(input => {
+    const v = input.value.trim();
+    if (v) drugs.push(v);
+  });
+  const banner = document.getElementById('interaction-alerts');
+  if (drugs.length < 2) { banner.style.display = 'none'; return; }
+  try {
+    const resp = await fetch('/rx/api/interactions/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({ drugs }),
+    });
+    const data = await resp.json();
+    if (!data.alerts || data.alerts.length === 0) {
+      banner.style.display = 'none';
+      return;
+    }
+    const severityStyle = {
+      major:    { bg: '#FEF2F2', border: '#FCA5A5', icon: '🚨', label: 'MAJOR',    labelColor: '#B91C1C' },
+      moderate: { bg: '#FFFBEB', border: '#FCD34D', icon: '⚠️',  label: 'MODERATE', labelColor: '#92400E' },
+      minor:    { bg: '#F0F9FF', border: '#7DD3FC', icon: 'ℹ️',  label: 'MINOR',   labelColor: '#0369A1' },
+    };
+    let html = `<div style="font-size:12px; font-weight:700; color:#374151; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">⚕ Drug Interaction Alerts</div>`;
+    for (const alert of data.alerts) {
+      const s = severityStyle[alert.severity] || severityStyle.moderate;
+      html += `
+        <div style="background:${s.bg}; border:1px solid ${s.border}; border-radius:8px; padding:10px 12px; margin-bottom:6px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+            <span style="font-size:14px;">${s.icon}</span>
+            <span style="font-size:12px; font-weight:700; color:${s.labelColor};">${s.label}</span>
+            <span style="font-size:13px; font-weight:600; color:#111827;">${escHtmlIX(alert.drug1)} + ${escHtmlIX(alert.drug2)}</span>
+          </div>
+          <div style="font-size:13px; color:#374151;">${escHtmlIX(alert.effect)}</div>
+          ${alert.mechanism ? `<div style="font-size:12px; color:#6B7280; margin-top:2px;">${escHtmlIX(alert.mechanism)}</div>` : ''}
+        </div>`;
+    }
+    banner.innerHTML = html;
+    banner.style.display = 'block';
+  } catch(e) {
+    // Silently ignore — interactions are advisory only
+    banner.style.display = 'none';
+  }
+}
+
+function escHtmlIX(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 // ── Pill tap handler (event delegation) ────────────────────────
@@ -1539,6 +1610,17 @@ function fillDrug(input, name) {
   input.focus();
 }
 
+function pickBrand(btn) {
+  const input = btn.closest('.med-row-header').querySelector('.med-drug');
+  const q = input.value.trim();
+  if (!q) { input.focus(); return; }
+  // Extract first meaningful word (skip short words and pure numbers/dosage)
+  const words = q.split(/\s+/);
+  const searchWord = words.find(w => w.length >= 4 && !/^\d/.test(w)) || words[0];
+  fetchDrugSuggestions(input, searchWord);
+  input.focus();
+}
+
 async function fetchDrugSuggestions(input, q) {
   try {
     const resp = await fetch(`${visitData.pharmacyUrl}?q=${encodeURIComponent(q)}`);
@@ -1551,7 +1633,13 @@ async function fetchDrugSuggestions(input, q) {
     dd.innerHTML = items.map(item => {
       const av = item.availability ? AVAIL_META[item.availability] : null;
       const badge = av ? `<span class="drug-avail-badge ${av.cls}">${av.label}</span>` : '';
-      return `<div class="drug-suggest-item" onmousedown="fillDrug(this.closest('.med-drug-input').querySelector('.med-drug'),'${esc(item.name)}')">${esc(item.name)}${badge}</div>`;
+      const expiry = item.expiry ? `<span style="font-size:10px;color:#9CA3AF;margin-left:4px;">Exp ${esc(item.expiry)}</span>` : '';
+      const generic = item.generic ? `<div style="font-size:11px;color:#9CA3AF;margin-top:1px;">${esc(item.generic)}</div>` : '';
+      return `<div class="drug-suggest-item" style="flex-direction:column;align-items:flex-start;" onmousedown="fillDrug(this.closest('.med-drug-input').querySelector('.med-drug'),'${esc(item.name)}')">
+        <div style="display:flex;align-items:center;gap:6px;width:100%;">
+          <span>${esc(item.name)}</span>${badge}${expiry}
+        </div>${generic}
+      </div>`;
     }).join('');
     dd.style.display = 'block';
   } catch (_) {}

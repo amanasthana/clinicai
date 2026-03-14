@@ -10,6 +10,8 @@ urlpatterns = [
     path('plan/', views.plan_view, name='plan'),
     path('staff/', views.staff_list_view, name='staff_list'),
     path('staff/add/', views.add_staff_view, name='add_staff'),
+    path('staff/<int:pk>/edit/', views.edit_staff_view, name='edit_staff'),
+    path('staff/<int:pk>/delete/', views.delete_staff_view, name='delete_staff'),
     path('register/', views.register_view, name='register'),
     path('register/success/', views.register_success_view, name='register_success'),
     path('admin-panel/', views.admin_panel_view, name='admin_panel'),
@@ -22,4 +24,6 @@ urlpatterns = [
     path('letterhead/', views.letterhead_view, name='letterhead'),
     path('admin-panel/check-user/<str:phone>/', views.check_user_view, name='check_user'),
     path('admin-panel/reset-password/<int:pk>/', views.reset_clinic_password_view, name='reset_clinic_password'),
+    path('switch-clinic/', views.switch_clinic_view, name='switch_clinic'),
+    path('add-clinic/', views.add_clinic_view, name='add_clinic'),
 ]

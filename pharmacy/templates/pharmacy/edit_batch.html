@@ -13,6 +13,8 @@
     <div style="font-size:16px; font-weight:600; color:#374151; margin-bottom:4px;">{{ batch.item.display_name }}</div>
     {% if batch.item.medicine and batch.item.medicine.generic_name %}
     <div style="font-size:13px; color:#9CA3AF; margin-bottom:6px;">{{ batch.item.medicine.generic_name }}</div>
+    {% elif batch.item.custom_generic_name %}
+    <div style="font-size:13px; color:#9CA3AF; margin-bottom:6px;">{{ batch.item.custom_generic_name }}</div>
     {% endif %}
     <div style="font-size:13px; color:#6B7280; margin-bottom:20px;">
       Received: {{ batch.received_date|date:"d M Y" }}
@@ -20,6 +22,19 @@
 
     <form method="post">
       {% csrf_token %}
+
+      {% if not batch.item.medicine %}
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">
+          Generic Composition
+          <span style="font-size:12px; color:#9CA3AF; font-weight:400;"> — helps the doctor find this medicine by its active ingredient</span>
+        </label>
+        <input type="text" name="custom_generic_name"
+          value="{{ batch.item.custom_generic_name|default:'' }}"
+          placeholder="e.g. Clotrimazole 1%, Amoxicillin 500mg"
+          class="input-field" style="font-size:14px;">
+      </div>
+      {% endif %}
 
       <div class="resp-grid-2" style="gap:14px; margin-bottom:16px;">
         <div>

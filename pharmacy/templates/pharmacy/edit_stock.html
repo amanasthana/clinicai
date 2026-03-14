@@ -1,50 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Edit Stock — {{ item.display_name }}{% endblock %}
+{% block title %}Edit Medicine — {{ item.display_name }}{% endblock %}
 
 {% block content %}
 <div class="page-container" style="max-width:600px;">
 
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
     <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">← Back</a>
-    <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Edit Stock</h1>
+    <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Edit Medicine</h1>
   </div>
 
   <div class="card">
-    <div style="font-size:16px; font-weight:600; color:#374151; margin-bottom:4px;">{{ item.display_name }}</div>
-    {% if item.medicine and item.medicine.generic_name %}
-    <div style="font-size:13px; color:#9CA3AF; margin-bottom:20px;">{{ item.medicine.generic_name }}</div>
-    {% endif %}
-
     <form method="post">
       {% csrf_token %}
 
-      <div class="resp-grid-2" style="gap:14px; margin-bottom:16px;">
-        <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Batch Number</label>
-          <input type="text" name="batch_number" value="{{ item.batch_number }}"
-            placeholder="e.g. B2024-01" class="input-field" style="font-size:14px;">
-        </div>
-        <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Expiry Date</label>
-          <input type="date" name="expiry_date"
-            value="{% if item.expiry_date %}{{ item.expiry_date|date:'Y-m-d' }}{% endif %}"
-            class="input-field" style="font-size:14px;">
-        </div>
-        <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Quantity</label>
-          <input type="number" name="quantity" min="0" value="{{ item.quantity }}"
-            class="input-field" style="font-size:14px;">
-        </div>
-        <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Unit Price (₹)</label>
-          <input type="number" name="unit_price" min="0" step="0.01" value="{{ item.unit_price }}"
-            class="input-field" style="font-size:14px;">
-        </div>
-        <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Reorder Level</label>
-          <input type="number" name="reorder_level" min="0" value="{{ item.reorder_level }}"
-            class="input-field" style="font-size:14px;">
-        </div>
+      {% if not item.medicine %}
+      <!-- Custom medicine: name and generic are editable -->
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Medicine Name</label>
+        <input type="text" name="custom_name" value="{{ item.custom_name }}"
+          placeholder="e.g. Cliza Ointment" class="input-field" style="font-size:14px;" required>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Generic Composition</label>
+        <input type="text" name="custom_generic_name" value="{{ item.custom_generic_name|default:'' }}"
+          placeholder="e.g. Clotrimazole 1%" class="input-field" style="font-size:14px;">
+        <div style="font-size:12px; color:#9CA3AF; margin-top:4px;">This helps identify alternatives when the medicine is out of stock.</div>
+      </div>
+      {% else %}
+      <!-- Catalog medicine: name/generic come from catalog, show read-only -->
+      <div style="margin-bottom:16px; padding:12px 14px; background:#F9FAFB; border-radius:10px; border:1px solid #E5E7EB;">
+        <div style="font-size:14px; font-weight:600; color:#374151;">{{ item.medicine.name }}</div>
+        {% if item.medicine.generic_name %}
+        <div style="font-size:12px; color:#9CA3AF; margin-top:3px;">{{ item.medicine.generic_name }}</div>
+        {% endif %}
+        <div style="font-size:12px; color:#9CA3AF; margin-top:6px;">Name and composition are set by the medicine catalog and cannot be changed here.</div>
+      </div>
+      {% endif %}
+
+      <div style="margin-bottom:20px;">
+        <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Reorder Level (units)</label>
+        <input type="number" name="reorder_level" min="0" value="{{ item.reorder_level }}"
+          class="input-field" style="font-size:14px; max-width:160px;">
+        <div style="font-size:12px; color:#9CA3AF; margin-top:4px;">You will see a low stock alert when quantity falls below this number.</div>
       </div>
 
       <div style="display:flex; gap:10px; flex-wrap:wrap; padding-top:16px; border-top:1px solid #E5E7EB;">

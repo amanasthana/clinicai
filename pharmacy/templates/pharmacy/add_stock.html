@@ -4,9 +4,14 @@
 {% block content %}
 <div class="page-container" style="max-width:600px;">
 
-  <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
-    <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">← Back</a>
-    <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Add Stock</h1>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">Back</a>
+      <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Add Stock</h1>
+    </div>
+    <a href="/pharmacy/scan/" style="font-size:13px; color:#2563EB; font-weight:500; text-decoration:none; border:1px solid #BFDBFE; padding:7px 14px; border-radius:8px; background:#EFF6FF;">
+      Scan a bill
+    </a>
   </div>
 
   {% if error %}
@@ -64,9 +69,18 @@
         <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">
           OR Custom Name <span style="color:#9CA3AF; font-weight:400;">(if not in catalog)</span>
         </label>
-        <input type="text" name="custom_name" id="custom-name" placeholder="e.g. Tab Ayurvedic X 500mg"
+        <input type="text" name="custom_name" id="custom-name" placeholder="e.g. Clinico Ointment 30g"
           class="input-field" style="font-size:14px;" oninput="checkCustomName(this.value)">
         <div id="custom-existing-banner" style="margin-top:8px; display:none; background:#FEF3C7; border:1px solid #FDE68A; border-radius:8px; padding:8px 12px; font-size:13px; color:#92400E;"></div>
+        <!-- Generic/composition — appears when custom name is typed -->
+        <div id="custom-generic-wrap" style="margin-top:10px; display:none;">
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">
+            Generic / Active Ingredient <span style="color:#9CA3AF; font-weight:400;">(so doctors can search by composition)</span>
+          </label>
+          <input type="text" name="custom_generic_name" id="custom-generic-name"
+            placeholder="e.g. Clindamycin 1% w/w"
+            class="input-field" style="font-size:14px;">
+        </div>
       </div>
 
       <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
@@ -162,7 +176,10 @@ async function selectMedicine(id, name, generic) {
 let customTimer = null;
 function checkCustomName(val) {
   const banner = document.getElementById('custom-existing-banner');
+  const genericWrap = document.getElementById('custom-generic-wrap');
   clearTimeout(customTimer);
+  // Show/hide generic composition field
+  if (genericWrap) genericWrap.style.display = val.trim().length >= 1 ? 'block' : 'none';
   if (val.trim().length < 2) { banner.style.display = 'none'; return; }
   // Clear catalog selection when typing custom name
   document.getElementById('catalog-id-input').value = '';

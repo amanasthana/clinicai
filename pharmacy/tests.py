@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from pharmacy.models import MedicineCatalog, PharmacyItem, PharmacyBatch, DoctorFavorite
 from accounts.models import Clinic, StaffMember
+from accounts.permissions import set_permissions_from_role
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +32,8 @@ def make_clinic_and_user(username='testdoctor', clinic_name='Test Clinic'):
         role='admin',
         display_name='Test Doctor',
     )
+    set_permissions_from_role(staff)
+    staff.save()
     return clinic, user, staff
 
 
@@ -208,16 +211,16 @@ class PharmacyBatchModelTest(TestCase):
         batch = self._make_batch()
         self.assertFalse(batch.is_near_expiry)
 
-    def test_is_near_expiry_true_when_within_60_days(self):
+    def test_is_near_expiry_true_when_within_90_days(self):
         batch = self._make_batch(expiry_offset_days=59)
         self.assertTrue(batch.is_near_expiry)
 
-    def test_is_near_expiry_true_at_exactly_60_days(self):
-        batch = self._make_batch(expiry_offset_days=60)
+    def test_is_near_expiry_true_at_exactly_90_days(self):
+        batch = self._make_batch(expiry_offset_days=90)
         self.assertTrue(batch.is_near_expiry)
 
-    def test_is_near_expiry_false_when_beyond_60_days(self):
-        batch = self._make_batch(expiry_offset_days=61)
+    def test_is_near_expiry_false_when_beyond_90_days(self):
+        batch = self._make_batch(expiry_offset_days=91)
         self.assertFalse(batch.is_near_expiry)
 
     # --- is_expired ---
@@ -487,3 +490,772 @@ class PharmacyViewTest(TestCase):
         items = list(resp.context['items'])
         item_clinics = {i.clinic_id for i in items}
         self.assertNotIn(other_clinic.pk, item_clinics)
+
+
+# ---------------------------------------------------------------------------
+# Custom generic name tests (Feature: generic composition for custom medicines)
+# ---------------------------------------------------------------------------
+
+class CustomGenericNameModelTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user(username='gentest', clinic_name='Gen Clinic')
+
+    def test_pharmacy_item_has_custom_generic_name_field(self):
+        item = PharmacyItem.objects.create(
+            clinic=self.clinic,
+            custom_name='Clinico Ointment',
+            custom_generic_name='Clindamycin 1% w/w',
+            reorder_level=5,
+        )
+        item.refresh_from_db()
+        self.assertEqual(item.custom_generic_name, 'Clindamycin 1% w/w')
+
+    def test_display_generic_returns_custom_generic_name_for_custom_item(self):
+        item = PharmacyItem.objects.create(
+            clinic=self.clinic,
+            custom_name='Clinico Ointment',
+            custom_generic_name='Clindamycin 1% w/w',
+            reorder_level=5,
+        )
+        self.assertEqual(item.display_generic, 'Clindamycin 1% w/w')
+
+    def test_display_generic_returns_catalog_generic_for_catalog_item(self):
+        med = make_catalog_medicine(name='Crocin', generic='Paracetamol 500mg')
+        item = PharmacyItem.objects.create(clinic=self.clinic, medicine=med, reorder_level=5)
+        self.assertEqual(item.display_generic, 'Paracetamol 500mg')
+
+    def test_display_generic_blank_for_custom_item_without_generic(self):
+        item = PharmacyItem.objects.create(
+            clinic=self.clinic,
+            custom_name='Mystery Tonic',
+            reorder_level=5,
+        )
+        self.assertEqual(item.display_generic, '')
+
+    def test_custom_generic_name_default_blank(self):
+        item = PharmacyItem.objects.create(
+            clinic=self.clinic,
+            custom_name='Plain Med',
+            reorder_level=5,
+        )
+        self.assertEqual(item.custom_generic_name, '')
+
+
+class AddStockCustomGenericViewTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user(username='stocktest', clinic_name='Stock Clinic')
+        self.client = Client()
+        self.client.login(username='stocktest', password='testpass123')
+
+    def test_add_stock_saves_custom_generic_name(self):
+        resp = self.client.post('/pharmacy/add/', {
+            'custom_name': 'Clinico Oint 30g',
+            'custom_generic_name': 'Clindamycin 1% w/w',
+            'quantity': 20,
+            'unit_price': '50.00',
+            'reorder_level': 5,
+        })
+        self.assertEqual(resp.status_code, 302)
+        item = PharmacyItem.objects.get(clinic=self.clinic, custom_name='Clinico Oint 30g')
+        self.assertEqual(item.custom_generic_name, 'Clindamycin 1% w/w')
+
+    def test_add_stock_catalog_medicine_ignores_custom_generic(self):
+        med = make_catalog_medicine(name='Metformin 500mg', generic='Metformin')
+        resp = self.client.post('/pharmacy/add/', {
+            'catalog_id': med.pk,
+            'custom_generic_name': 'Should be ignored',
+            'quantity': 10,
+            'unit_price': '5.00',
+            'reorder_level': 10,
+        })
+        self.assertEqual(resp.status_code, 302)
+        item = PharmacyItem.objects.get(clinic=self.clinic, medicine=med)
+        self.assertEqual(item.custom_generic_name, '')
+
+    def test_add_stock_updates_custom_generic_on_existing_item(self):
+        # Create item without generic first
+        item = PharmacyItem.objects.create(
+            clinic=self.clinic,
+            custom_name='Old Custom Med',
+            custom_generic_name='',
+            reorder_level=5,
+        )
+        PharmacyBatch.objects.create(item=item, quantity=10)
+        # Add another batch, now with generic
+        self.client.post('/pharmacy/add/', {
+            'custom_name': 'Old Custom Med',
+            'custom_generic_name': 'Betamethasone 0.1%',
+            'quantity': 5,
+            'unit_price': '10.00',
+            'reorder_level': 5,
+        })
+        item.refresh_from_db()
+        self.assertEqual(item.custom_generic_name, 'Betamethasone 0.1%')
+
+
+class PharmacySearchByGenericTest(TestCase):
+    """Inventory search (used by add_stock page) should match custom_generic_name."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user(username='srchtest', clinic_name='Search Clinic')
+        self.item = PharmacyItem.objects.create(
+            clinic=self.clinic,
+            custom_name='Clinico Ointment',
+            custom_generic_name='Clindamycin 1% w/w',
+            reorder_level=5,
+        )
+        PharmacyBatch.objects.create(item=self.item, quantity=50, unit_price=30)
+        self.client = Client()
+        self.client.login(username='srchtest', password='testpass123')
+
+    def test_inventory_search_finds_item_by_custom_generic(self):
+        resp = self.client.get('/pharmacy/api/search/?q=Clindamycin')
+        data = resp.json()
+        names = [i['name'] for i in data['items']]
+        self.assertIn('Clinico Ointment', names)
+
+    def test_inventory_search_finds_item_by_custom_name(self):
+        resp = self.client.get('/pharmacy/api/search/?q=Clinico')
+        data = resp.json()
+        names = [i['name'] for i in data['items']]
+        self.assertIn('Clinico Ointment', names)
+
+    def test_inventory_search_no_match_returns_empty(self):
+        resp = self.client.get('/pharmacy/api/search/?q=Aspirin')
+        data = resp.json()
+        self.assertEqual(data['items'], [])
+
+
+class ExpiryTierModelTest(TestCase):
+    """Tests for 3-month (red) and 6-month (orange) expiry tiers."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user(username='exptest', clinic_name='Exp Clinic')
+        self.med = make_catalog_medicine(name='TestDrug', generic='TestGeneric')
+        self.item = PharmacyItem.objects.create(clinic=self.clinic, medicine=self.med, reorder_level=5)
+
+    def _batch_with_days(self, days):
+        from django.utils import timezone
+        import datetime
+        expiry = timezone.now().date() + datetime.timedelta(days=days)
+        return PharmacyBatch(item=self.item, quantity=10, expiry_date=expiry)
+
+    def test_is_near_expiry_true_at_90_days(self):
+        batch = self._batch_with_days(90)
+        self.assertTrue(batch.is_near_expiry)
+
+    def test_is_near_expiry_true_at_60_days(self):
+        batch = self._batch_with_days(60)
+        self.assertTrue(batch.is_near_expiry)
+
+    def test_is_near_expiry_false_at_91_days(self):
+        batch = self._batch_with_days(91)
+        self.assertFalse(batch.is_near_expiry)
+
+    def test_is_approaching_expiry_true_at_120_days(self):
+        batch = self._batch_with_days(120)
+        self.assertTrue(batch.is_approaching_expiry)
+
+    def test_is_approaching_expiry_true_at_180_days(self):
+        batch = self._batch_with_days(180)
+        self.assertTrue(batch.is_approaching_expiry)
+
+    def test_is_approaching_expiry_false_at_181_days(self):
+        batch = self._batch_with_days(181)
+        self.assertFalse(batch.is_approaching_expiry)
+
+    def test_is_approaching_expiry_false_at_90_days(self):
+        # 90 days is near_expiry (red), NOT approaching (orange)
+        batch = self._batch_with_days(90)
+        self.assertFalse(batch.is_approaching_expiry)
+
+    def test_is_approaching_expiry_false_when_no_expiry(self):
+        batch = PharmacyBatch(item=self.item, quantity=10, expiry_date=None)
+        self.assertFalse(batch.is_approaching_expiry)
+
+    def test_is_approaching_expiry_false_when_expired(self):
+        from django.utils import timezone
+        import datetime
+        past = timezone.now().date() - datetime.timedelta(days=10)
+        batch = PharmacyBatch(item=self.item, quantity=10, expiry_date=past)
+        self.assertFalse(batch.is_approaching_expiry)
+
+
+class ExpiryDashboardContextTest(TestCase):
+    """Tests that pharmacy dashboard passes correct expiry counts to template."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user(username='dashexp', clinic_name='DashExp Clinic')
+        self.client = Client()
+        self.client.login(username='dashexp', password='testpass123')
+        self.med = make_catalog_medicine(name='DashDrug', generic='DashGeneric')
+        self.item = PharmacyItem.objects.create(clinic=self.clinic, medicine=self.med, reorder_level=5)
+
+    def _create_batch(self, days, qty=10):
+        from django.utils import timezone
+        import datetime
+        expiry = timezone.now().date() + datetime.timedelta(days=days)
+        return PharmacyBatch.objects.create(item=self.item, quantity=qty, expiry_date=expiry)
+
+    def test_expiring_3m_count_in_context(self):
+        self._create_batch(60)  # within 90 days
+        resp = self.client.get('/pharmacy/')
+        self.assertEqual(resp.context['expiring_3m_count'], 1)
+
+    def test_expiring_6m_count_in_context(self):
+        self._create_batch(150)  # 90–180 days
+        resp = self.client.get('/pharmacy/')
+        self.assertEqual(resp.context['expiring_6m_count'], 1)
+
+    def test_expired_batch_not_counted_in_3m(self):
+        from django.utils import timezone
+        import datetime
+        past = timezone.now().date() - datetime.timedelta(days=5)
+        PharmacyBatch.objects.create(item=self.item, quantity=10, expiry_date=past)
+        resp = self.client.get('/pharmacy/')
+        self.assertEqual(resp.context['expiring_3m_count'], 0)
+
+    def test_empty_batch_not_counted(self):
+        self._create_batch(60, qty=0)  # quantity=0, should not count
+        resp = self.client.get('/pharmacy/')
+        self.assertEqual(resp.context['expiring_3m_count'], 0)
+
+    def test_far_future_batch_not_counted(self):
+        self._create_batch(365)  # > 6 months
+        resp = self.client.get('/pharmacy/')
+        self.assertEqual(resp.context['expiring_3m_count'], 0)
+        self.assertEqual(resp.context['expiring_6m_count'], 0)
+
+
+# ===========================================================================
+# Phase 5 — Dispensing, Billing, Bill Scanning tests
+# ===========================================================================
+
+import json
+import decimal
+from pharmacy.models import DispensedItem, PharmacyBill
+from reception.models import Patient, Visit
+from prescription.models import Prescription, PrescriptionMedicine
+
+
+def make_patient_and_visit(clinic, username_suffix='disp'):
+    patient = Patient.objects.create(
+        clinic=clinic, full_name='Test Patient', phone=f'9{username_suffix[:9]}',
+        gender='M', age=40,
+    )
+    visit = Visit.objects.create(
+        clinic=clinic, patient=patient, token_number=1,
+        visit_date=timezone.now().date(), status='done',
+    )
+    return patient, visit
+
+
+def make_prescription(visit, staff, medicines=None):
+    rx = Prescription.objects.create(
+        visit=visit, doctor=staff, raw_clinical_note='Test note',
+        diagnosis='Test diagnosis',
+    )
+    if medicines:
+        for i, m in enumerate(medicines):
+            PrescriptionMedicine.objects.create(
+                prescription=rx,
+                drug_name=m['drug_name'],
+                dosage=m['dosage'],
+                frequency=m.get('frequency', 'twice daily'),
+                duration=m['duration'],
+                order=i,
+            )
+    return rx
+
+
+def make_item_with_batch(clinic, name='Metformin 500mg', generic='Metformin', qty=100, price='5.00'):
+    item = PharmacyItem.objects.create(
+        clinic=clinic, custom_name=name, custom_generic_name=generic, reorder_level=10,
+    )
+    batch = PharmacyBatch.objects.create(
+        item=item, batch_number='B001',
+        expiry_date=today() + datetime.timedelta(days=180),
+        quantity=qty, unit_price=price,
+    )
+    return item, batch
+
+
+# ---------------------------------------------------------------------------
+# _calc_qty unit tests
+# ---------------------------------------------------------------------------
+
+class CalcQtyTest(TestCase):
+
+    def _calc(self, dosage, duration):
+        from pharmacy.views import _calc_qty
+        return _calc_qty(dosage, duration)
+
+    def test_1_0_1_30_days(self):
+        self.assertEqual(self._calc('1-0-1', '30 days'), 60)
+
+    def test_1_1_1_7_days(self):
+        self.assertEqual(self._calc('1-1-1', '7 days'), 21)
+
+    def test_0_0_1_14_days(self):
+        self.assertEqual(self._calc('0-0-1', '14 days'), 14)
+
+    def test_1_0_0_2_weeks(self):
+        self.assertEqual(self._calc('1-0-0', '2 weeks'), 14)
+
+    def test_1_0_1_1_month(self):
+        self.assertEqual(self._calc('1-0-1', '1 month'), 60)
+
+    def test_din_duration(self):
+        self.assertEqual(self._calc('1-0-1', '10 din'), 20)
+
+    def test_sos_returns_1(self):
+        # SOS / as needed cannot be parsed → fallback 1
+        self.assertEqual(self._calc('SOS', 'as needed'), 1)
+
+    def test_empty_dosage_returns_1(self):
+        self.assertEqual(self._calc('', '7 days'), 1)
+
+    def test_empty_duration_returns_1(self):
+        self.assertEqual(self._calc('1-0-1', ''), 1)
+
+
+# ---------------------------------------------------------------------------
+# DispensedItem + PharmacyBill model tests
+# ---------------------------------------------------------------------------
+
+class DispensedItemModelTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('dispmodel')
+        self.patient, self.visit = make_patient_and_visit(self.clinic)
+        self.item, self.batch = make_item_with_batch(self.clinic)
+
+    def test_dispensed_item_creation(self):
+        di = DispensedItem.objects.create(
+            visit=self.visit,
+            pharmacy_item=self.item,
+            batch=self.batch,
+            quantity_dispensed=10,
+            unit_price=decimal.Decimal('5.00'),
+            dispensed_by=self.staff,
+        )
+        self.assertEqual(di.quantity_dispensed, 10)
+        self.assertFalse(di.is_substitute)
+
+    def test_bill_number_format(self):
+        today_str = timezone.now().strftime('%Y%m%d')
+        num = PharmacyBill.generate_bill_number(self.clinic.pk)
+        self.assertTrue(num.startswith(f'BILL-{today_str}-'))
+
+    def test_bill_number_sequential(self):
+        n1 = PharmacyBill.generate_bill_number(self.clinic.pk)
+        # Create a bill so count increases
+        bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number=n1, subtotal=100, final_amount=100,
+        )
+        n2 = PharmacyBill.generate_bill_number(self.clinic.pk)
+        self.assertNotEqual(n1, n2)
+
+    def test_bill_final_amount_with_discount(self):
+        """final_amount should reflect discount_percent applied to subtotal."""
+        bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number='BILL-TEST-0001',
+            subtotal=decimal.Decimal('100.00'),
+            discount_percent=10,
+            final_amount=decimal.Decimal('90.00'),
+        )
+        self.assertEqual(bill.final_amount, decimal.Decimal('90.00'))
+
+
+# ---------------------------------------------------------------------------
+# Dispense view tests
+# ---------------------------------------------------------------------------
+
+class DispenseViewTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('dispensev')
+        self.patient, self.visit = make_patient_and_visit(self.clinic, 'dv')
+        self.item, self.batch = make_item_with_batch(self.clinic, qty=100)
+        self.client = Client()
+        self.client.login(username='dispensev', password='testpass123')
+        self.url = f'/pharmacy/dispense/{self.visit.id}/'
+        self.confirm_url = f'/pharmacy/dispense/{self.visit.id}/confirm/'
+
+    # --- GET tests ---
+
+    def test_dispense_page_loads(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_dispense_page_requires_login(self):
+        anon = Client()
+        resp = anon.get(self.url)
+        self.assertIn(resp.status_code, [302, 403])
+
+    def test_dispense_wrong_clinic_returns_404(self):
+        other_clinic, other_user, _ = make_clinic_and_user('other_disp', 'Other Clinic')
+        other_patient = Patient.objects.create(
+            clinic=other_clinic, full_name='Other', phone='9888888888', gender='M', age=30,
+        )
+        other_visit = Visit.objects.create(
+            clinic=other_clinic, patient=other_patient, token_number=1,
+            visit_date=timezone.now().date(),
+        )
+        resp = self.client.get(f'/pharmacy/dispense/{other_visit.id}/')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_dispense_with_prescription_shows_medicines(self):
+        make_prescription(self.visit, self.staff, [
+            {'drug_name': 'Metformin 500mg', 'dosage': '1-0-1', 'duration': '30 days'},
+        ])
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('Metformin', str(resp.content))
+
+    def test_dispense_no_prescription_still_loads(self):
+        # No prescription created — should show empty state
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+
+    # --- POST confirm tests ---
+
+    def _confirm_payload(self, qty=10, discount=0, payment='cash'):
+        return json.dumps({
+            'items': [{
+                'batch_id': self.batch.pk,
+                'pharmacy_item_id': self.item.pk,
+                'prescription_med_id': None,
+                'qty': qty,
+                'is_substitute': False,
+                'notes': '',
+            }],
+            'discount': discount,
+            'payment_mode': payment,
+        })
+
+    def test_confirm_dispense_creates_bill(self):
+        resp = self.client.post(
+            self.confirm_url,
+            data=self._confirm_payload(qty=10),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.assertTrue(PharmacyBill.objects.filter(visit=self.visit).exists())
+
+    def test_confirm_dispense_decrements_batch_quantity(self):
+        original_qty = self.batch.quantity
+        self.client.post(
+            self.confirm_url,
+            data=self._confirm_payload(qty=15),
+            content_type='application/json',
+        )
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.quantity, original_qty - 15)
+
+    def test_confirm_dispense_creates_dispensed_items(self):
+        self.client.post(
+            self.confirm_url,
+            data=self._confirm_payload(qty=5),
+            content_type='application/json',
+        )
+        self.assertEqual(DispensedItem.objects.filter(visit=self.visit).count(), 1)
+
+    def test_confirm_dispense_prevents_overdispense(self):
+        resp = self.client.post(
+            self.confirm_url,
+            data=self._confirm_payload(qty=9999),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.json()['ok'])
+
+    def test_confirm_dispense_prevents_double_billing(self):
+        # First dispense
+        self.client.post(
+            self.confirm_url,
+            data=self._confirm_payload(qty=5),
+            content_type='application/json',
+        )
+        # Second attempt
+        _, batch2 = make_item_with_batch(self.clinic, name='Atenolol 50mg', qty=50)
+        payload = json.dumps({
+            'items': [{'batch_id': batch2.pk, 'qty': 5, 'is_substitute': False, 'notes': ''}],
+            'discount': 0, 'payment_mode': 'cash',
+        })
+        resp = self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('already has a bill', resp.json()['error'])
+
+    def test_confirm_dispense_with_discount(self):
+        resp = self.client.post(
+            self.confirm_url,
+            data=self._confirm_payload(qty=10, discount=10),
+            content_type='application/json',
+        )
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        # subtotal = 10 * 5.00 = 50; discount 10% = 45
+        self.assertEqual(bill.discount_percent, 10)
+        self.assertEqual(bill.final_amount, decimal.Decimal('45.00'))
+
+    def test_confirm_dispense_empty_items_returns_400(self):
+        payload = json.dumps({'items': [], 'discount': 0, 'payment_mode': 'cash'})
+        resp = self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_confirm_dispense_wrong_clinic_returns_404(self):
+        other_clinic, other_user, _ = make_clinic_and_user('other_conf', 'Other Conf Clinic')
+        other_patient = Patient.objects.create(
+            clinic=other_clinic, full_name='Other', phone='9777777777', gender='F', age=25,
+        )
+        other_visit = Visit.objects.create(
+            clinic=other_clinic, patient=other_patient, token_number=1,
+            visit_date=timezone.now().date(),
+        )
+        resp = self.client.post(
+            f'/pharmacy/dispense/{other_visit.id}/confirm/',
+            data=self._confirm_payload(),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Bill view tests
+# ---------------------------------------------------------------------------
+
+class BillViewTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('billview')
+        self.patient, self.visit = make_patient_and_visit(self.clinic, 'bv')
+        self.item, self.batch = make_item_with_batch(self.clinic, qty=50)
+        self.bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number='BILL-TEST-0001',
+            subtotal=decimal.Decimal('50.00'),
+            final_amount=decimal.Decimal('50.00'),
+        )
+        self.client = Client()
+        self.client.login(username='billview', password='testpass123')
+
+    def test_bill_view_loads(self):
+        resp = self.client.get(f'/pharmacy/bill/{self.bill.pk}/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_bill_view_wrong_clinic_404(self):
+        other_clinic, other_user, _ = make_clinic_and_user('other_bill', 'Other Bill Clinic')
+        other_patient = Patient.objects.create(
+            clinic=other_clinic, full_name='Other', phone='9666666666', gender='M', age=50,
+        )
+        other_visit = Visit.objects.create(
+            clinic=other_clinic, patient=other_patient, token_number=1,
+            visit_date=timezone.now().date(),
+        )
+        other_bill = PharmacyBill.objects.create(
+            visit=other_visit, clinic=other_clinic,
+            bill_number='BILL-OTHER-0001',
+            subtotal=100, final_amount=100,
+        )
+        resp = self.client.get(f'/pharmacy/bill/{other_bill.pk}/')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_bill_view_requires_login(self):
+        anon = Client()
+        resp = anon.get(f'/pharmacy/bill/{self.bill.pk}/')
+        self.assertIn(resp.status_code, [302, 403])
+
+
+# ---------------------------------------------------------------------------
+# Alternatives API tests
+# ---------------------------------------------------------------------------
+
+class AlternativesApiTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('alttest')
+        self.client = Client()
+        self.client.login(username='alttest', password='testpass123')
+
+    def test_alternatives_returns_matching_generic(self):
+        """Items with the same generic name should appear as alternatives."""
+        item1, _ = make_item_with_batch(self.clinic, name='Metformin 500mg (Sun)', generic='Metformin', qty=0)
+        item2, _ = make_item_with_batch(self.clinic, name='Metformin 500mg (Cipla)', generic='Metformin', qty=50)
+        resp = self.client.get(f'/pharmacy/api/alternatives/{item1.pk}/')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        names = [i['name'] for i in data['alternatives']]
+        self.assertIn(item2.display_name, names)
+
+    def test_alternatives_excludes_out_of_stock(self):
+        """Alternatives with no stock should not appear."""
+        item1, _ = make_item_with_batch(self.clinic, name='Atenolol 50mg (Sun)', generic='Atenolol', qty=0)
+        item2, _ = make_item_with_batch(self.clinic, name='Atenolol 50mg (Cipla)', generic='Atenolol', qty=0)
+        resp = self.client.get(f'/pharmacy/api/alternatives/{item1.pk}/')
+        data = resp.json()
+        self.assertEqual(len(data['alternatives']), 0)
+
+    def test_alternatives_excludes_self(self):
+        """The requested item itself should not appear in alternatives."""
+        item1, _ = make_item_with_batch(self.clinic, name='Ramipril 5mg (Sun)', generic='Ramipril', qty=50)
+        item2, _ = make_item_with_batch(self.clinic, name='Ramipril 5mg (Cipla)', generic='Ramipril', qty=50)
+        resp = self.client.get(f'/pharmacy/api/alternatives/{item1.pk}/')
+        data = resp.json()
+        ids = [i['id'] for i in data['alternatives']]
+        self.assertNotIn(item1.pk, ids)
+
+    def test_alternatives_wrong_clinic_returns_404(self):
+        other_clinic, _, _ = make_clinic_and_user('otheralt', 'Alt Clinic')
+        item, _ = make_item_with_batch(other_clinic, name='Atenolol 50mg', qty=50)
+        resp = self.client.get(f'/pharmacy/api/alternatives/{item.pk}/')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_alternatives_requires_login(self):
+        item, _ = make_item_with_batch(self.clinic, qty=50)
+        anon = Client()
+        resp = anon.get(f'/pharmacy/api/alternatives/{item.pk}/')
+        self.assertIn(resp.status_code, [302, 403])
+
+
+# ---------------------------------------------------------------------------
+# Regression — existing pharmacy features still work
+# ---------------------------------------------------------------------------
+
+class RegressionPharmacyTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('regpharm')
+        self.client = Client()
+        self.client.login(username='regpharm', password='testpass123')
+        self.item, self.batch = make_item_with_batch(self.clinic, qty=100)
+
+    def test_pharmacy_dashboard_loads(self):
+        resp = self.client.get('/pharmacy/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_add_stock_page_loads(self):
+        resp = self.client.get('/pharmacy/add/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_catalog_search_api_works(self):
+        resp = self.client.get('/pharmacy/api/catalog/?q=Para')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('items', resp.json())
+
+    def test_inventory_search_api_works(self):
+        resp = self.client.get('/pharmacy/api/search/?q=Metformin')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn('items', data)
+        self.assertEqual(len(data['items']), 1)
+
+    def test_add_stock_creates_item(self):
+        resp = self.client.post('/pharmacy/add/', {
+            'custom_name': 'Regression Medicine',
+            'batch_number': 'B999',
+            'quantity': 50,
+            'unit_price': '3.00',
+            'reorder_level': 5,
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(PharmacyItem.objects.filter(clinic=self.clinic, custom_name='Regression Medicine').exists())
+
+    def test_scan_page_loads(self):
+        resp = self.client.get('/pharmacy/scan/')
+        self.assertEqual(resp.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# Edit PharmacyItem (generic composition + name)
+# ---------------------------------------------------------------------------
+
+class EditItemViewTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, _ = make_clinic_and_user('edititem_doc', 'Edit Item Clinic')
+        self.client = Client()
+        self.client.login(username='edititem_doc', password='testpass123')
+        self.item = PharmacyItem.objects.create(
+            clinic=self.clinic,
+            custom_name='Cliza Ointment',
+            custom_generic_name='',
+            reorder_level=5,
+        )
+        PharmacyBatch.objects.create(item=self.item, quantity=20, unit_price=50)
+
+    def test_edit_page_loads(self):
+        resp = self.client.get(f'/pharmacy/item/{self.item.pk}/edit/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_edit_generic_name_saves(self):
+        self.client.post(f'/pharmacy/item/{self.item.pk}/edit/', {
+            'custom_name': 'Cliza Ointment',
+            'custom_generic_name': 'Clotrimazole 1%',
+            'reorder_level': 5,
+        })
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.custom_generic_name, 'Clotrimazole 1%')
+
+    def test_edit_name_saves(self):
+        self.client.post(f'/pharmacy/item/{self.item.pk}/edit/', {
+            'custom_name': 'Cliza Plus Ointment',
+            'custom_generic_name': 'Clotrimazole 1%',
+            'reorder_level': 5,
+        })
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.custom_name, 'Cliza Plus Ointment')
+
+    def test_edit_reorder_level_saves(self):
+        self.client.post(f'/pharmacy/item/{self.item.pk}/edit/', {
+            'custom_name': 'Cliza Ointment',
+            'custom_generic_name': '',
+            'reorder_level': 20,
+        })
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.reorder_level, 20)
+
+    def test_edit_redirects_to_dashboard(self):
+        resp = self.client.post(f'/pharmacy/item/{self.item.pk}/edit/', {
+            'custom_name': 'Cliza Ointment',
+            'custom_generic_name': 'Clotrimazole 1%',
+            'reorder_level': 5,
+        })
+        self.assertRedirects(resp, '/pharmacy/')
+
+    def test_cannot_edit_other_clinics_item(self):
+        other_clinic = Clinic.objects.create(name='Other Clinic', address='x', city='Delhi', phone='9000000099')
+        other_item = PharmacyItem.objects.create(clinic=other_clinic, custom_name='Other Drug', reorder_level=0)
+        PharmacyBatch.objects.create(item=other_item, quantity=10, unit_price=10)
+        resp = self.client.post(f'/pharmacy/item/{other_item.pk}/edit/', {
+            'custom_name': 'Hacked',
+            'custom_generic_name': '',
+            'reorder_level': 0,
+        })
+        self.assertEqual(resp.status_code, 404)
+
+    def test_catalog_medicine_generic_not_overwritten(self):
+        catalog = make_catalog_medicine('Metformin', 'Metformin HCl')
+        catalog_item = PharmacyItem.objects.create(
+            clinic=self.clinic, medicine=catalog, reorder_level=5,
+        )
+        PharmacyBatch.objects.create(item=catalog_item, quantity=10, unit_price=5)
+        self.client.post(f'/pharmacy/item/{catalog_item.pk}/edit/', {
+            'custom_name': 'Hacked Name',
+            'custom_generic_name': 'Hacked Generic',
+            'reorder_level': 10,
+        })
+        catalog_item.refresh_from_db()
+        # Catalog items: custom_generic_name should not be changed (medicine FK present)
+        self.assertEqual(catalog_item.custom_name, '')
+        self.assertEqual(catalog_item.custom_generic_name, '')
+
+    def test_edit_requires_login(self):
+        anon = Client()
+        resp = anon.get(f'/pharmacy/item/{self.item.pk}/edit/')
+        self.assertIn(resp.status_code, [302, 403])

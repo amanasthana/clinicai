@@ -59,6 +59,15 @@ class Visit(models.Model):
         ('in_consultation', 'In Consultation'),
         ('done', 'Done'),
         ('no_show', 'No Show'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    CANCELLATION_REASON_CHOICES = [
+        ('patient_called', 'Patient called to cancel'),
+        ('rescheduled', 'Rescheduled'),
+        ('doctor_unavailable', 'Doctor unavailable'),
+        ('patient_unwell', 'Patient unwell / hospitalised'),
+        ('other', 'Other'),
     ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='visits')
@@ -72,6 +81,7 @@ class Visit(models.Model):
     vitals_weight = models.CharField(max_length=10, blank=True) # "72 kg"
     vitals_spo2 = models.CharField(max_length=10, blank=True)   # "98%"
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting')
+    cancellation_reason = models.CharField(max_length=30, blank=True, choices=CANCELLATION_REASON_CHOICES)
     visit_date = models.DateField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)
     called_at = models.DateTimeField(null=True, blank=True)
@@ -95,4 +105,5 @@ class Visit(models.Model):
             'in_consultation': 'blue',
             'done': 'green',
             'no_show': 'red',
+            'cancelled': 'red',
         }.get(self.status, 'gray')

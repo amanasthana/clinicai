@@ -16,5 +16,8 @@ python manage.py seed_medicine_catalog
 echo "--- Seeding medical terms (idempotent) ---"
 python manage.py seed_medical_terms
 
+echo "--- Seeding drug interactions (idempotent) ---"
+python manage.py seed_drug_interactions
+
 echo "--- Starting gunicorn ---"
 gunicorn --bind=0.0.0.0:8000 --timeout=120 --workers=2 clinicai.wsgi

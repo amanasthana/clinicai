@@ -7,17 +7,16 @@
 .ph-med-row { transition: background .1s; }
 .ph-med-row:hover { background: #FAFAFA; }
 
-/* Three-dot dropdown */
+/* Three-dot dropdown — fixed so overflow:hidden on card doesn't clip it */
 .ph-dropdown {
   display: none;
-  position: absolute;
-  right: 0; top: 36px;
+  position: fixed;
   background: #fff;
   border: 1px solid #E5E7EB;
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  min-width: 172px;
-  z-index: 300;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  min-width: 180px;
+  z-index: 9999;
   overflow: hidden;
 }
 .ph-dropdown.open { display: block; }
@@ -52,20 +51,68 @@
     <a href="/pharmacy/add/" class="btn btn-primary" style="font-size:13px;">+ Add Stock</a>
   </div>
 
-  <!-- ── 3 Stat chips — always single row ── -->
-  <div class="flex gap-3 mb-6">
-    <div class="flex-1 rounded-xl text-center py-3 px-2" style="background:#F0FDF4; border:1px solid #BBF7D0; min-height:58px;">
+  <!-- ── Pending dispense section ── -->
+  {% if pending_dispense %}
+  <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:16px; margin-bottom:20px;">
+    <div style="font-size:13px; font-weight:700; color:#1E40AF; margin-bottom:12px;">
+      Patients ready for dispensing ({{ pending_dispense|length }})
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      {% for visit in pending_dispense %}
+      <div style="display:flex; align-items:center; justify-content:space-between; background:#fff; border-radius:8px; padding:10px 14px; border:1px solid #DBEAFE; flex-wrap:wrap; gap:8px;">
+        <div>
+          <div style="font-size:14px; font-weight:600; color:#111827;">{{ visit.patient.full_name }}</div>
+          <div style="font-size:12px; color:#6B7280; margin-top:2px;">
+            Token {{ visit.token_number }}
+            {% if visit.prescription and visit.prescription.doctor %}
+             &middot; Dr {{ visit.prescription.doctor.display_name }}
+            {% endif %}
+          </div>
+        </div>
+        <a href="/pharmacy/dispense/{{ visit.id }}/"
+           style="padding:8px 16px; background:#2563EB; color:#fff; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none;">
+          Dispense
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Stat chips — clickable filters ── -->
+  <div class="flex gap-3 mb-3 flex-wrap">
+    <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="ok"
+         style="background:#F0FDF4; border:1px solid #BBF7D0; min-height:58px; cursor:pointer; user-select:none;">
       <div class="text-xl font-bold" style="color:#059669;">{{ total_in_stock }}</div>
       <div class="text-xs mt-0.5" style="color:#065F46;">In Stock</div>
     </div>
-    <div class="flex-1 rounded-xl text-center py-3 px-2" style="background:#FFFBEB; border:1px solid #FDE68A; min-height:58px;">
+    <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="low"
+         style="background:#FFFBEB; border:1px solid #FDE68A; min-height:58px; cursor:pointer; user-select:none;">
       <div class="text-xl font-bold" style="color:#D97706;">{{ low_stock_count }}</div>
       <div class="text-xs mt-0.5" style="color:#92400E;">Low Stock</div>
     </div>
-    <div class="flex-1 rounded-xl text-center py-3 px-2" style="background:#FFF1F2; border:1px solid #FECDD3; min-height:58px;">
+    <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="out"
+         style="background:#FFF1F2; border:1px solid #FECDD3; min-height:58px; cursor:pointer; user-select:none;">
       <div class="text-xl font-bold" style="color:#E11D48;">{{ out_of_stock_items|length }}</div>
       <div class="text-xs mt-0.5" style="color:#9F1239;">Out of Stock</div>
     </div>
+    {% if expiring_6m_count %}
+    <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="exp6m"
+         style="background:#FFF7ED; border:1px solid #FED7AA; min-height:58px; cursor:pointer; user-select:none;">
+      <div class="text-xl font-bold" style="color:#EA580C;">{{ expiring_6m_count }}</div>
+      <div class="text-xs mt-0.5" style="color:#9A3412;">Exp &lt; 6 Months</div>
+    </div>
+    {% endif %}
+    {% if expiring_3m_count %}
+    <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="exp3m"
+         style="background:#FFF1F2; border:1px solid #FECDD3; min-height:58px; cursor:pointer; user-select:none;">
+      <div class="text-xl font-bold" style="color:#E11D48;">{{ expiring_3m_count }}</div>
+      <div class="text-xs mt-0.5" style="color:#9F1239;">Exp &lt; 3 Months</div>
+    </div>
+    {% endif %}
+  </div>
+  <div id="active-filter-label" style="display:none; font-size:12px; color:#6B7280; margin-bottom:12px; padding:0 2px;">
+    Showing filtered results. <button onclick="clearChipFilters()" style="color:#2563EB; background:none; border:none; cursor:pointer; font-size:12px; font-family:inherit; padding:0;">Show all</button>
   </div>
 
   <!-- ── Low stock alerts ── -->
@@ -122,7 +169,12 @@
       {% for item in items %}
       {% with fefo=item.use_first_batch %}
 
-      <div class="ph-item" data-name="{{ item.display_name|lower }}" id="med-{{ item.pk }}"
+      <div class="ph-item"
+           data-name="{{ item.display_name|lower }}"
+           data-status="{% if not item.in_stock %}out{% elif item.low_stock %}low{% else %}ok{% endif %}"
+           data-exp3m="{% for b in item.batches.all %}{% if b.is_near_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
+           data-exp6m="{% for b in item.batches.all %}{% if b.is_approaching_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
+           id="med-{{ item.pk }}"
            style="border-left:3px solid {% if not item.in_stock %}#EF4444{% elif item.low_stock %}#F59E0B{% else %}#10B981{% endif %}; border-bottom:1px solid #F3F4F6;">
 
         <!-- ── Collapsed row (click to expand) ── -->
@@ -134,6 +186,8 @@
             <div class="text-sm font-semibold text-gray-900 truncate">{{ item.display_name }}</div>
             {% if item.medicine and item.medicine.generic_name %}
             <div class="text-xs text-gray-400 mt-0.5">{{ item.medicine.generic_name }}</div>
+            {% elif item.custom_generic_name %}
+            <div class="text-xs text-gray-400 mt-0.5">{{ item.custom_generic_name }}</div>
             {% endif %}
           </div>
 
@@ -146,7 +200,7 @@
           <!-- Expiry -->
           {% if item.earliest_expiry %}
           <span class="text-xs whitespace-nowrap hidden sm:inline"
-            style="color:{% if item.earliest_expiry|date:'Y-m-d' < '2026-04-13' %}#DC2626{% else %}#9CA3AF{% endif %};">
+            style="color:{% if item.earliest_expiry|date:'Y-m-d' < today_plus_90 %}#DC2626{% else %}#9CA3AF{% endif %};">
             {{ item.earliest_expiry|date:"M Y" }}
           </span>
           {% endif %}
@@ -156,11 +210,14 @@
 
           <!-- ⋮ three-dot menu -->
           <div class="relative flex-shrink-0" onclick="event.stopPropagation()">
-            <button onclick="toggleMenu({{ item.pk }})"
+            <button id="menu-btn-{{ item.pk }}" onclick="toggleMenu({{ item.pk }})"
               class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 border-none bg-transparent cursor-pointer text-base">⋮</button>
             <div class="ph-dropdown" id="menu-{{ item.pk }}">
               <a href="/pharmacy/item/{{ item.pk }}/add-batch/">
                 <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="margin-right:8px; vertical-align:-1px; flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Batch
+              </a>
+              <a href="/pharmacy/item/{{ item.pk }}/edit/">
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="margin-right:8px; vertical-align:-1px; flex-shrink:0;"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit Medicine
               </a>
               <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
               <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
@@ -197,7 +254,9 @@
                 {% if batch.is_expired %}
                 <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEE2E2;color:#991B1B;">Expired</span>
                 {% elif batch.is_near_expiry %}
-                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEF3C7;color:#92400E;">Expiring Soon</span>
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEE2E2;color:#BE123C;">Exp &lt;3m 🔴</span>
+                {% elif batch.is_approaching_expiry %}
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEF3C7;color:#92400E;">Exp &lt;6m 🟠</span>
                 {% endif %}
               </div>
               <div class="flex gap-4 flex-wrap mt-1">
@@ -251,16 +310,46 @@
 <script>
 // Close menus when clicking outside
 document.addEventListener('click', function(e) {
-  if (!e.target.closest('.ph-dropdown') && !e.target.closest('[onclick*="toggleMenu"]')) {
+  if (!e.target.closest('.ph-dropdown') && !e.target.closest('[id^="menu-btn-"]')) {
     document.querySelectorAll('.ph-dropdown.open').forEach(d => d.classList.remove('open'));
   }
 });
 
+// Close on scroll (dropdown is fixed so it won't follow the item)
+window.addEventListener('scroll', function() {
+  document.querySelectorAll('.ph-dropdown.open').forEach(d => d.classList.remove('open'));
+}, true);
+
 function toggleMenu(pk) {
   const menu = document.getElementById('menu-' + pk);
+  const btn  = document.getElementById('menu-btn-' + pk);
   const wasOpen = menu.classList.contains('open');
+
+  // Close all open menus first
   document.querySelectorAll('.ph-dropdown.open').forEach(d => d.classList.remove('open'));
-  if (!wasOpen) menu.classList.add('open');
+
+  if (!wasOpen && btn) {
+    // Show to measure size, then position
+    menu.classList.add('open');
+    const rect    = btn.getBoundingClientRect();
+    const menuW   = menu.offsetWidth;
+    const menuH   = menu.offsetHeight;
+    const gap     = 4;
+
+    // Default: below the button, right-aligned
+    let top  = rect.bottom + gap;
+    let left = rect.right - menuW;
+
+    // Flip above if it would go off the bottom of the viewport
+    if (top + menuH > window.innerHeight - 8) {
+      top = rect.top - menuH - gap;
+    }
+    // Keep within left edge
+    if (left < 8) left = 8;
+
+    menu.style.top  = top + 'px';
+    menu.style.left = left + 'px';
+  }
 }
 
 function toggleExpand(pk, e) {
@@ -272,11 +361,82 @@ function toggleExpand(pk, e) {
   if (arrow) arrow.textContent = open ? '▶' : '▼';
 }
 
-function filterInv(q) {
-  q = q.toLowerCase().trim();
-  document.querySelectorAll('#inv-list .ph-item').forEach(row => {
-    row.style.display = (!q || row.dataset.name.includes(q)) ? '' : 'none';
+// ── Chip filters ──
+const activeChips = new Set();
+
+document.querySelectorAll('.stat-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const f = chip.dataset.filter;
+    if (activeChips.has(f)) {
+      activeChips.delete(f);
+      chip.style.opacity = '1';
+      chip.style.outline = '';
+    } else {
+      activeChips.add(f);
+      chip.style.opacity = '1';
+      chip.style.outline = '2.5px solid #2563EB';
+    }
+    applyChipFilters();
   });
+});
+
+function applyChipFilters() {
+  const label = document.getElementById('active-filter-label');
+  const items = document.querySelectorAll('#inv-list .ph-item');
+  if (activeChips.size === 0) {
+    items.forEach(row => { if (!row.style.display || row.style.display === 'none') return; row.style.display = ''; });
+    applySearchFilter();
+    label.style.display = 'none';
+    return;
+  }
+  label.style.display = 'block';
+  items.forEach(row => {
+    const status = row.dataset.status;
+    const exp3m  = row.dataset.exp3m.includes('1');
+    const exp6m  = row.dataset.exp6m.includes('1');
+    const match =
+      (activeChips.has('ok')    && status === 'ok')  ||
+      (activeChips.has('low')   && status === 'low') ||
+      (activeChips.has('out')   && status === 'out') ||
+      (activeChips.has('exp3m') && exp3m)            ||
+      (activeChips.has('exp6m') && exp6m);
+    row.style.display = match ? '' : 'none';
+  });
+}
+
+function clearChipFilters() {
+  activeChips.clear();
+  document.querySelectorAll('.stat-chip').forEach(c => { c.style.opacity = '1'; c.style.outline = ''; });
+  document.querySelectorAll('#inv-list .ph-item').forEach(r => r.style.display = '');
+  document.getElementById('active-filter-label').style.display = 'none';
+  applySearchFilter();
+}
+
+// ── Text search (respects chip filter) ──
+let searchQuery = '';
+function applySearchFilter() {
+  document.querySelectorAll('#inv-list .ph-item').forEach(row => {
+    if (activeChips.size > 0 && row.style.display === 'none') return; // already hidden by chip
+    if (activeChips.size === 0) {
+      row.style.display = (!searchQuery || row.dataset.name.includes(searchQuery)) ? '' : 'none';
+    }
+  });
+}
+
+function filterInv(q) {
+  searchQuery = q.toLowerCase().trim();
+  if (activeChips.size > 0) {
+    // Re-apply chip filter first, then further restrict by search
+    applyChipFilters();
+    document.querySelectorAll('#inv-list .ph-item').forEach(row => {
+      if (row.style.display === 'none') return;
+      if (searchQuery && !row.dataset.name.includes(searchQuery)) row.style.display = 'none';
+    });
+  } else {
+    document.querySelectorAll('#inv-list .ph-item').forEach(row => {
+      row.style.display = (!searchQuery || row.dataset.name.includes(searchQuery)) ? '' : 'none';
+    });
+  }
 }
 </script>
 {% endblock %}

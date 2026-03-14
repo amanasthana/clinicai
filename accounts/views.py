@@ -1,6 +1,6 @@
 import logging
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -17,6 +17,7 @@ logger = logging.getLogger('accounts')
 
 from .forms import StyledAuthForm, ClinicSetupForm, AdminUserForm, AddStaffForm, ClinicRegistrationForm, ContactForm
 from .models import Clinic, StaffMember, ClinicRegistrationRequest, ContactMessage
+from .permissions import require_permission, set_permissions_from_role, ROLE_PERMISSIONS, ALL_PERMISSION_FLAGS
 
 
 def login_view(request):
@@ -32,7 +33,7 @@ def login_view(request):
     if request.method == 'POST':
         if form.is_valid():
             user = form.get_user()
-            if not hasattr(user, 'staff_profile') and not user.is_superuser:
+            if not user.is_superuser and not StaffMember.objects.filter(user=user).exists():
                 logger.warning('LOGIN_NO_PROFILE user=%s', form.cleaned_data.get('username'))
                 messages.error(request, 'Your account is not linked to any clinic. Contact your admin.')
                 return render(request, 'accounts/login.html', {'form': form})
@@ -100,7 +101,7 @@ def clinic_setup_view(request):
     })
 
 
-@login_required
+@require_permission('can_manage_staff')
 def plan_view(request):
     """Show the clinic's current plan, today's usage, and upgrade options."""
     from prescription.models import Prescription
@@ -134,7 +135,7 @@ def plan_view(request):
     })
 
 
-@login_required
+@require_permission('can_manage_staff')
 def staff_list_view(request):
     """List all staff at the logged-in user's clinic."""
     clinic = request.user.staff_profile.clinic
@@ -142,7 +143,7 @@ def staff_list_view(request):
     return render(request, 'accounts/staff_list.html', {'staff': staff, 'clinic': clinic})
 
 
-@login_required
+@require_permission('can_manage_staff')
 def add_staff_view(request):
     """Add a new staff member to the clinic."""
     clinic = request.user.staff_profile.clinic
@@ -156,7 +157,7 @@ def add_staff_view(request):
             first_name=cd['first_name'],
             last_name=cd['last_name'],
         )
-        StaffMember.objects.create(
+        sm = StaffMember.objects.create(
             user=user,
             clinic=clinic,
             role=cd['role'],
@@ -164,10 +165,79 @@ def add_staff_view(request):
             qualification=cd.get('qualification', ''),
             registration_number=cd.get('registration_number', ''),
         )
+        set_permissions_from_role(sm)
+        sm.save()
         messages.success(request, f"{cd['display_name']} added successfully.")
         return redirect('accounts:staff_list')
 
-    return render(request, 'accounts/add_staff.html', {'form': form, 'clinic': clinic})
+    import json as _json
+    return render(request, 'accounts/add_staff.html', {
+        'form': form,
+        'clinic': clinic,
+        'role_permissions': ROLE_PERMISSIONS,
+        'role_permissions_json': _json.dumps(ROLE_PERMISSIONS),
+    })
+
+
+@require_permission('can_manage_staff')
+def edit_staff_view(request, pk):
+    """Edit an existing staff member's details and permission flags."""
+    my_clinic = request.user.staff_profile.clinic
+    sm = get_object_or_404(StaffMember, pk=pk, clinic=my_clinic)
+
+    if request.method == 'POST':
+        # Basic fields
+        sm.display_name = request.POST.get('display_name', '').strip() or sm.display_name
+        sm.qualification = request.POST.get('qualification', '').strip()
+        sm.registration_number = request.POST.get('registration_number', '').strip()
+        new_role = request.POST.get('role', sm.role)
+        sm.role = new_role
+
+        # If "reset to role defaults" was requested, apply preset then override with POSTed checkboxes
+        if request.POST.get('reset_to_role'):
+            set_permissions_from_role(sm)
+        else:
+            # Save each flag from checkboxes
+            for flag in ALL_PERMISSION_FLAGS:
+                setattr(sm, flag, request.POST.get(flag) == 'on')
+
+        # Guard: cannot remove can_manage_staff from yourself if you're the only admin
+        if sm.user == request.user and not sm.can_manage_staff:
+            other_admins = my_clinic.staff.filter(can_manage_staff=True).exclude(pk=sm.pk)
+            if not other_admins.exists():
+                messages.error(request, 'You cannot remove staff management access from yourself — you are the only admin.')
+                return redirect('accounts:edit_staff', pk=pk)
+
+        sm.save()
+        messages.success(request, f'{sm.display_name} updated.')
+        return redirect('accounts:staff_list')
+
+    import json as _json
+    return render(request, 'accounts/edit_staff.html', {
+        'sm': sm,
+        'clinic': my_clinic,
+        'role_permissions': ROLE_PERMISSIONS,
+        'all_flags': ALL_PERMISSION_FLAGS,
+        'role_permissions_json': _json.dumps(ROLE_PERMISSIONS),
+    })
+
+
+@require_permission('can_manage_staff')
+@require_POST
+def delete_staff_view(request, pk):
+    """Remove a staff member from this clinic. Does not delete the Django User."""
+    my_clinic = request.user.staff_profile.clinic
+    sm = get_object_or_404(StaffMember, pk=pk, clinic=my_clinic)
+
+    # Cannot delete yourself
+    if sm.user == request.user:
+        messages.error(request, 'You cannot remove yourself from the clinic.')
+        return redirect('accounts:staff_list')
+
+    name = sm.display_name
+    sm.delete()
+    messages.success(request, f'{name} has been removed from the clinic.')
+    return redirect('accounts:staff_list')
 
 
 def register_view(request):
@@ -330,14 +400,10 @@ def update_preference_api(request):
     return JsonResponse({'ok': True})
 
 
-@login_required
+@require_permission('can_manage_staff')
 def letterhead_view(request):
     """Upload and configure clinic letterhead for prescription printing."""
     staff = request.user.staff_profile
-    if staff.role not in ('admin', 'doctor'):
-        messages.error(request, 'Only clinic admins and doctors can manage letterhead.')
-        return redirect('reception:dashboard')
-
     clinic = staff.clinic
 
     if request.method == 'POST':
@@ -404,7 +470,7 @@ def reset_clinic_password_view(request, pk):
             user.save(update_fields=['password'])
 
             # Ensure StaffMember exists
-            if not hasattr(user, 'staff_profile'):
+            if not StaffMember.objects.filter(user=user).exists():
                 StaffMember.objects.create(
                     user=user, clinic=clinic, role='admin',
                     display_name=reg.doctor_name,
@@ -426,6 +492,74 @@ def reset_clinic_password_view(request, pk):
     return redirect('accounts:admin_panel')
 
 
+@login_required
+@require_POST
+def switch_clinic_view(request):
+    """Set the active clinic by storing a StaffMember PK in the session."""
+    from django.http import JsonResponse as _JsonResponse
+    staff_id = request.POST.get('staff_id')
+    if not staff_id:
+        messages.error(request, 'No clinic specified.')
+        return redirect('reception:dashboard')
+
+    try:
+        staff_id = int(staff_id)
+    except (ValueError, TypeError):
+        messages.error(request, 'Invalid clinic selection.')
+        return redirect('reception:dashboard')
+
+    # Verify this membership belongs to the current user
+    membership = StaffMember.objects.filter(pk=staff_id, user=request.user).select_related('clinic').first()
+    if not membership:
+        messages.error(request, 'You do not have access to that clinic.')
+        return redirect('reception:dashboard')
+
+    request.session['active_staff_id'] = staff_id
+    messages.success(request, f'Switched to {membership.clinic.name}.')
+    next_url = request.POST.get('next', '/')
+    return redirect(next_url)
+
+
+@login_required
+def add_clinic_view(request):
+    """Self-serve: create a new clinic and add the current user as a staff member."""
+    if request.method == 'POST':
+        clinic_name = request.POST.get('clinic_name', '').strip()
+        city = request.POST.get('city', '').strip()
+        address = request.POST.get('address', '').strip()
+        phone = request.POST.get('clinic_phone', '').strip()
+        role = request.POST.get('role', 'doctor')
+        display_name = request.POST.get('display_name', '').strip()
+        qualification = request.POST.get('qualification', '').strip()
+        registration_number = request.POST.get('registration_number', '').strip()
+
+        if not clinic_name or not display_name:
+            messages.error(request, 'Clinic name and your display name are required.')
+            return redirect('accounts:add_clinic')
+
+        clinic = Clinic.objects.create(
+            name=clinic_name,
+            city=city,
+            address=address,
+            phone=phone,
+        )
+        sm = StaffMember.objects.create(
+            user=request.user,
+            clinic=clinic,
+            role=role,
+            display_name=display_name,
+            qualification=qualification,
+            registration_number=registration_number,
+        )
+        # Immediately switch to the new clinic
+        request.session['active_staff_id'] = sm.pk
+        messages.success(request, f'{clinic_name} added. You are now working at this clinic.')
+        return redirect('reception:dashboard')
+
+    # GET: show form — no clinic list exposed
+    return render(request, 'accounts/add_clinic.html')
+
+
 def check_user_view(request, phone):
     """Superuser-only debug: verify if a registered user account is healthy."""
     from django.http import JsonResponse
@@ -435,13 +569,14 @@ def check_user_view(request, phone):
         u = User.objects.get(username=phone)
     except User.DoesNotExist:
         return JsonResponse({'exists': False, 'phone': phone})
-    has_staff = hasattr(u, 'staff_profile')
+    first_membership = StaffMember.objects.filter(user=u).select_related('clinic').first()
+    has_staff = first_membership is not None
     return JsonResponse({
         'exists': True,
         'phone': phone,
         'is_active': u.is_active,
         'has_staff_profile': has_staff,
-        'role': u.staff_profile.role if has_staff else None,
-        'clinic': u.staff_profile.clinic.name if has_staff else None,
+        'role': first_membership.role if has_staff else None,
+        'clinic': first_membership.clinic.name if has_staff else None,
         'date_joined': str(u.date_joined),
     })
