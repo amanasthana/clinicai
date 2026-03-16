@@ -2,7 +2,7 @@
 Tests for multi-clinic support (Phase 5) and regression for existing features.
 """
 import json
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -651,3 +651,191 @@ class RBACAnalyticsTest(TestCase):
         c = Client()
         c.login(username='rbac_analytics_override', password='testpass123')
         self.assertEqual(c.get('/analytics/').status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# Password Reset (OTP via Fast2SMS) Tests
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch, MagicMock
+from django.core.cache import cache
+
+
+class ForgotPasswordFlowTest(TestCase):
+    """Tests for the full forgot-password OTP flow."""
+
+    def setUp(self):
+        self.clinic = make_clinic('OTP Test Clinic')
+        self.user = make_user('9876543210', password='oldpass123')
+        make_membership(self.user, self.clinic, role='doctor', display_name='OTP Doc')
+        self.client = Client()
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    # --- forgot_password_view ---
+
+    def test_forgot_password_page_loads(self):
+        resp = self.client.get('/accounts/forgot-password/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_forgot_password_invalid_phone_shows_error(self):
+        resp = self.client.post('/accounts/forgot-password/', {'phone': '123'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'valid 10-digit')
+
+    def test_forgot_password_unknown_phone_still_redirects(self):
+        """Security: don't reveal if phone is registered."""
+        resp = self.client.post('/accounts/forgot-password/', {'phone': '9000000000'})
+        self.assertRedirects(resp, '/accounts/verify-otp/')
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_forgot_password_known_phone_sends_otp_and_redirects(self, mock_sms):
+        mock_sms.return_value = (True, None)
+        resp = self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        self.assertRedirects(resp, '/accounts/verify-otp/')
+        mock_sms.assert_called_once()
+        # OTP stored in cache
+        self.assertIsNotNone(cache.get('pwd_reset_otp:9876543210'))
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_forgot_password_sms_failure_shows_error(self, mock_sms):
+        mock_sms.return_value = (False, 'SMS delivery failed.')
+        resp = self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'SMS delivery failed')
+
+    # --- _send_otp_fast2sms: API key configured check ---
+
+    @override_settings(FAST2SMS_API_KEY='')
+    def test_send_otp_fails_gracefully_when_api_key_missing(self):
+        from accounts.views import _send_otp_fast2sms
+        ok, err = _send_otp_fast2sms('9876543210', '123456')
+        self.assertFalse(ok)
+        self.assertIn('not configured', err)
+
+    @override_settings(FAST2SMS_API_KEY='test_key_123')
+    def test_send_otp_calls_fast2sms_api(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {'return': True, 'request_id': 'abc123', 'message': ['Request Submitted Successfully']}
+        with patch('requests.get', return_value=mock_resp):
+            from accounts.views import _send_otp_fast2sms
+            ok, err = _send_otp_fast2sms('9876543210', '654321')
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+
+    # --- verify_otp_view ---
+
+    def test_verify_otp_without_session_redirects(self):
+        resp = self.client.get('/accounts/verify-otp/')
+        self.assertRedirects(resp, '/accounts/forgot-password/')
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_verify_otp_correct_code_grants_reset(self, mock_sms):
+        mock_sms.return_value = (True, None)
+        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        otp = cache.get('pwd_reset_otp:9876543210')
+        resp = self.client.post('/accounts/verify-otp/', {'otp': otp})
+        self.assertRedirects(resp, '/accounts/reset-password/')
+        self.assertTrue(cache.get('pwd_reset_verified:9876543210'))
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_verify_otp_wrong_code_shows_error(self, mock_sms):
+        mock_sms.return_value = (True, None)
+        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        resp = self.client.post('/accounts/verify-otp/', {'otp': '000000'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Incorrect OTP')
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_verify_otp_lockout_after_5_attempts(self, mock_sms):
+        mock_sms.return_value = (True, None)
+        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        cache.set('pwd_reset_attempts:9876543210', 5, timeout=600)
+        resp = self.client.post('/accounts/verify-otp/', {'otp': '000000'})
+        self.assertContains(resp, 'Too many incorrect')
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_verify_otp_expired_shows_error(self, mock_sms):
+        mock_sms.return_value = (True, None)
+        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        cache.delete('pwd_reset_otp:9876543210')  # simulate expiry
+        resp = self.client.post('/accounts/verify-otp/', {'otp': '123456'})
+        self.assertContains(resp, 'expired')
+
+    # --- reset_password_view ---
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_reset_password_sets_new_password(self, mock_sms):
+        mock_sms.return_value = (True, None)
+        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        otp = cache.get('pwd_reset_otp:9876543210')
+        self.client.post('/accounts/verify-otp/', {'otp': otp})
+        resp = self.client.post('/accounts/reset-password/', {
+            'password1': 'newpass9876', 'password2': 'newpass9876'
+        })
+        self.assertRedirects(resp, '/accounts/login/')
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('newpass9876'))
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_reset_password_mismatch_shows_error(self, mock_sms):
+        mock_sms.return_value = (True, None)
+        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        otp = cache.get('pwd_reset_otp:9876543210')
+        self.client.post('/accounts/verify-otp/', {'otp': otp})
+        resp = self.client.post('/accounts/reset-password/', {
+            'password1': 'newpass9876', 'password2': 'different'
+        })
+        self.assertContains(resp, 'do not match')
+
+    @patch('accounts.views._send_otp_fast2sms')
+    def test_reset_password_too_short_shows_error(self, mock_sms):
+        mock_sms.return_value = (True, None)
+        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+        otp = cache.get('pwd_reset_otp:9876543210')
+        self.client.post('/accounts/verify-otp/', {'otp': otp})
+        resp = self.client.post('/accounts/reset-password/', {
+            'password1': 'short', 'password2': 'short'
+        })
+        self.assertContains(resp, '8 characters')
+
+    def test_reset_password_without_verified_session_redirects(self):
+        resp = self.client.get('/accounts/reset-password/')
+        self.assertRedirects(resp, '/accounts/forgot-password/')
+
+    # --- change_password_view ---
+
+    def test_change_password_requires_login(self):
+        resp = self.client.get('/accounts/change-password/')
+        self.assertRedirects(resp, '/accounts/login/?next=/accounts/change-password/')
+
+    def test_change_password_wrong_current_password(self):
+        self.client.login(username='9876543210', password='oldpass123')
+        resp = self.client.post('/accounts/change-password/', {
+            'current_password': 'wrongpass',
+            'password1': 'newpass9876',
+            'password2': 'newpass9876',
+        })
+        self.assertContains(resp, 'incorrect')
+
+    def test_change_password_success(self):
+        self.client.login(username='9876543210', password='oldpass123')
+        resp = self.client.post('/accounts/change-password/', {
+            'current_password': 'oldpass123',
+            'password1': 'newpass9876',
+            'password2': 'newpass9876',
+        })
+        self.assertRedirects(resp, '/')
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('newpass9876'))
+
+    def test_change_password_mismatch(self):
+        self.client.login(username='9876543210', password='oldpass123')
+        resp = self.client.post('/accounts/change-password/', {
+            'current_password': 'oldpass123',
+            'password1': 'newpass9876',
+            'password2': 'different',
+        })
+        self.assertContains(resp, 'do not match')
