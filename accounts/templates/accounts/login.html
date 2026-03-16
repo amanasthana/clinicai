@@ -223,9 +223,12 @@
           {{ form.username }}
         </div>
 
-        <div class="form-group" style="margin-bottom: 24px;">
+        <div class="form-group" style="margin-bottom: 8px;">
           <label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
           {{ form.password }}
+        </div>
+        <div style="text-align:right; margin-bottom: 20px;">
+          <a href="/accounts/forgot-password/" style="font-size:13px; color:#2563EB; text-decoration:none;">Forgot password?</a>
         </div>
 
         <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; font-size: 15px;">

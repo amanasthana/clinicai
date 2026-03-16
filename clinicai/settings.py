@@ -119,6 +119,16 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 # Anthropic AI
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
 
+# Fast2SMS (OTP for password reset)
+FAST2SMS_API_KEY = env('FAST2SMS_API_KEY', default='')
+
+# Django cache (used for OTP storage — in-memory is fine for single-instance)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+
 # Pricing / Usage limits
 FREE_DAILY_RX_LIMIT = 30   # prescriptions per clinic per day on free plan
 

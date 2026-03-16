@@ -93,6 +93,8 @@
         {{ user.staff_profile.display_name }}
       </span>
 
+      <a href="/accounts/change-password/" class="btn btn-secondary btn-sm" style="text-decoration:none;">Password</a>
+
       <form method="post" action="/accounts/logout/" style="margin:0;">
         {% csrf_token %}
         <button type="submit" class="btn btn-secondary btn-sm">Logout</button>
@@ -148,6 +150,7 @@
     {% if user.is_superuser %}
     <a href="/accounts/admin-panel/" style="color:#7C3AED; font-weight:600;">Admin Panel</a>
     {% endif %}
+    <a href="/accounts/change-password/">Change Password</a>
     <div class="nm-logout-wrap">
       <form method="post" action="/accounts/logout/">
         {% csrf_token %}
