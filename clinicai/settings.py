@@ -119,10 +119,17 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 # Anthropic AI
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
 
-# Fast2SMS (OTP for password reset)
-FAST2SMS_API_KEY = env('FAST2SMS_API_KEY', default='')
+# Email (password reset via Brevo SMTP)
+EMAIL_BACKEND      = env('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST         = 'smtp-relay.brevo.com'
+EMAIL_PORT         = 587
+EMAIL_USE_TLS      = True
+EMAIL_HOST_USER    = env('BREVO_SMTP_USER', default='')
+EMAIL_HOST_PASSWORD = env('BREVO_SMTP_KEY', default='')
+DEFAULT_FROM_EMAIL = 'ClinicAI <noreply@clinicai.in>'
+PASSWORD_RESET_TIMEOUT = 3 * 24 * 3600  # 3 days
 
-# Django cache (used for OTP storage — in-memory is fine for single-instance)
+# Django cache (in-memory is fine for single-instance)
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',

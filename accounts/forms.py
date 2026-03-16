@@ -48,6 +48,10 @@ class AdminUserForm(forms.Form):
         max_length=150,
         widget=forms.TextInput(attrs={'class': 'input-field', 'placeholder': 'Username for login'}),
     )
+    email = forms.EmailField(
+        required=False,
+        widget=forms.EmailInput(attrs={'class': 'input-field', 'placeholder': 'doctor@example.com (optional — needed for password reset)'}),
+    )
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={'class': 'input-field', 'placeholder': 'Set a password'}),
         min_length=8,
@@ -79,6 +83,10 @@ class AddStaffForm(forms.Form):
     first_name = forms.CharField(max_length=50, widget=forms.TextInput(attrs={'class': 'input-field'}))
     last_name = forms.CharField(max_length=50, widget=forms.TextInput(attrs={'class': 'input-field'}))
     username = forms.CharField(max_length=150, widget=forms.TextInput(attrs={'class': 'input-field'}))
+    email = forms.EmailField(
+        required=False,
+        widget=forms.EmailInput(attrs={'class': 'input-field', 'placeholder': 'staff@example.com (optional — needed for password reset)'}),
+    )
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={'class': 'input-field'}), min_length=8
     )
@@ -146,8 +154,8 @@ class ClinicRegistrationForm(forms.Form):
         help_text='This will be your login username.',
     )
     email = forms.EmailField(
-        required=False,
-        widget=forms.EmailInput(attrs={'class': 'input-field', 'placeholder': 'doctor@example.com — optional'}),
+        required=True,
+        widget=forms.EmailInput(attrs={'class': 'input-field', 'placeholder': 'doctor@example.com'}),
     )
     password = forms.CharField(
         min_length=8,

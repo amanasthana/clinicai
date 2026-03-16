@@ -82,6 +82,7 @@ def clinic_setup_view(request):
             password=cd['password'],
             first_name=cd['first_name'],
             last_name=cd['last_name'],
+            email=cd.get('email', '') or '',
         )
         StaffMember.objects.create(
             user=user,
@@ -156,6 +157,7 @@ def add_staff_view(request):
             password=cd['password'],
             first_name=cd['first_name'],
             last_name=cd['last_name'],
+            email=cd.get('email', '') or '',
         )
         sm = StaffMember.objects.create(
             user=user,
@@ -560,158 +562,6 @@ def add_clinic_view(request):
     return render(request, 'accounts/add_clinic.html')
 
 
-def _send_otp_fast2sms(phone, otp):
-    """Send OTP via Fast2SMS Dev API. Returns (success, error_message)."""
-    import requests as _req
-    api_key = settings.FAST2SMS_API_KEY
-    if not api_key:
-        logger.error('FAST2SMS_API_KEY not configured')
-        return False, 'SMS service not configured.'
-    try:
-        resp = _req.get(
-            'https://www.fast2sms.com/dev/bulkV2',
-            params={
-                'authorization': api_key,
-                'variables_values': str(otp),
-                'route': 'otp',
-                'numbers': phone,
-            },
-            timeout=8,
-        )
-        data = resp.json()
-        logger.info('FAST2SMS_RESPONSE phone=%s data=%s', phone, data)
-        if data.get('return'):
-            return True, None
-        # message can be a list or a plain string depending on error type
-        raw = data.get('message', 'SMS delivery failed.')
-        err_msg = raw[0] if isinstance(raw, list) else str(raw)
-        logger.error('FAST2SMS_FAILED phone=%s err=%s', phone, err_msg)
-        return False, err_msg
-    except Exception as e:
-        logger.error('FAST2SMS_ERROR %s', e)
-        return False, 'Could not send OTP. Try again.'
-
-
-def forgot_password_view(request):
-    """Step 1: user enters their 10-digit registered mobile number."""
-    if request.user.is_authenticated:
-        return redirect('reception:dashboard')
-
-    error = None
-    if request.method == 'POST':
-        import random
-        from django.core.cache import cache
-
-        phone = request.POST.get('phone', '').strip()
-        if not phone.isdigit() or len(phone) != 10:
-            error = 'Enter a valid 10-digit mobile number.'
-        else:
-            user = User.objects.filter(username=phone).first()
-            if not user:
-                # Don't reveal whether number exists — show same success message
-                request.session['otp_phone'] = phone
-                return redirect('accounts:verify_otp')
-
-            otp = str(random.randint(100000, 999999))
-            cache.set(f'pwd_reset_otp:{phone}', otp, timeout=600)   # 10 min
-            cache.set(f'pwd_reset_attempts:{phone}', 0, timeout=600)
-            ok, err = _send_otp_fast2sms(phone, otp)
-            if not ok:
-                error = err
-            else:
-                request.session['otp_phone'] = phone
-                return redirect('accounts:verify_otp')
-
-    return render(request, 'accounts/forgot_password.html', {'error': error})
-
-
-def verify_otp_view(request):
-    """Step 2: user enters the 6-digit OTP."""
-    if request.user.is_authenticated:
-        return redirect('reception:dashboard')
-
-    from django.core.cache import cache
-
-    phone = request.session.get('otp_phone')
-    if not phone:
-        return redirect('accounts:forgot_password')
-
-    error = None
-    if request.method == 'POST':
-        entered = request.POST.get('otp', '').strip()
-        attempts = cache.get(f'pwd_reset_attempts:{phone}', 0)
-
-        if attempts >= 5:
-            error = 'Too many incorrect attempts. Please request a new OTP.'
-        elif not entered.isdigit() or len(entered) != 6:
-            error = 'Enter the 6-digit OTP.'
-        else:
-            stored_otp = cache.get(f'pwd_reset_otp:{phone}')
-            if stored_otp is None:
-                error = 'OTP has expired. Please request a new one.'
-            elif entered != stored_otp:
-                cache.set(f'pwd_reset_attempts:{phone}', attempts + 1, timeout=600)
-                error = 'Incorrect OTP. Please try again.'
-            else:
-                # OTP correct — grant reset token
-                cache.delete(f'pwd_reset_otp:{phone}')
-                cache.delete(f'pwd_reset_attempts:{phone}')
-                cache.set(f'pwd_reset_verified:{phone}', True, timeout=300)  # 5 min to set new password
-                return redirect('accounts:reset_password')
-
-    return render(request, 'accounts/verify_otp.html', {'phone': phone, 'error': error})
-
-
-def resend_otp_view(request):
-    """Resend OTP to the same phone stored in session."""
-    import random
-    from django.core.cache import cache
-
-    phone = request.session.get('otp_phone')
-    if not phone:
-        return redirect('accounts:forgot_password')
-
-    otp = str(random.randint(100000, 999999))
-    cache.set(f'pwd_reset_otp:{phone}', otp, timeout=600)
-    cache.set(f'pwd_reset_attempts:{phone}', 0, timeout=600)
-    _send_otp_fast2sms(phone, otp)
-    messages.success(request, 'A new OTP has been sent.')
-    return redirect('accounts:verify_otp')
-
-
-def reset_password_view(request):
-    """Step 3: user sets a new password after OTP is verified."""
-    if request.user.is_authenticated:
-        return redirect('reception:dashboard')
-
-    from django.core.cache import cache
-
-    phone = request.session.get('otp_phone')
-    if not phone or not cache.get(f'pwd_reset_verified:{phone}'):
-        messages.error(request, 'Session expired. Please start again.')
-        return redirect('accounts:forgot_password')
-
-    error = None
-    if request.method == 'POST':
-        pw1 = request.POST.get('password1', '')
-        pw2 = request.POST.get('password2', '')
-        if len(pw1) < 8:
-            error = 'Password must be at least 8 characters.'
-        elif pw1 != pw2:
-            error = 'Passwords do not match.'
-        else:
-            user = User.objects.filter(username=phone).first()
-            if user:
-                user.set_password(pw1)
-                user.save()
-            cache.delete(f'pwd_reset_verified:{phone}')
-            del request.session['otp_phone']
-            messages.success(request, 'Password changed successfully. Please log in.')
-            return redirect('accounts:login')
-
-    return render(request, 'accounts/reset_password.html', {'error': error})
-
-
 @login_required
 def change_password_view(request):
     """Logged-in user changes their own password."""
@@ -737,6 +587,30 @@ def change_password_view(request):
             return redirect('reception:dashboard')
 
     return render(request, 'accounts/change_password.html', {'error': error})
+
+
+@login_required
+def update_email_view(request):
+    """AJAX: save or update the logged-in user's email address."""
+    from django.http import JsonResponse
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST required'}, status=405)
+    email = request.POST.get('email', '').strip().lower()
+    if not email:
+        return JsonResponse({'ok': False, 'error': 'Email address is required.'})
+    from django.core.validators import validate_email
+    from django.core.exceptions import ValidationError
+    try:
+        validate_email(email)
+    except ValidationError:
+        return JsonResponse({'ok': False, 'error': 'Enter a valid email address.'})
+    # Check not already used by another user
+    from django.contrib.auth.models import User as _User
+    if _User.objects.filter(email__iexact=email).exclude(pk=request.user.pk).exists():
+        return JsonResponse({'ok': False, 'error': 'This email is already linked to another account.'})
+    request.user.email = email
+    request.user.save(update_fields=['email'])
+    return JsonResponse({'ok': True})
 
 
 def check_user_view(request, phone):

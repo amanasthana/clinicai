@@ -654,188 +654,185 @@ class RBACAnalyticsTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Password Reset (OTP via Fast2SMS) Tests
+# Email Nudge and Password Reset Tests
 # ---------------------------------------------------------------------------
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from django.core.cache import cache
 
 
-class ForgotPasswordFlowTest(TestCase):
-    """Tests for the full forgot-password OTP flow."""
+class EmailNudgeAndUpdateTest(TestCase):
+    """Tests for email nudge and update_email endpoint."""
 
     def setUp(self):
-        self.clinic = make_clinic('OTP Test Clinic')
-        self.user = make_user('9876543210', password='oldpass123')
-        make_membership(self.user, self.clinic, role='doctor', display_name='OTP Doc')
-        self.client = Client()
-        cache.clear()
+        self.clinic = make_clinic('Email Nudge Clinic')
+        self.user_no_email = make_user('9111000001', password='testpass123')
+        self.user_no_email.email = ''
+        self.user_no_email.save()
+        make_membership(self.user_no_email, self.clinic, role='doctor', display_name='No Email Doc')
 
-    def tearDown(self):
-        cache.clear()
+        self.user_with_email = make_user('9111000002', password='testpass123')
+        self.user_with_email.email = 'doc@clinic.com'
+        self.user_with_email.save()
+        make_membership(self.user_with_email, self.clinic, role='doctor', display_name='Has Email Doc')
 
-    # --- forgot_password_view ---
+    def test_nudge_shown_when_email_missing(self):
+        self.client.login(username='9111000001', password='testpass123')
+        resp = self.client.get('/')
+        self.assertContains(resp, 'Add your email address')
+
+    def test_nudge_hidden_when_email_present(self):
+        self.client.login(username='9111000002', password='testpass123')
+        resp = self.client.get('/')
+        self.assertNotContains(resp, 'Add your email address')
+
+    def test_update_email_requires_login(self):
+        resp = self.client.post('/accounts/update-email/', {'email': 'x@x.com'})
+        self.assertEqual(resp.status_code, 302)
+
+    def test_update_email_saves_valid_email(self):
+        self.client.login(username='9111000001', password='testpass123')
+        resp = self.client.post('/accounts/update-email/', {'email': 'newemail@clinic.com'})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.user_no_email.refresh_from_db()
+        self.assertEqual(self.user_no_email.email, 'newemail@clinic.com')
+
+    def test_update_email_rejects_invalid_email(self):
+        self.client.login(username='9111000001', password='testpass123')
+        resp = self.client.post('/accounts/update-email/', {'email': 'notanemail'})
+        data = resp.json()
+        self.assertFalse(data['ok'])
+
+    def test_update_email_rejects_duplicate(self):
+        self.client.login(username='9111000001', password='testpass123')
+        resp = self.client.post('/accounts/update-email/', {'email': 'doc@clinic.com'})
+        data = resp.json()
+        self.assertFalse(data['ok'])
+        self.assertIn('already linked', data['error'])
+
+    def test_update_email_rejects_empty(self):
+        self.client.login(username='9111000001', password='testpass123')
+        resp = self.client.post('/accounts/update-email/', {'email': ''})
+        data = resp.json()
+        self.assertFalse(data['ok'])
+
+
+class ForgotPasswordEmailTest(TestCase):
+    """Tests for email-based password reset flow."""
+
+    def setUp(self):
+        self.clinic = make_clinic('Reset Email Clinic')
+        self.user = make_user('9222000001', password='oldpass123')
+        self.user.email = 'reset@clinic.com'
+        self.user.save()
+        make_membership(self.user, self.clinic, role='doctor', display_name='Reset Doc')
 
     def test_forgot_password_page_loads(self):
         resp = self.client.get('/accounts/forgot-password/')
         self.assertEqual(resp.status_code, 200)
 
-    def test_forgot_password_invalid_phone_shows_error(self):
-        resp = self.client.post('/accounts/forgot-password/', {'phone': '123'})
+    def test_forgot_password_with_known_email_sends_email(self):
+        from django.core import mail
+        with self.settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
+            resp = self.client.post('/accounts/forgot-password/', {'email': 'reset@clinic.com'})
+        self.assertRedirects(resp, '/accounts/forgot-password/sent/')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('reset@clinic.com', mail.outbox[0].to)
+
+    def test_forgot_password_with_unknown_email_no_error(self):
+        """Security: don't reveal whether email exists."""
+        from django.core import mail
+        with self.settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
+            resp = self.client.post('/accounts/forgot-password/', {'email': 'nobody@x.com'})
+        self.assertRedirects(resp, '/accounts/forgot-password/sent/')
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_forgot_password_done_page_loads(self):
+        resp = self.client.get('/accounts/forgot-password/sent/')
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'valid 10-digit')
 
-    def test_forgot_password_unknown_phone_still_redirects(self):
-        """Security: don't reveal if phone is registered."""
-        resp = self.client.post('/accounts/forgot-password/', {'phone': '9000000000'})
-        self.assertRedirects(resp, '/accounts/verify-otp/')
-
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_forgot_password_known_phone_sends_otp_and_redirects(self, mock_sms):
-        mock_sms.return_value = (True, None)
-        resp = self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
-        self.assertRedirects(resp, '/accounts/verify-otp/')
-        mock_sms.assert_called_once()
-        # OTP stored in cache
-        self.assertIsNotNone(cache.get('pwd_reset_otp:9876543210'))
-
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_forgot_password_sms_failure_shows_error(self, mock_sms):
-        mock_sms.return_value = (False, 'SMS delivery failed.')
-        resp = self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
+    def test_reset_confirm_with_invalid_token_shows_error(self):
+        resp = self.client.get('/accounts/reset/bad-uid/bad-token/')
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'SMS delivery failed')
+        self.assertContains(resp, 'invalid or has expired')
 
-    # --- _send_otp_fast2sms: API key configured check ---
-
-    @override_settings(FAST2SMS_API_KEY='')
-    def test_send_otp_fails_gracefully_when_api_key_missing(self):
-        from accounts.views import _send_otp_fast2sms
-        ok, err = _send_otp_fast2sms('9876543210', '123456')
-        self.assertFalse(ok)
-        self.assertIn('not configured', err)
-
-    @override_settings(FAST2SMS_API_KEY='test_key_123')
-    def test_send_otp_calls_fast2sms_api(self):
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {'return': True, 'request_id': 'abc123', 'message': ['Request Submitted Successfully']}
-        with patch('requests.get', return_value=mock_resp):
-            from accounts.views import _send_otp_fast2sms
-            ok, err = _send_otp_fast2sms('9876543210', '654321')
-        self.assertTrue(ok)
-        self.assertIsNone(err)
-
-    # --- verify_otp_view ---
-
-    def test_verify_otp_without_session_redirects(self):
-        resp = self.client.get('/accounts/verify-otp/')
-        self.assertRedirects(resp, '/accounts/forgot-password/')
-
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_verify_otp_correct_code_grants_reset(self, mock_sms):
-        mock_sms.return_value = (True, None)
-        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
-        otp = cache.get('pwd_reset_otp:9876543210')
-        resp = self.client.post('/accounts/verify-otp/', {'otp': otp})
-        self.assertRedirects(resp, '/accounts/reset-password/')
-        self.assertTrue(cache.get('pwd_reset_verified:9876543210'))
-
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_verify_otp_wrong_code_shows_error(self, mock_sms):
-        mock_sms.return_value = (True, None)
-        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
-        resp = self.client.post('/accounts/verify-otp/', {'otp': '000000'})
+    def test_reset_complete_page_loads(self):
+        resp = self.client.get('/accounts/reset/done/')
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'Incorrect OTP')
 
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_verify_otp_lockout_after_5_attempts(self, mock_sms):
-        mock_sms.return_value = (True, None)
-        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
-        cache.set('pwd_reset_attempts:9876543210', 5, timeout=600)
-        resp = self.client.post('/accounts/verify-otp/', {'otp': '000000'})
-        self.assertContains(resp, 'Too many incorrect')
 
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_verify_otp_expired_shows_error(self, mock_sms):
-        mock_sms.return_value = (True, None)
-        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
-        cache.delete('pwd_reset_otp:9876543210')  # simulate expiry
-        resp = self.client.post('/accounts/verify-otp/', {'otp': '123456'})
-        self.assertContains(resp, 'expired')
+class ChangePasswordTest(TestCase):
+    """Tests for change password (logged-in user)."""
 
-    # --- reset_password_view ---
-
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_reset_password_sets_new_password(self, mock_sms):
-        mock_sms.return_value = (True, None)
-        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
-        otp = cache.get('pwd_reset_otp:9876543210')
-        self.client.post('/accounts/verify-otp/', {'otp': otp})
-        resp = self.client.post('/accounts/reset-password/', {
-            'password1': 'newpass9876', 'password2': 'newpass9876'
-        })
-        self.assertRedirects(resp, '/accounts/login/')
-        self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password('newpass9876'))
-
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_reset_password_mismatch_shows_error(self, mock_sms):
-        mock_sms.return_value = (True, None)
-        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
-        otp = cache.get('pwd_reset_otp:9876543210')
-        self.client.post('/accounts/verify-otp/', {'otp': otp})
-        resp = self.client.post('/accounts/reset-password/', {
-            'password1': 'newpass9876', 'password2': 'different'
-        })
-        self.assertContains(resp, 'do not match')
-
-    @patch('accounts.views._send_otp_fast2sms')
-    def test_reset_password_too_short_shows_error(self, mock_sms):
-        mock_sms.return_value = (True, None)
-        self.client.post('/accounts/forgot-password/', {'phone': '9876543210'})
-        otp = cache.get('pwd_reset_otp:9876543210')
-        self.client.post('/accounts/verify-otp/', {'otp': otp})
-        resp = self.client.post('/accounts/reset-password/', {
-            'password1': 'short', 'password2': 'short'
-        })
-        self.assertContains(resp, '8 characters')
-
-    def test_reset_password_without_verified_session_redirects(self):
-        resp = self.client.get('/accounts/reset-password/')
-        self.assertRedirects(resp, '/accounts/forgot-password/')
-
-    # --- change_password_view ---
+    def setUp(self):
+        self.clinic = make_clinic('Change PW Clinic')
+        self.user = make_user('9333000001', password='oldpass123')
+        make_membership(self.user, self.clinic, role='doctor', display_name='Change PW Doc')
 
     def test_change_password_requires_login(self):
         resp = self.client.get('/accounts/change-password/')
         self.assertRedirects(resp, '/accounts/login/?next=/accounts/change-password/')
 
-    def test_change_password_wrong_current_password(self):
-        self.client.login(username='9876543210', password='oldpass123')
+    def test_change_password_wrong_current(self):
+        self.client.login(username='9333000001', password='oldpass123')
         resp = self.client.post('/accounts/change-password/', {
-            'current_password': 'wrongpass',
-            'password1': 'newpass9876',
-            'password2': 'newpass9876',
+            'current_password': 'wrongpass', 'password1': 'newpass9876', 'password2': 'newpass9876',
         })
         self.assertContains(resp, 'incorrect')
 
     def test_change_password_success(self):
-        self.client.login(username='9876543210', password='oldpass123')
+        self.client.login(username='9333000001', password='oldpass123')
         resp = self.client.post('/accounts/change-password/', {
-            'current_password': 'oldpass123',
-            'password1': 'newpass9876',
-            'password2': 'newpass9876',
+            'current_password': 'oldpass123', 'password1': 'newpass9876', 'password2': 'newpass9876',
         })
         self.assertRedirects(resp, '/')
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password('newpass9876'))
 
     def test_change_password_mismatch(self):
-        self.client.login(username='9876543210', password='oldpass123')
+        self.client.login(username='9333000001', password='oldpass123')
         resp = self.client.post('/accounts/change-password/', {
-            'current_password': 'oldpass123',
-            'password1': 'newpass9876',
-            'password2': 'different',
+            'current_password': 'oldpass123', 'password1': 'newpass9876', 'password2': 'different',
         })
         self.assertContains(resp, 'do not match')
+
+    def test_change_password_too_short(self):
+        self.client.login(username='9333000001', password='oldpass123')
+        resp = self.client.post('/accounts/change-password/', {
+            'current_password': 'oldpass123', 'password1': 'short', 'password2': 'short',
+        })
+        self.assertContains(resp, '8 characters')
+
+
+class AddStaffEmailTest(TestCase):
+    """Test that email is collected when adding staff."""
+
+    def setUp(self):
+        self.clinic = make_clinic('Staff Email Clinic')
+        self.admin = make_user('9444000001', password='testpass123')
+        make_membership(self.admin, self.clinic, role='admin', display_name='Admin')
+
+    def test_add_staff_saves_email(self):
+        self.client.login(username='9444000001', password='testpass123')
+        resp = self.client.post('/accounts/staff/add/', {
+            'first_name': 'Jane', 'last_name': 'Doe',
+            'username': '9555000001', 'password': 'staffpass123',
+            'display_name': 'Jane Doe', 'role': 'receptionist',
+            'email': 'jane@clinic.com',
+        })
+        self.assertRedirects(resp, '/accounts/staff/')
+        from django.contrib.auth.models import User
+        u = User.objects.get(username='9555000001')
+        self.assertEqual(u.email, 'jane@clinic.com')
+
+    def test_add_staff_without_email_works(self):
+        self.client.login(username='9444000001', password='testpass123')
+        resp = self.client.post('/accounts/staff/add/', {
+            'first_name': 'John', 'last_name': 'Doe',
+            'username': '9555000002', 'password': 'staffpass123',
+            'display_name': 'John Doe', 'role': 'receptionist',
+            'email': '',
+        })
+        self.assertRedirects(resp, '/accounts/staff/')
