@@ -579,9 +579,14 @@ def _send_otp_fast2sms(phone, otp):
             timeout=8,
         )
         data = resp.json()
+        logger.info('FAST2SMS_RESPONSE phone=%s data=%s', phone, data)
         if data.get('return'):
             return True, None
-        return False, data.get('message', ['SMS delivery failed.'])[0]
+        # message can be a list or a plain string depending on error type
+        raw = data.get('message', 'SMS delivery failed.')
+        err_msg = raw[0] if isinstance(raw, list) else str(raw)
+        logger.error('FAST2SMS_FAILED phone=%s err=%s', phone, err_msg)
+        return False, err_msg
     except Exception as e:
         logger.error('FAST2SMS_ERROR %s', e)
         return False, 'Could not send OTP. Try again.'
