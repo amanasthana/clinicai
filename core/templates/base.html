@@ -171,47 +171,6 @@
   </div>
   {% endif %}
 
-  {% if user.is_authenticated and not user.email %}
-<div id="email-nudge" style="background:#FFF7ED; border-bottom:1px solid #FED7AA; padding:8px 20px; display:flex; align-items:center; gap:10px; font-size:13px; color:#92400E;">
-  <span style="background:#F97316; color:#fff; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0;">i</span>
-  <span>Add your email address to enable password recovery.</span>
-  <form id="nudge-form" style="display:flex; gap:6px; margin-left:4px;">
-    {% csrf_token %}
-    <input id="nudge-email" type="email" placeholder="your@email.com"
-      style="padding:5px 10px; border:1px solid #FED7AA; border-radius:6px; font-size:13px; font-family:inherit; outline:none; width:200px; background:#fff;">
-    <button type="submit"
-      style="padding:5px 12px; background:#F97316; color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit;">
-      Save
-    </button>
-  </form>
-  <span id="nudge-msg" style="color:#16A34A; display:none; font-weight:500;">✓ Saved</span>
-</div>
-<script>
-document.getElementById('nudge-form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  const email = document.getElementById('nudge-email').value.trim();
-  const csrf = this.querySelector('[name=csrfmiddlewaretoken]').value;
-  fetch('/accounts/update-email/', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrf},
-    body: 'email=' + encodeURIComponent(email),
-  })
-  .then(r => r.json())
-  .then(function(data) {
-    if (data.ok) {
-      document.getElementById('email-nudge').style.background = '#F0FDF4';
-      document.getElementById('email-nudge').style.borderBottomColor = '#BBF7D0';
-      document.getElementById('nudge-form').style.display = 'none';
-      document.getElementById('nudge-msg').style.display = 'inline';
-      setTimeout(function() { document.getElementById('email-nudge').style.display = 'none'; }, 2000);
-    } else {
-      document.getElementById('nudge-email').style.borderColor = '#EF4444';
-      document.getElementById('nudge-email').title = data.error;
-    }
-  });
-});
-</script>
-{% endif %}
 
   <!-- Main content -->
   <main>

@@ -679,12 +679,12 @@ class EmailNudgeAndUpdateTest(TestCase):
     def test_nudge_shown_when_email_missing(self):
         self.client.login(username='9111000001', password='testpass123')
         resp = self.client.get('/')
-        self.assertContains(resp, 'Add your email address')
+        self.assertContains(resp, 'Add your email')
 
     def test_nudge_hidden_when_email_present(self):
         self.client.login(username='9111000002', password='testpass123')
         resp = self.client.get('/')
-        self.assertNotContains(resp, 'Add your email address')
+        self.assertNotContains(resp, 'Add your email')
 
     def test_update_email_requires_login(self):
         resp = self.client.post('/accounts/update-email/', {'email': 'x@x.com'})
