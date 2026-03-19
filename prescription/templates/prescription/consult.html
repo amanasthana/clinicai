@@ -192,15 +192,16 @@
   width: 42px; height: 42px;
   border-radius: 50%;
   border: none;
-  background: #F3F4F6;
-  color: #6B7280;
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+  color: #fff;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  transition: background 0.2s, color 0.2s, transform 0.1s;
+  transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.40);
   -webkit-tap-highlight-color: transparent;
 }
-.mic-btn:hover { background: #E5E7EB; color: #374151; }
+.mic-btn:hover { opacity: 0.88; box-shadow: 0 4px 14px rgba(99,102,241,0.50); }
 .mic-btn:active { transform: scale(0.93); }
 .mic-btn.recording {
   background: #EF4444;
@@ -396,7 +397,7 @@
               placeholder="Symptoms, duration, severity, relevant history...&#10;E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, fatigue, polyuria"
               style="resize:vertical; font-size:15px; line-height:1.6;"
               oninput="onNoteInput(this)" onfocus="setActiveTA(this)"
-            >{% if existing_rx %}{{ existing_rx.raw_clinical_note }}{% endif %}</textarea>
+            >{% if existing_rx %}{{ existing_rx.raw_clinical_note }}{% elif visit.chief_complaint %}{{ visit.chief_complaint }}{% endif %}</textarea>
             <div class="suggest-dropdown" id="suggest-dropdown"></div>
           </div>
         </div>
