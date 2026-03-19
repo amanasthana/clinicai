@@ -472,13 +472,13 @@
   </div>
 
   <!-- Clinical info strip (chief complaint, vitals, examination) -->
-  {% with has_cc=visit.chief_complaint has_vitals=visit.vitals_bp|add:visit.vitals_temp|add:visit.vitals_spo2|add:visit.vitals_weight has_eval=rx.clinical_evaluation %}
-  {% if has_cc or has_vitals or has_eval %}
+  {% with complaint=visit.chief_complaint|default:rx.raw_clinical_note has_vitals=visit.vitals_bp|add:visit.vitals_temp|add:visit.vitals_spo2|add:visit.vitals_weight has_eval=rx.clinical_evaluation %}
+  {% if complaint or has_vitals or has_eval %}
   <div class="rx-clinical">
-    {% if visit.chief_complaint %}
+    {% if complaint %}
     <div class="rx-clin-row">
       <span class="rx-clin-label">Complaint</span>
-      <span class="rx-clin-value">{{ visit.chief_complaint }}</span>
+      <span class="rx-clin-value">{{ complaint|truncatechars:200 }}</span>
     </div>
     {% endif %}
     {% if visit.vitals_bp or visit.vitals_temp or visit.vitals_spo2 or visit.vitals_weight %}

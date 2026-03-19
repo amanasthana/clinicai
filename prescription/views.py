@@ -303,10 +303,14 @@ def save_prescription_api(request, visit_id):
             order=i,
         )
 
-    # Mark visit as done
+    # Mark visit as done; backfill chief_complaint from raw_note if receptionist left it blank
     visit.status = 'done'
     visit.completed_at = timezone.now()
-    visit.save()
+    update_fields = ['status', 'completed_at']
+    if not visit.chief_complaint and raw_note:
+        visit.chief_complaint = raw_note.split('\n')[0][:200].strip()
+        update_fields.append('chief_complaint')
+    visit.save(update_fields=update_fields)
 
     logger.info(
         "Prescription saved: visit=%s doctor=%s medicines=%d",
