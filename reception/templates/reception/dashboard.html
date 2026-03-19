@@ -29,31 +29,55 @@
   100% { box-shadow: 0 0 0 2px #6366f1, 0 0 12px 2px rgba(99,102,241,0.25); }
 }
 
+/* ── AI Hero bar ───────────────────────────────────────── */
 #help-wrap {
   margin-bottom: 24px;
-  border-radius: 16px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #4338CA 0%, #6D28D9 55%, #4F46E5 100%);
+  box-shadow: 0 6px 24px rgba(79,70,229,0.28);
   overflow: hidden;
+  transition: box-shadow 0.2s;
 }
-#help-wrap.is-focused {
-  border-color: transparent;
-  animation: focusSpin 2.5s linear infinite;
-  background: #fff;
-}
+#help-wrap.is-focused,
 #help-wrap.is-loading,
 #help-wrap.is-responding {
-  border-color: transparent;
-  animation: focusSpin 2.5s linear infinite;
-  background: #fff;
+  box-shadow: 0 8px 32px rgba(79,70,229,0.4);
 }
 
+/* Label row at top */
+#help-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 18px 0 18px;
+}
+#help-label-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#help-label-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+}
+
+/* Input pill — white floated inside the gradient */
 #help-input-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin: 12px 18px 0 18px;
+  background: #fff;
+  border-radius: 14px;
   padding: 12px 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.14);
 }
 
 #help-input {
@@ -61,14 +85,13 @@
   border: none;
   background: transparent;
   outline: none;
-  font-size: 14px;
+  font-size: 15px;
   color: #111827;
   font-family: inherit;
   min-width: 0;
 }
 #help-input::placeholder { color: #9CA3AF; }
 #help-input:disabled { opacity: 0.6; }
-
 
 .help-icon-btn {
   width: 36px;
@@ -98,38 +121,40 @@
 #help-send-btn:hover { background: #4338CA; }
 #help-send-btn:disabled { background: #A5B4FC; cursor: not-allowed; }
 
-/* Suggested chips */
+/* Chips on gradient background */
 #help-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 14px 12px 14px;
+  padding: 12px 18px 16px 18px;
 }
 .help-chip {
   font-size: 12px;
   font-weight: 500;
-  color: #4F46E5;
-  background: #EEF2FF;
-  border: 1px solid #C7D2FE;
+  color: #fff;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
   border-radius: 20px;
-  padding: 4px 12px;
+  padding: 5px 13px;
   cursor: pointer;
   transition: background 0.12s;
   white-space: nowrap;
+  backdrop-filter: blur(4px);
 }
-.help-chip:hover { background: #E0E7FF; }
+.help-chip:hover { background: rgba(255,255,255,0.28); }
 
-/* Response area */
+/* Response / loading area — white panel below gradient */
 #help-response-area {
   display: none;
-  border-top: 1px solid #E5E7EB;
   background: #fff;
+  margin: 0 18px 16px 18px;
+  border-radius: 12px;
 }
 #help-response-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px 6px 14px;
+  padding: 10px 14px 4px 14px;
 }
 #help-response-label {
   font-size: 12px;
@@ -149,7 +174,7 @@
 }
 #help-close-btn:hover { color: #374151; }
 #help-response-body {
-  padding: 0 14px 14px 14px;
+  padding: 0 14px 12px 14px;
   font-size: 14px;
   color: #374151;
   line-height: 1.65;
@@ -163,35 +188,32 @@
   font-weight: 700;
 }
 
-/* Loading dots */
 #help-loading {
   display: none;
   align-items: center;
   gap: 6px;
-  padding: 12px 14px;
+  padding: 0 18px 16px 18px;
   font-size: 13px;
-  color: #9CA3AF;
-  border-top: 1px solid #E5E7EB;
+  color: rgba(255,255,255,0.75);
 }
 .help-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #6366F1;
+  background: #fff;
   display: inline-block;
   animation: dotBounce 1.2s ease-in-out infinite;
 }
 .help-dot:nth-child(2) { animation-delay: 0.2s; }
 .help-dot:nth-child(3) { animation-delay: 0.4s; }
 
-/* Ask another button */
 #help-ask-again {
   display: none;
-  padding: 0 14px 12px 14px;
+  padding: 0 18px 14px 18px;
 }
 #help-ask-again button {
   font-size: 13px;
-  color: #4F46E5;
+  color: rgba(255,255,255,0.85);
   background: none;
   border: none;
   cursor: pointer;
@@ -201,9 +223,13 @@
 }
 
 @media (max-width: 480px) {
-  #help-input-row { padding: 10px 12px; gap: 6px; }
-  #help-chips { padding: 0 12px 10px 12px; }
-  #help-response-body { padding: 0 12px 12px 12px; font-size: 13px; }
+  #help-label-row  { padding: 14px 14px 0 14px; }
+  #help-input-row  { margin: 10px 14px 0 14px; padding: 10px 12px; }
+  #help-chips      { padding: 10px 14px 14px 14px; gap: 5px; }
+  #help-loading    { padding: 0 14px 14px 14px; }
+  #help-response-area { margin: 0 14px 14px 14px; }
+  #help-ask-again  { padding: 0 14px 12px 14px; }
+  #help-input      { font-size: 14px; }
 }
 </style>
 {% endblock %}
@@ -211,43 +237,81 @@
 {% block content %}
 <div class="page-container">
 
-  {% if not request.user.email %}
-  <div id="email-nudge" style="display:flex; align-items:center; gap:8px; background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:8px 14px; margin-bottom:16px; font-size:12.5px; color:#92400E;">
-    <span style="background:#F59E0B; color:#fff; border-radius:50%; width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0;">!</span>
-    <span>Add your email to enable password recovery —</span>
-    <form id="nudge-form" style="display:flex; gap:6px; align-items:center;">
-      {% csrf_token %}
-      <input id="nudge-email" type="email" placeholder="your@email.com"
-        style="padding:4px 9px; border:1px solid #FDE68A; border-radius:5px; font-size:12px; font-family:inherit; outline:none; width:180px; background:#fff; color:#111827;">
-      <button type="submit" style="padding:4px 10px; background:#D97706; color:#fff; border:none; border-radius:5px; font-size:12px; font-weight:500; cursor:pointer; font-family:inherit;">Save</button>
-    </form>
-    <span id="nudge-ok" style="color:#16A34A; font-weight:500; display:none;">✓ Saved</span>
+  <!-- AI Assistant — hero search bar (top of page, most prominent element) -->
+  <div id="help-wrap">
+
+    <!-- Label -->
+    <div id="help-label-row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      <span id="help-label-text">ClinicAI Assistant</span>
+      <span id="help-label-badge">AI</span>
+    </div>
+
+    <!-- Input pill -->
+    <div id="help-input-row">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+
+      <input
+        id="help-input"
+        type="text"
+        maxlength="400"
+        autocomplete="off"
+        placeholder="Ask anything — how to print, add stock, change settings…"
+        aria-label="Ask ClinicAI"
+      >
+
+      <button id="help-clear-btn" class="help-icon-btn" title="Clear" aria-label="Clear" style="display:none; background:none; color:#9CA3AF;" onclick="helpClear()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+
+      <button id="help-mic-btn" class="help-icon-btn" title="Ask by voice" tabindex="0" aria-label="Voice input">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+
+      <button id="help-send-btn" class="help-icon-btn" title="Send" tabindex="0" aria-label="Send question">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Quick-action chips -->
+    <div id="help-chips" role="list" aria-label="Suggested questions">
+      <span class="help-chip" role="listitem" onclick="helpChipClick('Print prescription')">Print prescription</span>
+      <span class="help-chip" role="listitem" onclick="helpChipClick('Add stock to pharmacy')">Add stock</span>
+      <span class="help-chip" role="listitem" onclick="helpChipClick('Change staff member roles and permissions')">Change roles</span>
+      <span class="help-chip" role="listitem" onclick="helpChipClick('How do I set up clinic letterhead?')">Letterhead setup</span>
+    </div>
+
+    <!-- Loading dots -->
+    <div id="help-loading" role="status" aria-live="polite">
+      <span class="help-dot"></span>
+      <span class="help-dot"></span>
+      <span class="help-dot"></span>
+      <span style="margin-left:4px;">Looking that up…</span>
+    </div>
+
+    <!-- Response panel (white card inside gradient container) -->
+    <div id="help-response-area" role="region" aria-live="polite" aria-label="Help response">
+      <div id="help-response-header">
+        <span id="help-response-label">ClinicAI Help</span>
+        <button id="help-close-btn" onclick="helpClose()" aria-label="Close help response">×</button>
+      </div>
+      <div id="help-response-body"></div>
+      <div id="help-ask-again">
+        <button onclick="helpAskAgain()">Ask something else</button>
+      </div>
+    </div>
+
   </div>
-  <script>
-  document.getElementById('nudge-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const email = document.getElementById('nudge-email').value.trim();
-    const csrf = this.querySelector('[name=csrfmiddlewaretoken]').value;
-    fetch('/accounts/update-email/', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrf},
-      body: 'email=' + encodeURIComponent(email),
-    })
-    .then(r => r.json())
-    .then(function(d) {
-      if (d.ok) {
-        document.getElementById('nudge-form').style.display = 'none';
-        document.querySelector('#email-nudge span:nth-child(2)').textContent = 'Email saved.';
-        document.getElementById('nudge-ok').style.display = 'inline';
-        setTimeout(function() { document.getElementById('email-nudge').style.display = 'none'; }, 2000);
-      } else {
-        document.getElementById('nudge-email').style.borderColor = '#EF4444';
-        document.getElementById('nudge-email').setAttribute('title', d.error);
-      }
-    });
-  });
-  </script>
-  {% endif %}
 
   <!-- Header -->
   <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
@@ -281,7 +345,7 @@
     </div>
   </div>
 
-  <!-- 72-hour New Feature banner (auto-dismisses after 72h or on click) -->
+  <!-- 72-hour New Feature banner -->
   <div id="new-feature-banner" style="display:none; margin-bottom:20px; background:linear-gradient(135deg,#EFF6FF 0%,#F5F3FF 100%); border:1px solid #C7D2FE; border-radius:12px; padding:14px 18px;">
     <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
       <div style="flex:1;">
@@ -291,7 +355,7 @@
           <span style="font-size:11px; font-weight:600; background:#6366F1; color:#fff; padding:2px 8px; border-radius:20px;">LIVE</span>
         </div>
         <div style="font-size:13px; color:#374151; line-height:1.6;">
-          <strong>📊 Analytics Dashboard</strong> — patient volume trends, top diagnoses & most prescribed medicines.<br>
+          <strong>📊 Analytics Dashboard</strong> — patient volume trends, top diagnoses &amp; most prescribed medicines.<br>
           <strong>⚕ Drug Interaction Alerts</strong> — real-time safety alerts on the prescription screen as you add medicines.
         </div>
         <a href="/analytics/" style="display:inline-block; margin-top:10px; font-size:13px; font-weight:600; color:#4F46E5; text-decoration:none;">
@@ -310,76 +374,6 @@
     <span><strong style="color:#111827;">{{ week_stats.total_patients }}</strong> registered patients</span>
     <span style="color:#D1D5DB;">·</span>
     <span><strong style="color:#059669;">+{{ week_stats.new_patients }}</strong> new this week</span>
-  </div>
-
-  <!-- AI Help Search Bar -->
-  <div id="help-wrap">
-    <div id="help-input-row">
-      <!-- Search icon -->
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-
-      <input
-        id="help-input"
-        type="text"
-        maxlength="400"
-        autocomplete="off"
-        placeholder="How can I help you today?"
-        aria-label="Search help"
-      >
-
-      <!-- Clear button — shown only when input has text -->
-      <button id="help-clear-btn" class="help-icon-btn" title="Clear" aria-label="Clear" style="display:none; background:none; color:#9CA3AF;" onclick="helpClear()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-
-      <!-- Mic button (hidden if SpeechRecognition not available) -->
-      <button id="help-mic-btn" class="help-icon-btn" title="Ask by voice" tabindex="0" aria-label="Voice input">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="2" width="6" height="12" rx="3"/>
-          <path d="M5 10a7 7 0 0 0 14 0"/>
-          <line x1="12" y1="19" x2="12" y2="23"/>
-          <line x1="8" y1="23" x2="16" y2="23"/>
-        </svg>
-      </button>
-
-      <!-- Send button -->
-      <button id="help-send-btn" class="help-icon-btn" title="Send question" tabindex="0" aria-label="Send question">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"/>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Suggested chips (hidden when active) -->
-    <div id="help-chips" role="list" aria-label="Suggested questions">
-      <span class="help-chip" role="listitem" onclick="helpChipClick('Print prescription')">Print prescription</span>
-      <span class="help-chip" role="listitem" onclick="helpChipClick('Add stock to pharmacy')">Add stock</span>
-      <span class="help-chip" role="listitem" onclick="helpChipClick('Change staff member roles and permissions')">Change roles</span>
-      <span class="help-chip" role="listitem" onclick="helpChipClick('How do I set up clinic letterhead?')">Letterhead setup</span>
-    </div>
-
-    <!-- Loading indicator -->
-    <div id="help-loading" role="status" aria-live="polite">
-      <span class="help-dot"></span>
-      <span class="help-dot"></span>
-      <span class="help-dot"></span>
-      <span style="margin-left:4px;">Looking that up...</span>
-    </div>
-
-    <!-- Response area -->
-    <div id="help-response-area" role="region" aria-live="polite" aria-label="Help response">
-      <div id="help-response-header">
-        <span id="help-response-label">ClinicAI Help</span>
-        <button id="help-close-btn" onclick="helpClose()" aria-label="Close help response">×</button>
-      </div>
-      <div id="help-response-body"></div>
-      <div id="help-ask-again">
-        <button onclick="helpAskAgain()">Ask something else</button>
-      </div>
-    </div>
   </div>
 
   <!-- Patient Search (PRIMARY ACTION) -->

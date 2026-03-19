@@ -18,5 +18,9 @@ urlpatterns = [
     path('dispense/<uuid:visit_id>/confirm/', views.confirm_dispense_api, name='confirm_dispense'),
     path('bill/<int:bill_id>/', views.bill_view, name='bill'),
     path('api/alternatives/<int:item_id>/', views.alternatives_api, name='alternatives'),
+    path('api/item-detail/', views.item_detail_api, name='item_detail'),
+    path('walk-in/', views.walk_in_view, name='walk_in'),
+    path('bill/<int:bill_id>/edit/', views.edit_bill_view, name='edit_bill'),
     path('scan/', views.add_stock_scan_view, name='scan'),
+    path('settings/', views.pharmacy_settings_view, name='settings'),
 ]

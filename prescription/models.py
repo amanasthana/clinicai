@@ -32,6 +32,9 @@ class Prescription(models.Model):
     selected_diagnosis = models.CharField(max_length=500, blank=True) # doctor's confirmed choice from differentials
     # Extended clinical fields
     clinical_evaluation = models.TextField(blank=True, default='')
+    comorbidities = models.TextField(blank=True, default='')
+    past_history = models.TextField(blank=True, default='')
+    drug_allergies = models.TextField(blank=True, default='')
     investigations_text = models.TextField(blank=True, default='')
     validity_days = models.PositiveSmallIntegerField(default=30)
     share_token = models.UUIDField(unique=True, null=True, blank=True)

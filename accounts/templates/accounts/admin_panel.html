@@ -63,6 +63,53 @@
     {% endfor %}
   {% endif %}
 
+  {% if wa_reset_url %}
+  <div class="card" style="background:#F0FDF4; border:1px solid #BBF7D0; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <div style="font-size:14px; color:#166534;">
+      <strong>Password reset done for {{ wa_reset_name }}.</strong> Temp password shown above — notify them on WhatsApp now.
+    </div>
+    <a href="{{ wa_reset_url }}" target="_blank" rel="noopener"
+       style="display:inline-flex; align-items:center; gap:6px; background:#25D366; color:#fff; font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px; text-decoration:none;">
+      WhatsApp {{ wa_reset_name }}
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- Password Reset Requests -->
+  {% if pending_pw_resets %}
+  <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:12px; display:flex; align-items:center; gap:10px;">
+    Password Reset Requests
+    <span style="background:#F59E0B; color:#fff; font-size:12px; font-weight:700; padding:2px 9px; border-radius:20px;">{{ pending_pw_resets|length }}</span>
+  </div>
+  <div class="card" style="background:#FEF3C7; border:1px solid #FDE68A; margin-bottom:28px;">
+    {% for req in pending_pw_resets %}
+    {% with sm=req.user.staff_memberships.first %}
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 0; {% if not forloop.last %}border-bottom:1px solid #FDE68A;{% endif %}">
+      <div>
+        <div style="font-size:14px; font-weight:600; color:#78350F;">
+          {{ req.user.username }}{% if sm %} — {{ sm.display_name }}{% if sm.clinic %} &middot; {{ sm.clinic.name }}{% endif %}{% endif %}
+        </div>
+        <div style="font-size:12px; color:#92400E; margin-top:2px;">Requested {{ req.requested_at|date:"j M Y, g:i A" }}</div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <a href="https://wa.me/91{{ req.user.username }}" target="_blank" rel="noopener"
+           style="display:inline-flex; align-items:center; gap:5px; background:#25D366; color:#fff; font-size:12px; font-weight:600; padding:6px 12px; border-radius:7px; text-decoration:none;">
+          WhatsApp
+        </a>
+        <form method="post" action="/accounts/admin-panel/pw-reset/{{ req.pk }}/" style="margin:0;"
+              onsubmit="return confirm('Reset password for {{ req.user.username }}? A temporary password will be shown.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm" style="background:#D97706; color:#fff; border:none;">
+            Reset Password
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endwith %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- Pending -->
   <div id="registrations" style="font-size:16px; font-weight:600; color:#111827; margin-bottom:16px; display:flex; align-items:center; gap:10px;">
     Pending Review
@@ -144,11 +191,11 @@
   {% endif %}
 
   <!-- Approved -->
-  {% if approved %}
+  {% if approved_with_clinic %}
   <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:12px; margin-top:32px;">
     Recently Approved
   </div>
-  {% for reg in approved %}
+  {% for reg, clinic_pk in approved_with_clinic %}
   <div class="card" style="margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 18px;">
     <div>
       <div style="font-size:15px; font-weight:600; color:#111827;">{{ reg.clinic_name }}</div>
@@ -163,6 +210,13 @@
         <button type="submit" class="btn btn-primary btn-sm">🔧 Fix Account</button>
       </form>
       <a href="https://wa.me/91{{ reg.phone }}" target="_blank" class="btn btn-secondary btn-sm">📲 WhatsApp</a>
+      {% if clinic_pk %}
+      <a href="/accounts/clinic/{{ clinic_pk }}/delete/"
+         class="btn btn-sm" style="background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;"
+         onclick="return confirm('Delete {{ reg.clinic_name }} and ALL its data? This cannot be undone.');">
+        Delete Clinic
+      </a>
+      {% endif %}
     </div>
   </div>
   {% endfor %}
@@ -181,6 +235,72 @@
   {% endfor %}
   {% endif %}
 
+
+  <!-- ── Pending Deletion Requests ── -->
+  {% if pending_deletions %}
+  <div style="font-size:16px; font-weight:600; color:#DC2626; margin-bottom:12px; margin-top:40px; display:flex; align-items:center; gap:10px;">
+    Pending Clinic Deletions
+    <span style="background:#DC2626; color:#fff; font-size:12px; font-weight:700; padding:2px 9px; border-radius:20px;">{{ pending_deletions|length }}</span>
+  </div>
+  {% for dreq in pending_deletions %}
+  <div class="card" style="margin-bottom:12px; border:1.5px solid #FECACA; background:#FFF5F5;">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <div>
+        <div style="font-size:16px; font-weight:700; color:#991B1B;">{{ dreq.clinic_name_snapshot }}</div>
+        <div style="font-size:13px; color:#6B7280; margin-top:3px;">
+          Requested by: {{ dreq.requested_by.username|default:"—" }} &middot; {{ dreq.created_at|date:"j M Y, g:i A" }}
+        </div>
+        {% if dreq.reason %}<div style="font-size:13px; color:#374151; margin-top:6px;">Reason: {{ dreq.reason }}</div>{% endif %}
+        <div style="font-size:13px; color:#9CA3AF; margin-top:6px;">
+          Patient records, prescriptions, inventory, and all clinic data will be permanently deleted.
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
+        <form method="post" action="{% url 'accounts:approve_clinic_deletion' dreq.pk %}"
+              onsubmit="return confirm('PERMANENTLY DELETE {{ dreq.clinic_name_snapshot }} and ALL its data? This cannot be undone.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm" style="background:#DC2626; color:#fff; border:none;">
+            Approve &amp; Delete
+          </button>
+        </form>
+        <form method="post" action="{% url 'accounts:reject_clinic_deletion' dreq.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-secondary btn-sm">Reject Request</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- ── All Clinics ── -->
+  <div style="margin-top:40px; padding-top:32px; border-top:2px solid var(--color-border);">
+    <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:4px; display:flex; align-items:center; gap:10px;">
+      All Clinics
+      <span style="background:#6B7280; color:#fff; font-size:12px; font-weight:700; padding:2px 9px; border-radius:20px;">{{ all_clinics|length }}</span>
+    </div>
+    <p style="font-size:13px; color:#6B7280; margin-bottom:16px;">Every clinic on the platform. Edit details or delete directly.</p>
+    {% for c in all_clinics %}
+    <div class="card" style="margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 18px;">
+      <div>
+        <div style="font-size:15px; font-weight:600; color:#111827;">{{ c.name }}</div>
+        <div style="font-size:13px; color:#6B7280;">
+          {{ c.city }}{% if c.state %}, {{ c.state }}{% endif %}
+          &middot; {{ c.staff.count }} staff
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <a href="/accounts/clinic/{{ c.pk }}/delete/"
+           class="btn btn-sm" style="background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;"
+           onclick="return confirm('Delete {{ c.name }} and ALL its data? This cannot be undone.');">
+          Delete
+        </a>
+      </div>
+    </div>
+    {% empty %}
+    <div class="card" style="text-align:center; color:#6B7280; padding:30px;">No clinics yet.</div>
+    {% endfor %}
+  </div>
 
   <!-- ── Contact Messages ── -->
   <div id="messages" style="margin-top:48px; padding-top:32px; border-top:2px solid var(--color-border);">

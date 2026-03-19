@@ -107,6 +107,7 @@
     <!-- Medicines from prescription -->
     {% if medicine_rows %}
     <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px;">From Prescription</div>
+    {% endif %}
     <div id="med-list">
       {% for row in medicine_rows %}
       <div class="med-row {% if not row.in_stock %}not-stocked{% endif %}" id="row-{{ row.prescription_med_id }}">
@@ -158,9 +159,9 @@
       </div>
       {% endfor %}
     </div>
-    {% else %}
+    {% if not medicine_rows %}
     <div style="background:#FFF7ED; border:1px solid #FED7AA; border-radius:12px; padding:14px 16px; margin-bottom:16px; font-size:14px; color:#92400E;">
-      No prescription found for this visit. You can still record dispensed medicines manually.
+      No prescription for this visit. Use the search below to add medicines manually.
     </div>
     {% endif %}
 
@@ -178,8 +179,11 @@
 
     <!-- Discount -->
     <div style="background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:16px; margin-bottom:16px;">
-      <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:8px;">Discount (%)</label>
-      <input type="number" id="discount-pct" min="0" max="100" value="0"
+      <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:8px;">
+        Discount (%)
+        {% if clinic.default_medicine_discount %}<span style="font-size:11px; color:#059669; font-weight:400;">— clinic default {{ clinic.default_medicine_discount }}% pre-filled</span>{% endif %}
+      </label>
+      <input type="number" id="discount-pct" min="0" max="100" value="{{ clinic.default_medicine_discount|default:0 }}"
         style="width:100px; padding:10px; border:1px solid #D1D5DB; border-radius:8px; font-size:15px; font-family:inherit; outline:none;"
         oninput="updateTotal()">
     </div>
@@ -330,30 +334,17 @@ function searchInventory(q) {
 async function addManualItem(itemId) {
   document.getElementById('manual-dropdown').style.display = 'none';
   document.getElementById('manual-search').value = '';
-  // Fetch item details including batch info
-  try {
-    const resp = await fetch('/pharmacy/api/alternatives/' + itemId + '/?self=1');
-    // Re-use alternatives endpoint; for manual add we just need batch info directly
-  } catch(e) {}
-  // Build a row — we need the full item data, let's use a special endpoint or just re-fetch
-  // For simplicity: add a generic row and let server validate
-  addManualRow(itemId);
-}
-
-async function addManualRow(itemId) {
-  // Fetch from search to get stock info
-  const resp = await fetch('/pharmacy/api/search/?q=' + encodeURIComponent(itemId));
-  // Better: we stored data in the dropdown — let's use a different approach
-  // Actually fetch the item page for details
-  // Simplest: use an ajax call to get item+batch data
   try {
     const r = await fetch('/pharmacy/api/item-detail/?id=' + itemId);
     if (!r.ok) throw new Error('not found');
     const d = await r.json();
+    if (!d.batch_id) {
+      showError(d.name + ' is out of stock and cannot be dispensed.');
+      return;
+    }
     appendManualRow(d);
   } catch(e) {
-    // Fallback: just add a partial row
-    appendManualRow({id: itemId, name: 'Medicine #' + itemId, batch_id: null, unit_price: '0', stock_qty: 0});
+    showError('Could not load medicine details. Please try again.');
   }
 }
 
@@ -370,7 +361,11 @@ function appendManualRow(d) {
     <input type="hidden" class="f-substitute" value="false">
     <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
       <div style="flex:1; min-width:0;">
-        <div style="font-size:15px; font-weight:600; color:#111827;">${escHtml(d.name)}</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="font-size:15px; font-weight:600; color:#111827;">${escHtml(d.name)}</div>
+          <button type="button" onclick="this.closest('.med-row').remove(); updateTotal();"
+            style="font-size:11px; color:#EF4444; background:none; border:none; cursor:pointer; padding:0;">✕ Remove</button>
+        </div>
         <div style="font-size:12px; color:#6B7280; margin-top:2px;">Manual addition &middot; Rs ${d.unit_price||0}/unit</div>
       </div>
       <div>

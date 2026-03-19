@@ -2,98 +2,195 @@
 {% block title %}Bill {{ bill.bill_number }} — {{ clinic.name }}{% endblock %}
 
 {% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 <style>
-@media print {
-  nav, .no-print { display: none !important; }
-  .page-container { max-width: 100% !important; padding: 0 !important; }
-  body { font-size: 12pt; }
+/* ── Screen toolbar (hidden when printing) ───────────────────── */
+.bill-toolbar {
+  max-width: 680px; margin: 0 auto 16px;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
 }
+.tb-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 18px; border-radius: 10px; font-size: 13px;
+  font-weight: 600; cursor: pointer; text-decoration: none;
+  border: none; font-family: inherit; transition: opacity .15s;
+}
+.tb-btn:active { opacity: .8; }
+.tb-print { background: #111827; color: #fff; }
+.tb-wa    { background: #25D366; color: #fff; }
+.tb-back  { background: #fff; color: #374151; border: 1.5px solid #E5E7EB; }
+
+/* ── Bill card ───────────────────────────────────────────────── */
+.bill-card {
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
+  overflow: hidden;
+  max-width: 680px;
+  margin: 0 auto;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  color: #1F2937;
+}
+.bill-header     { padding: 20px 24px; border-bottom: 1px solid #E5E7EB; }
+.bill-patient    { padding: 12px 24px; background: #F9FAFB; border-bottom: 1px solid #E5E7EB; }
+.bill-items      { padding: 16px 24px; }
+.bill-totals     { padding: 14px 24px; background: #F9FAFB; border-top: 1px solid #E5E7EB; }
+.bill-footer     { padding: 12px 24px; border-top: 1px solid #E5E7EB; text-align: center; }
+
 .bill-table { width: 100%; border-collapse: collapse; }
 .bill-table th {
-  text-align: left;
-  font-size: 11px;
-  font-weight: 700;
-  color: #6B7280;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-  padding: 8px 0;
-  border-bottom: 1px solid #E5E7EB;
+  text-align: left; font-size: 11px; font-weight: 700;
+  color: #6B7280; text-transform: uppercase; letter-spacing: .5px;
+  padding: 7px 6px 7px 0; border-bottom: 1px solid #E5E7EB;
 }
+.bill-table th.r { text-align: right; }
 .bill-table td {
-  font-size: 14px;
-  padding: 10px 0;
-  border-bottom: 1px solid #F3F4F6;
-  color: #374151;
+  font-size: 13px; padding: 9px 6px 9px 0;
+  border-bottom: 1px solid #F3F4F6; color: #374151;
+  vertical-align: top;
 }
+.bill-table td.r { text-align: right; }
 .bill-table tr:last-child td { border-bottom: none; }
+
+.total-row { display: flex; justify-content: space-between; font-size: 14px; color: #374151; margin-bottom: 6px; }
+.total-final { font-size: 19px; font-weight: 700; color: #111827; border-top: 1px solid #D1D5DB; padding-top: 10px; margin-top: 6px; }
+
+/* ── WhatsApp info box ───────────────────────────────────────── */
+.wa-info {
+  background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px;
+  padding: 14px 18px; max-width: 680px; margin: 0 auto 16px;
+  font-size: 13px; color: #166534; line-height: 1.6;
+}
+
+/* ── Print styles ────────────────────────────────────────────── */
+@media print {
+  nav, .bill-toolbar, .wa-info, .no-print { display: none !important; }
+  body { font-size: 10pt; background: #fff !important; }
+  .bill-card {
+    border: none; border-radius: 0; max-width: 100%;
+    box-shadow: none; font-size: 10pt;
+  }
+  .bill-header  { padding: 8pt 12pt; }
+  .bill-patient { padding: 6pt 12pt; }
+  .bill-items   { padding: 8pt 12pt; }
+  .bill-totals  { padding: 6pt 12pt; }
+  .bill-footer  { padding: 5pt 12pt; }
+  .bill-table th { font-size: 7pt; padding: 4pt 4pt 4pt 0; }
+  .bill-table td { font-size: 9pt; padding: 5pt 4pt 5pt 0; }
+  .total-row { font-size: 9pt; margin-bottom: 3pt; }
+  .total-final  { font-size: 12pt; }
+  @page { size: A5 portrait; margin: 8mm 10mm; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-container" style="max-width:640px;">
+<div class="page-container" style="max-width:720px;">
 
-  <!-- Print + back controls -->
-  <div class="no-print" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-    <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">Back to Pharmacy</a>
-    <button onclick="window.print()"
-      style="padding:10px 20px; background:#111827; color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit;">
-      Print bill
+  <!-- ── Toolbar ── -->
+  <div class="bill-toolbar no-print">
+    <button class="tb-btn tb-print" id="pdf-btn" onclick="savePdf()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Save as PDF
     </button>
+    {% if wa_url %}
+    <button class="tb-btn tb-wa" id="wa-btn" onclick="sendViaWhatsApp()">
+      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.857L0 24l6.309-1.505A11.946 11.946 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.79 9.79 0 01-5.002-1.37l-.36-.213-3.743.892.925-3.645-.233-.374A9.77 9.77 0 012.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/></svg>
+      Send PDF via WhatsApp
+    </button>
+    {% endif %}
+    <a href="/pharmacy/" class="tb-btn tb-back">← Pharmacy</a>
+    <form method="post" action="/pharmacy/bill/{{ bill.pk }}/edit/"
+          onsubmit="return confirm('This will reverse the bill and restore stock. You can re-dispense after. Continue?');"
+          style="margin:0; display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="tb-btn" style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;">
+        Edit / Re-dispense
+      </button>
+    </form>
+    <a href="/" class="tb-btn tb-back">Reception</a>
   </div>
 
-  <!-- Bill card -->
-  <div style="background:#fff; border:1px solid #E5E7EB; border-radius:16px; overflow:hidden;">
+  <!-- ── WhatsApp instructions ── -->
+  {% if wa_url %}
+  <div class="wa-info no-print">
+    <strong>Paperless workflow:</strong> Click <em>Save as PDF</em> — the bill downloads to your device. Then click <em>Send PDF via WhatsApp</em> — WhatsApp opens to the patient's number. Attach the PDF from your Downloads and send. Done. ✓
+  </div>
+  {% endif %}
+
+  <!-- ── Bill card ── -->
+  <div class="bill-card" id="bill-card">
 
     <!-- Header -->
-    <div style="padding:20px 24px; border-bottom:1px solid #E5E7EB;">
+    <div class="bill-header">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
         <div>
-          <div style="font-size:18px; font-weight:700; color:#111827;">{{ clinic.name }}</div>
-          {% if clinic.address %}<div style="font-size:13px; color:#6B7280;">{{ clinic.address }}</div>{% endif %}
-          {% if clinic.phone %}<div style="font-size:13px; color:#6B7280;">Ph: {{ clinic.phone }}</div>{% endif %}
+          <div style="font-size:19px; font-weight:800; color:#111827; letter-spacing:-.3px;">{{ clinic.name }}</div>
+          {% if clinic.address %}
+          <div style="font-size:12px; color:#6B7280; margin-top:2px;">{{ clinic.address }}{% if clinic.city %}, {{ clinic.city }}{% endif %}{% if clinic.state %}, {{ clinic.state }}{% endif %}</div>
+          {% endif %}
+          {% if clinic.phone %}<div style="font-size:12px; color:#6B7280;">Tel: {{ clinic.phone }}</div>{% endif %}
         </div>
         <div style="text-align:right;">
-          <div style="font-size:18px; font-weight:700; color:#111827;">BILL</div>
-          <div style="font-size:13px; color:#6B7280; margin-top:2px;">{{ bill.bill_number }}</div>
-          <div style="font-size:13px; color:#6B7280;">{{ bill.created_at|date:"d M Y, g:i A" }}</div>
+          <div style="font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.6px;">Medicine Bill</div>
+          <div style="font-size:16px; font-weight:700; color:#111827; margin-top:2px;">{{ bill.bill_number }}</div>
+          <div style="font-size:12px; color:#6B7280;">{{ bill.created_at|date:"d M Y, g:i A" }}</div>
         </div>
       </div>
     </div>
 
     <!-- Patient info -->
-    <div style="padding:14px 24px; border-bottom:1px solid #E5E7EB; background:#F9FAFB;">
-      <div style="font-size:15px; font-weight:600; color:#111827;">{{ patient.full_name }}</div>
-      <div style="font-size:13px; color:#6B7280;">
-        Token {{ visit.token_number }}
-        {% if patient.phone %} &middot; {{ patient.phone }}{% endif %}
-        {% if patient.age %} &middot; {{ patient.age }}y{% endif %}
+    <div class="bill-patient">
+      <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+        <div>
+          <div style="font-size:15px; font-weight:700; color:#111827;">{{ patient.full_name }}</div>
+          <div style="font-size:12px; color:#6B7280; margin-top:2px;">
+            {% if patient.age %}{{ patient.age }}y{% endif %}{% if patient.age and patient.gender %} · {% endif %}{% if patient.gender %}{{ patient.get_gender_display }}{% endif %}{% if patient.phone %} · {{ patient.phone }}{% endif %}
+          </div>
+        </div>
+        <div style="text-align:right; font-size:12px; color:#6B7280;">
+          <div>Token #{{ visit.token_number }}</div>
+          <div>{{ visit.visit_date|date:"d M Y" }}</div>
+          {% if prescription %}
+          <div>Rx #{{ prescription.pk }}</div>
+          {% endif %}
+        </div>
       </div>
     </div>
 
-    <!-- Item table -->
-    <div style="padding:16px 24px;">
+    <!-- Items table -->
+    <div class="bill-items">
       <table class="bill-table">
         <thead>
           <tr>
-            <th>Medicine</th>
-            <th style="text-align:right;">Qty</th>
-            <th style="text-align:right;">Rate</th>
-            <th style="text-align:right;">Amount</th>
+            <th style="width:34%;">Medicine</th>
+            <th style="width:22%;">Generic / Composition</th>
+            <th style="width:12%;">Batch / Exp</th>
+            <th class="r" style="width:8%;">Qty</th>
+            <th class="r" style="width:12%;">Rate (Rs)</th>
+            <th class="r" style="width:12%;">Amount (Rs)</th>
           </tr>
         </thead>
         <tbody>
           {% for item in dispensed_items %}
           <tr>
             <td>
-              <div style="font-weight:500;">{{ item.pharmacy_item.display_name }}</div>
-              {% if item.is_substitute %}
-              <div style="font-size:11px; color:#D97706;">(substitute)</div>
-              {% endif %}
-              {% if item.notes %}<div style="font-size:12px; color:#9CA3AF;">{{ item.notes }}</div>{% endif %}
+              <div style="font-weight:600; color:#111827;">{{ item.pharmacy_item.display_name }}</div>
+              {% if item.is_substitute %}<div style="font-size:11px; color:#D97706; margin-top:1px;">(substitute)</div>{% endif %}
+              {% if item.notes %}<div style="font-size:11px; color:#9CA3AF; margin-top:1px;">{{ item.notes }}</div>{% endif %}
             </td>
-            <td style="text-align:right;">{{ item.quantity_dispensed }}</td>
-            <td style="text-align:right;">Rs {{ item.unit_price }}</td>
-            <td style="text-align:right; font-weight:600;">Rs {% widthratio item.quantity_dispensed 1 item.unit_price %}</td>
+            <td style="color:#6B7280; font-size:12px;">
+              {{ item.pharmacy_item.display_generic|default:"—" }}
+            </td>
+            <td style="font-size:11px; color:#6B7280;">
+              {% if item.batch.batch_number %}<div>{{ item.batch.batch_number }}</div>{% endif %}
+              {% if item.batch.expiry_date %}<div>Exp: {{ item.batch.expiry_date|date:"M Y" }}</div>{% endif %}
+              {% if not item.batch.batch_number and not item.batch.expiry_date %}—{% endif %}
+            </td>
+            <td class="r">{{ item.quantity_dispensed }}</td>
+            <td class="r">{{ item.unit_price }}</td>
+            <td class="r" style="font-weight:600;">{% widthratio item.quantity_dispensed 1 item.unit_price %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -101,37 +198,78 @@
     </div>
 
     <!-- Totals -->
-    <div style="padding:14px 24px; border-top:1px solid #E5E7EB; background:#F9FAFB;">
-      <div style="display:flex; justify-content:space-between; font-size:14px; color:#374151; margin-bottom:6px;">
+    <div class="bill-totals">
+      <div class="total-row">
         <span>Subtotal</span>
         <span>Rs {{ bill.subtotal }}</span>
       </div>
       {% if bill.discount_percent %}
-      <div style="display:flex; justify-content:space-between; font-size:14px; color:#374151; margin-bottom:6px;">
+      <div class="total-row" style="color:#059669;">
         <span>Discount ({{ bill.discount_percent }}%)</span>
-        <span style="color:#059669;">- Rs {% widthratio bill.subtotal bill.discount_percent 100 %}</span>
+        <span>− Rs {{ discount_amount }}</span>
       </div>
       {% endif %}
-      <div style="display:flex; justify-content:space-between; font-size:18px; font-weight:700; color:#111827; border-top:1px solid #D1D5DB; padding-top:10px; margin-top:6px;">
-        <span>Total</span>
+      <div class="total-row total-final">
+        <span>Total Payable</span>
         <span>Rs {{ bill.final_amount }}</span>
       </div>
-      <div style="font-size:13px; color:#6B7280; margin-top:6px;">
-        Payment: {{ bill.get_payment_mode_display }}
+      <div style="font-size:12px; color:#6B7280; margin-top:6px; display:flex; gap:16px; flex-wrap:wrap;">
+        <span>Payment: <strong>{{ bill.get_payment_mode_display }}</strong></span>
+        <span style="color:#059669; font-weight:500;">✓ Paid</span>
       </div>
     </div>
 
     <!-- Footer -->
-    <div style="padding:12px 24px; border-top:1px solid #E5E7EB; text-align:center;">
-      <div style="font-size:12px; color:#9CA3AF;">Thank you. Please retain this bill for your records.</div>
+    <div class="bill-footer">
+      <div style="font-size:11px; color:#9CA3AF;">Thank you for visiting {{ clinic.name }}. Please retain this bill for your records.</div>
     </div>
 
-  </div>
-
-  <div class="no-print" style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
-    <a href="/pharmacy/" class="btn btn-secondary" style="flex:1; text-align:center;">Back to Pharmacy</a>
-    <a href="/" class="btn btn-primary" style="flex:1; text-align:center;">Reception</a>
-  </div>
+  </div><!-- /bill-card -->
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function savePdf() {
+  const btn = document.getElementById('pdf-btn');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = 'Generating…';
+  try {
+    const card = document.getElementById('bill-card');
+    await html2pdf().set({
+      margin:      [5, 6, 5, 6],
+      filename:    'bill-{{ bill.bill_number }}-{{ patient.full_name|slugify }}.pdf',
+      image:       { type: 'jpeg', quality: 0.97 },
+      html2canvas: { scale: 2.5, useCORS: true, logging: false },
+      jsPDF:       { unit: 'mm', format: 'a5', orientation: 'portrait' },
+    }).from(card).save();
+  } catch(e) { window.print(); }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
+}
+
+{% if wa_url %}
+async function sendViaWhatsApp() {
+  const btn = document.getElementById('wa-btn');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = 'Generating PDF…';
+  try {
+    const card = document.getElementById('bill-card');
+    await html2pdf().set({
+      margin:      [5, 6, 5, 6],
+      filename:    'bill-{{ bill.bill_number }}-{{ patient.full_name|slugify }}.pdf',
+      image:       { type: 'jpeg', quality: 0.97 },
+      html2canvas: { scale: 2.5, useCORS: true, logging: false },
+      jsPDF:       { unit: 'mm', format: 'a5', orientation: 'portrait' },
+    }).from(card).save();
+    // After PDF downloads, open WhatsApp
+    setTimeout(() => window.open('{{ wa_url|escapejs }}', '_blank'), 600);
+  } catch(e) {
+    window.open('{{ wa_url|escapejs }}', '_blank');
+  } finally { btn.disabled = false; btn.innerHTML = orig; }
+}
+{% endif %}
+</script>
 {% endblock %}

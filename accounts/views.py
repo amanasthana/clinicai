@@ -16,7 +16,7 @@ from django.utils import timezone
 logger = logging.getLogger('accounts')
 
 from .forms import StyledAuthForm, ClinicSetupForm, AdminUserForm, AddStaffForm, ClinicRegistrationForm, ContactForm
-from .models import Clinic, StaffMember, ClinicRegistrationRequest, ContactMessage
+from .models import Clinic, StaffMember, ClinicRegistrationRequest, ContactMessage, PasswordResetRequest
 from .permissions import require_permission, set_permissions_from_role, ROLE_PERMISSIONS, ALL_PERMISSION_FLAGS
 
 
@@ -38,6 +38,9 @@ def login_view(request):
                 messages.error(request, 'Your account is not linked to any clinic. Contact your admin.')
                 return render(request, 'accounts/login.html', {'form': form})
             login(request, user)
+            # Check if admin has flagged a forced password change
+            if StaffMember.objects.filter(user=user, must_change_password=True).exists():
+                return redirect('accounts:change_password')
             next_url = request.GET.get('next', '/')
             return redirect(next_url)
         else:
@@ -141,7 +144,21 @@ def staff_list_view(request):
     """List all staff at the logged-in user's clinic."""
     clinic = request.user.staff_profile.clinic
     staff = clinic.staff.select_related('user').order_by('role', 'display_name')
-    return render(request, 'accounts/staff_list.html', {'staff': staff, 'clinic': clinic})
+
+    # Carry forward WhatsApp link from a just-completed reset
+    wa_reset_url = request.session.pop('wa_reset_url', None)
+    wa_reset_name = request.session.pop('wa_reset_name', None)
+
+    from .models import ClinicDeletionRequest
+    pending_deletion = ClinicDeletionRequest.objects.filter(clinic=clinic, status='pending').first()
+
+    return render(request, 'accounts/staff_list.html', {
+        'staff': staff,
+        'clinic': clinic,
+        'wa_reset_url': wa_reset_url,
+        'wa_reset_name': wa_reset_name,
+        'pending_deletion': pending_deletion,
+    })
 
 
 @require_permission('can_manage_staff')
@@ -271,13 +288,40 @@ def admin_panel_view(request):
     rejected = ClinicRegistrationRequest.objects.filter(status='rejected').order_by('-reviewed_at')[:10]
     contact_messages = ContactMessage.objects.all()
     unread_count = contact_messages.filter(read=False).count()
+    pending_pw_resets = PasswordResetRequest.objects.filter(handled=False).select_related('user')
+    wa_reset_url = request.session.pop('wa_reset_url', None)
+    wa_reset_name = request.session.pop('wa_reset_name', None)
+
+    # Build list of (reg, clinic_pk) pairs for approved registrations (for delete button)
+    approved_with_clinic = []
+    for reg in approved:
+        clinic_pk = None
+        try:
+            u = User.objects.get(username=reg.phone)
+            sm = StaffMember.objects.filter(user=u).select_related('clinic').first()
+            if sm:
+                clinic_pk = sm.clinic.pk
+        except User.DoesNotExist:
+            pass
+        approved_with_clinic.append((reg, clinic_pk))
+
+    # All clinics (regardless of registration source)
+    from .models import ClinicDeletionRequest
+    all_clinics = Clinic.objects.all().order_by('name').prefetch_related('staff')
+    pending_deletions = ClinicDeletionRequest.objects.filter(status='pending').select_related('clinic', 'requested_by')
 
     return render(request, 'accounts/admin_panel.html', {
         'pending': pending,
         'approved': approved,
         'rejected': rejected,
+        'approved_with_clinic': approved_with_clinic,
         'contact_messages': contact_messages,
         'unread_count': unread_count,
+        'pending_pw_resets': pending_pw_resets,
+        'wa_reset_url': wa_reset_url,
+        'wa_reset_name': wa_reset_name,
+        'all_clinics': all_clinics,
+        'pending_deletions': pending_deletions,
     })
 
 
@@ -315,7 +359,7 @@ def approve_registration_view(request, pk):
             user.save()
 
             # Create staff member
-            StaffMember.objects.create(
+            sm = StaffMember.objects.create(
                 user=user,
                 clinic=clinic,
                 role='admin',
@@ -323,6 +367,8 @@ def approve_registration_view(request, pk):
                 qualification=reg.qualification,
                 registration_number=reg.registration_number,
             )
+            set_permissions_from_role(sm)
+            sm.save()
 
             # Mark as approved
             reg.status = 'approved'
@@ -471,14 +517,19 @@ def reset_clinic_password_view(request, pk):
             user.password = reg.password_hash
             user.save(update_fields=['password'])
 
+            # Flag forced password change for all staff memberships
+            StaffMember.objects.filter(user=user).update(must_change_password=True)
+
             # Ensure StaffMember exists
             if not StaffMember.objects.filter(user=user).exists():
-                StaffMember.objects.create(
+                _sm = StaffMember.objects.create(
                     user=user, clinic=clinic, role='admin',
                     display_name=reg.doctor_name,
                     qualification=reg.qualification,
                     registration_number=reg.registration_number,
                 )
+                set_permissions_from_role(_sm)
+                _sm.save()
 
             # Mark approved if not already
             reg.status = 'approved'
@@ -491,6 +542,43 @@ def reset_clinic_password_view(request, pk):
         logger.error('FIX_ACCOUNT_FAILED pk=%s error=%s', pk, e, exc_info=True)
         messages.error(request, f'Fix failed: {e}. Make sure migrations are up to date: python manage.py migrate')
 
+    return redirect('accounts:admin_panel')
+
+
+@_require_POST
+def superuser_reset_password_view(request, pk):
+    """Superuser resets a user's password from the admin panel password reset request."""
+    if not request.user.is_superuser:
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden('Not authorized.')
+
+    import secrets, string
+    reset_req = get_object_or_404(PasswordResetRequest, pk=pk)
+    user = reset_req.user
+
+    temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+    user.set_password(temp_password)
+    user.save()
+
+    # Flag forced change on all memberships
+    StaffMember.objects.filter(user=user).update(must_change_password=True)
+
+    # Mark all pending requests for this user as handled
+    PasswordResetRequest.objects.filter(user=user, handled=False).update(
+        handled=True, handled_at=timezone.now()
+    )
+
+    # Build WhatsApp deeplink
+    phone = user.username
+    wa_text = (
+        f"Hello! Your ClinicAI password has been reset. "
+        f"Temporary password: {temp_password} — Please log in and change it immediately."
+    )
+    wa_url = f"https://wa.me/91{phone}?text={quote(wa_text)}"
+
+    messages.success(request, f'Password reset for {user.username}. Temp: {temp_password}')
+    request.session['wa_reset_url'] = wa_url
+    request.session['wa_reset_name'] = user.username
     return redirect('accounts:admin_panel')
 
 
@@ -553,6 +641,8 @@ def add_clinic_view(request):
             qualification=qualification,
             registration_number=registration_number,
         )
+        set_permissions_from_role(sm)
+        sm.save()
         # Immediately switch to the new clinic
         request.session['active_staff_id'] = sm.pk
         messages.success(request, f'{clinic_name} added. You are now working at this clinic.')
@@ -566,6 +656,8 @@ def add_clinic_view(request):
 def change_password_view(request):
     """Logged-in user changes their own password."""
     from django.contrib.auth import update_session_auth_hash
+
+    forced = StaffMember.objects.filter(user=request.user, must_change_password=True).exists()
 
     error = None
     if request.method == 'POST':
@@ -583,10 +675,14 @@ def change_password_view(request):
             request.user.set_password(pw1)
             request.user.save()
             update_session_auth_hash(request, request.user)
+            # Clear forced-change flag on all memberships
+            StaffMember.objects.filter(user=request.user, must_change_password=True).update(
+                must_change_password=False
+            )
             messages.success(request, 'Password changed successfully.')
             return redirect('reception:dashboard')
 
-    return render(request, 'accounts/change_password.html', {'error': error})
+    return render(request, 'accounts/change_password.html', {'error': error, 'forced': forced})
 
 
 @login_required
@@ -611,6 +707,160 @@ def update_email_view(request):
     request.user.email = email
     request.user.save(update_fields=['email'])
     return JsonResponse({'ok': True})
+
+
+def forgot_password_view(request):
+    """Forgot password — shows security message; logs reset request for clinic admin to handle."""
+    if request.user.is_authenticated:
+        return redirect('reception:dashboard')
+
+    submitted = False
+    if request.method == 'POST':
+        phone = request.POST.get('phone', '').strip()
+        if phone:
+            try:
+                user = User.objects.get(username=phone)
+                # Only create one pending request at a time
+                PasswordResetRequest.objects.get_or_create(user=user, handled=False)
+                logger.info('FORGOT_PASSWORD_REQUEST username=%s', phone)
+            except User.DoesNotExist:
+                pass  # Don't reveal whether the account exists
+        submitted = True
+
+    return render(request, 'accounts/forgot_password.html', {'submitted': submitted})
+
+
+@require_permission('can_manage_staff')
+@require_POST
+def staff_reset_password_view(request, pk):
+    """Clinic admin resets a staff member's password to a temp value and flags forced change."""
+    import secrets
+    import string
+
+    my_clinic = request.user.staff_profile.clinic
+    sm = get_object_or_404(StaffMember, pk=pk, clinic=my_clinic)
+
+    # Generate a readable temp password
+    alphabet = string.ascii_letters + string.digits
+    temp_password = ''.join(secrets.choice(alphabet) for _ in range(10))
+
+    sm.user.set_password(temp_password)
+    sm.user.save()
+    sm.must_change_password = True
+    sm.save(update_fields=['must_change_password'])
+
+    # Mark any pending reset requests as handled
+    PasswordResetRequest.objects.filter(user=sm.user, handled=False).update(
+        handled=True,
+        handled_at=timezone.now(),
+    )
+
+    # Build WhatsApp deeplink for admin to notify the staff member
+    phone_number = sm.user.username  # phone is the username
+    wa_text = (
+        f"Hello {sm.display_name}, your ClinicAI login password has been reset by your admin. "
+        f"Temporary password: {temp_password} — Please log in and change it immediately."
+    )
+    wa_url = f"https://wa.me/91{phone_number}?text={quote(wa_text)}"
+
+    messages.success(
+        request,
+        f'Password reset for {sm.display_name}. Temp password: {temp_password}. '
+        f'They must change it on first login.'
+    )
+    # Store wa_url in session so template can show the WhatsApp button
+    request.session['wa_reset_url'] = wa_url
+    request.session['wa_reset_name'] = sm.display_name
+    return redirect('accounts:staff_list')
+
+
+@require_permission('can_manage_staff')
+def clinic_edit_view(request):
+    """Edit clinic name, address, city, state, phone."""
+    clinic = request.user.staff_profile.clinic
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        if not name:
+            messages.error(request, 'Clinic name is required.')
+            return render(request, 'accounts/clinic_edit.html', {'clinic': clinic})
+        clinic.name = name
+        clinic.address = request.POST.get('address', '').strip()
+        clinic.city = request.POST.get('city', '').strip()
+        clinic.state = request.POST.get('state', '').strip()
+        clinic.phone = request.POST.get('phone', '').strip()
+        clinic.save(update_fields=['name', 'address', 'city', 'state', 'phone'])
+        messages.success(request, 'Clinic details updated.')
+        return redirect('accounts:staff_list')
+    return render(request, 'accounts/clinic_edit.html', {'clinic': clinic})
+
+
+@login_required
+def clinic_delete_view(request, pk):
+    """Delete a clinic. Superuser only."""
+    if not request.user.is_superuser:
+        messages.error(request, 'Only superuser can delete clinics.')
+        return redirect('accounts:admin_panel')
+    clinic = get_object_or_404(Clinic, pk=pk)
+    if request.method == 'POST':
+        clinic_name = clinic.name
+        clinic.delete()
+        messages.success(request, f'Clinic "{clinic_name}" has been deleted.')
+        return redirect('accounts:admin_panel')
+    return render(request, 'accounts/clinic_delete_confirm.html', {'clinic': clinic})
+
+
+@require_permission('can_manage_staff')
+@require_POST
+def request_clinic_deletion_view(request):
+    """Doctor/admin submits a deletion request for their clinic."""
+    from .models import ClinicDeletionRequest
+    clinic = request.user.staff_profile.clinic
+    reason = request.POST.get('reason', '').strip()
+    # Prevent duplicate pending requests
+    if ClinicDeletionRequest.objects.filter(clinic=clinic, status='pending').exists():
+        messages.warning(request, 'A deletion request for this clinic is already pending review.')
+        return redirect('accounts:staff_list')
+    ClinicDeletionRequest.objects.create(
+        clinic=clinic,
+        clinic_name_snapshot=clinic.name,
+        requested_by=request.user,
+        reason=reason,
+    )
+    messages.success(request, 'Deletion request submitted. You will be notified within 24–48 hours.')
+    return redirect('accounts:staff_list')
+
+
+@login_required
+def approve_clinic_deletion_view(request, pk):
+    """Superuser approves a clinic deletion request."""
+    from .models import ClinicDeletionRequest
+    if not request.user.is_superuser:
+        return render(request, 'accounts/403.html', status=403)
+    req = get_object_or_404(ClinicDeletionRequest, pk=pk, status='pending')
+    if request.method == 'POST':
+        clinic_name = req.clinic_name_snapshot
+        clinic_to_delete = req.clinic
+        # Delete request record first (clinic CASCADE would wipe it anyway)
+        req.delete()
+        clinic_to_delete.delete()  # cascades to all clinic data
+        messages.success(request, f'Clinic "{clinic_name}" and all its data have been permanently deleted.')
+        return redirect('accounts:admin_panel')
+    return render(request, 'accounts/clinic_delete_confirm.html', {'clinic': req.clinic, 'deletion_request': req})
+
+
+@login_required
+@require_POST
+def reject_clinic_deletion_view(request, pk):
+    """Superuser rejects a clinic deletion request."""
+    from .models import ClinicDeletionRequest
+    if not request.user.is_superuser:
+        return render(request, 'accounts/403.html', status=403)
+    req = get_object_or_404(ClinicDeletionRequest, pk=pk, status='pending')
+    req.status = 'rejected'
+    req.reviewed_at = timezone.now()
+    req.save()
+    messages.success(request, f'Deletion request for "{req.clinic_name_snapshot}" rejected.')
+    return redirect('accounts:admin_panel')
 
 
 def check_user_view(request, phone):

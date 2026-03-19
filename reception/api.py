@@ -57,6 +57,31 @@ def patient_search_api(request):
 
 
 @require_permission('can_register_patients')
+def patient_autocomplete_api(request):
+    """
+    Autocomplete: search by partial name OR partial phone.
+    Returns up to 8 matches. Min 2 chars.
+    """
+    from django.db.models import Q
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': []})
+
+    clinic = request.user.staff_profile.clinic
+    qs = Patient.objects.filter(
+        Q(full_name__icontains=q) | Q(phone__startswith=q),
+        clinic=clinic,
+    ).order_by('full_name')[:8]
+
+    results = [
+        {'id': str(p.id), 'name': p.full_name, 'phone': p.phone,
+         'age': p.age, 'gender_display': p.gender_display}
+        for p in qs
+    ]
+    return JsonResponse({'results': results})
+
+
+@require_permission('can_register_patients')
 def queue_api(request):
     """Return today's queue as JSON for live updates.
 

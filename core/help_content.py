@@ -39,16 +39,27 @@ PATIENT DATA SAFETY AND PRIVACY:
 COMPLETE FEATURE GUIDE:
 
 RECEPTION DASHBOARD (/)
-- Patient lookup by 10-digit phone number: type the number in the search box; if found, a card shows name, age, allergies and recent visits with "Add to Queue" and "View Profile" buttons; if not found, a prompt to register appears.
-- New patient registration: click "+ New Patient" or "+ Walk-in" (floating button); fill name, phone, age, gender, chief complaint; a token number is assigned automatically.
+- Patient lookup: type a 10-digit phone number in the search box at the top. If found, a card shows name, age, allergies, and recent visits with "Add to Queue" and "View Profile" buttons. If not found, a prompt appears to register the patient.
+- AI assistant: the search bar at the top also accepts natural-language questions (e.g. "how many patients today", "which medicines are expiring"). The AI can answer questions about the clinic's live data if you have analytics permission.
+- New patient registration: click "+ New Patient" or the floating "+ Walk-in" button; fill name, phone, age, gender, chief complaint; a token number is assigned automatically.
 - Today's queue: shows all patients with token number, name, age, chief complaint, vitals (BP if entered), and status badge.
 - Stat card filters: click "Total Today", "Waiting", "In Consult", or "Done" cards at the top to filter the queue instantly.
-- Queue actions per patient: "Call In" (moves waiting → in consultation), "Prescribe" (opens consult screen, only shown when in consultation), "No Show" (marks patient absent), "Cancel" (opens a cancellation modal asking for reason).
+- Queue actions per patient: "Call In" (moves waiting → in consultation), "Prescribe" (opens consult screen, shown when in consultation), "No Show" (marks patient absent), "Cancel" (opens a cancellation modal asking for reason).
 - Cancellation reasons available: Patient called to cancel, Rescheduled, Doctor unavailable, Patient unwell / hospitalised, Other.
-- No-show button: marks patient as no-show; removes from active queue.
+- No-show button: marks patient as no-show and removes them from the active queue.
 - Weekly summary bar: shows total visits in last 7 days, total registered patients, and new patients this week.
 - Queue auto-refreshes every 30 seconds.
 - Reset / Refresh button: clears the active filter and refreshes the queue.
+
+PATIENT PROFILE (/reception/patient/<id>/)
+- Shows full patient details: name, age, gender, phone, allergies, all past visits with date and chief complaint.
+- Each past visit shows the diagnosis, medicines prescribed, and a link to view or print the prescription.
+- Edit Profile button: opens the patient edit form to update name, age, gender, address, and allergy information.
+
+PATIENT EDIT (/reception/patient/<id>/edit/)
+- Edit any patient detail except phone number (phone is the unique identifier and cannot be changed).
+- Fields: full name, age, gender, address, known allergies / comorbidities.
+- Save changes and return to the patient profile.
 
 DOCTOR QUEUE (/rx/doctor/)
 - Shows all of today's patients who are waiting or in consultation.
@@ -56,74 +67,105 @@ DOCTOR QUEUE (/rx/doctor/)
 - "Start Consult" button opens the prescription screen for that visit.
 
 PRESCRIPTION / CONSULT SCREEN (/rx/consult/<visit-id>/)
+Step 1 — Clinical Notes:
 - Chief complaint: pre-filled from reception; editable.
-- Clinical notes: free-text area for symptoms, examination findings, diagnosis.
-- AI generation: click "Generate with AI" — the system automatically removes all patient-identifying information and sends only de-identified clinical facts to ClinicAI's AI engine. The AI returns a suggested diagnosis, advice, and a medicine list.
-- Medicine search: type a medicine name or generic salt name in the search box to find matches from the clinic's inventory or a built-in drug list.
-- Add medicine: click a search result to add it to the prescription table; each row shows drug name, dose, frequency, duration, instructions.
-- Edit medicine fields: all fields in the medicine table are directly editable before saving.
-- Remove medicine: click the remove button (×) on any medicine row.
-- Drug interaction alerts: real-time warnings appear if two medicines in the list have a known interaction.
-- Save prescription: click "Save" to store the prescription; cannot be edited after saving.
-- Print: click "Print" to open the print view.
+- Examination findings, comorbidities, past history, drug allergies: click the "+ Add" buttons to expand optional sections. Each section can be collapsed with ✕.
+- Voice dictation: a floating microphone button appears at the bottom-right of the screen (if the device supports it). Tap the mic to start recording; tap again to stop. The dictated text is appended to whichever field you last tapped. The mic works for all text fields — chief complaint, examination findings, investigations, advice, and patient summary.
+- Auto-suggest: as you type in the clinical notes, ClinicAI suggests medical terms (symptoms, diagnoses, investigations, advice snippets) drawn from an Indian clinical terminology database.
+- Two AI modes: Quick Prescribe (goes straight to a prescription) or Differential Dx (AI ranks possible diagnoses first, then you choose one before prescribing).
+
+Step 2 — Differential Diagnoses (if Differential Dx mode chosen):
+- AI returns 3–5 ranked diagnoses with reasoning and red flags.
+- Select the most likely diagnosis, then click "Get Investigations" or skip to prescribe directly.
+
+Step 3 — Investigations:
+- AI suggests investigations split into Immediate and Elective groups.
+- Investigations are unticked by default — tick the ones you want to order.
+- Click "Generate Prescription" to proceed.
+
+Step 4 — Prescription (editable before saving):
+- Diagnosis: editable text field.
+- Medicines: each row has drug name (with typeahead from clinic inventory), dosage pills, frequency pills, duration pills, and optional remarks. Add rows with "+ Add Medicine"; remove with ×.
+- Drug interaction alerts: appear in real-time if two medicines have a known interaction (colour-coded: Major / Moderate / Minor).
+- Investigations Suggested: large text area (editable, voice-enabled). Shows tests selected in Step 3 or AI-suggested tests if Quick Prescribe was used.
+- Advice: large text area (editable, voice-enabled).
+- Patient Summary (English): large text area for a plain-language summary to send to the patient via WhatsApp. Voice-enabled.
+- Patient Summary (Hindi): same summary in Hindi. Voice-enabled. Uses Devanagari font.
+- Follow-up in (days): number field.
+- Valid for (days): pill selector (5 / 7 / 10 / 14 / 30 days).
+- Save & Complete Visit: saves the prescription and marks the visit as done.
+- Regenerate: re-runs AI to generate a fresh prescription.
 
 PRINT VIEW (/rx/print/<visit-id>/)
-- A5 layout by default; A4 also supported.
-- Shows clinic letterhead (if uploaded), patient details, date, medicines table, advice, follow-up.
-- WhatsApp share button: sends a pre-filled WhatsApp message with a link to the prescription (uses the patient's phone number).
-- Print is done using the browser's print dialog; use "Save as PDF" for digital copies.
+- A5 layout by default; A4 also supported — toggle with the button at the top.
+- Shows clinic letterhead (if uploaded), patient details, date, medicines table, investigations, advice, follow-up.
+- WhatsApp button: on mobile and devices that support Web Share, tapping "Send on WhatsApp" generates a PDF of the prescription and opens the share sheet directly — no file is saved to the device. On desktop browsers, it opens a WhatsApp chat with a message pre-filled.
+- Print: click "Print" to use the browser print dialog; use "Save as PDF" for digital copies.
 
 MY MEDICINES / FAVORITES (/rx/favorites/)
 - Doctors can save frequently prescribed medicines as favorites for faster prescribing.
-- Add a favorite: search for a medicine and click the star/bookmark icon.
-- Remove a favorite: click the star icon again to toggle off.
-- Favorites appear at the top of the medicine search results on the consult screen.
+- Favorites appear as quick-add pills at the top of the consult screen.
+- Add: search for a medicine and bookmark it. Remove: click the bookmark again to toggle off.
 
 PHARMACY INVENTORY (/pharmacy/)
 - Stat card filters at the top: All, Low Stock, Expiring Soon — click to filter the list.
 - Search bar: filter medicines by name or generic composition.
-- Each medicine row has a three-dot menu (⋮) with options: Edit Medicine, Add Batch, Edit Batch, Flag for Reorder, Delete.
-- Add stock: click "+ Add Medicine" to create a new medicine entry; fill name, generic composition, form, unit.
-- Add batch: use the three-dot menu → Add Batch; enter batch number, expiry date, quantity, purchase price, selling price.
-- Edit batch: three-dot menu → Edit Batch; update expiry, quantity, or price for an existing batch.
-- Flag for reorder: three-dot menu → Flag for Reorder; marks the item so it appears in the Low Stock filter.
-- Delete medicine: three-dot menu → Delete; removes the medicine and all its batches.
+- Each medicine row has a three-dot menu (⋮) with: Edit Medicine, Add Batch, Edit Batch, Flag for Reorder, Delete.
+- Add stock: click "+ Add Medicine"; fill name, generic composition, form, unit.
+- Add batch: three-dot menu → Add Batch; enter batch number, expiry date, quantity, purchase price, selling price.
+- Edit batch: three-dot menu → Edit Batch; update expiry, quantity, or price.
+- Flag for reorder: marks the item so it appears in the Low Stock filter.
+- Delete medicine: three-dot menu → Delete; removes the medicine and all its batches permanently.
 
 BILL SCAN (/pharmacy/scan/)
 - Upload a photo of a purchase invoice.
 - AI reads the invoice and automatically extracts medicine names, batch numbers, expiry dates, quantities, and prices.
-- Review the extracted items, make corrections if needed, then confirm to add them to inventory in bulk.
+- Review the extracted items, correct if needed, then confirm to add them to inventory in bulk.
 
 DISPENSING AND BILLING (/pharmacy/dispense/<visit-id>/)
 - Accessible from the pharmacy dashboard when a patient's status is "Done".
-- Shows the medicines prescribed for that visit.
+- Works even if there is no prescription (walk-in or OTC purchase) — use the manual medicine search to add items.
+- Shows prescribed medicines matched to clinic inventory automatically.
+- Medicine matching is smart: "Tab Ultracet" on the prescription will match "Ultracet" in inventory.
+- Alternatives: if a prescribed medicine is out of stock, alternatives with the same generic composition are suggested.
 - Quantity steppers: adjust the quantity to dispense for each item.
-- Alternatives: if a prescribed medicine is out of stock, the system suggests alternatives with the same generic composition.
-- Payment mode: select Cash, UPI, or Card.
+- Payment mode: Cash, UPI, or Card.
 - Generate bill: creates a printed/PDF bill with itemised medicines, quantities, prices, and total.
 
 ANALYTICS (/analytics/)
-- Visible to doctors and admin staff only (requires can_view_analytics permission).
-- Date range selector: 7 days, 30 days, 3 months, 1 year.
-- Visit trends: daily patient volume chart for the selected range.
+- Visible to users with "View analytics" permission (doctors and admin by default).
+- Date range: 7 days, 30 days, 3 months (90 days), 1 year — click the chips at the top right.
+- Patient volume chart: a mountain/area chart showing daily visits for the selected range. No-show and cancelled visits are excluded.
 - Top chief complaints: most common reasons patients visited in the selected period.
 - Top prescribed medicines: most frequently prescribed drugs in the selected period.
-- Summary numbers: total visits, total registered patients, new patients, average daily visits.
+- Summary cards: Total Visits, Avg/Day, New Patients, Registered Patients.
+- Patient Visit Log: a full table of every visit in the period — date, patient name (clickable to profile), age, mobile number, and diagnosis. Searchable by name, mobile, or diagnosis using the search box above the table.
 
 STAFF MANAGEMENT (/accounts/staff/)
-- Add staff: click "+ Add Staff"; enter name, username/phone, password, role.
-- Edit staff: click the edit icon next to a staff member to change their details or permissions.
-- Delete staff: click the delete icon; cannot delete your own account.
+- Add staff: click "+ Add Staff"; enter name, mobile number (becomes username), password, and role.
+- Edit staff: click the edit icon to change name, username, role, or permissions.
+- Reset password: click "Reset Password" next to a staff member to generate a secure temporary password; the page then shows a WhatsApp button to send the new password to the staff member directly.
+- Delete staff: click the delete icon; you cannot delete your own account.
 - Roles available: Admin, Doctor, Receptionist, Pharmacist (presets that set permissions automatically).
-- The 7 permission flags and what they control:
+- The 7 permission flags:
   1. Register patients — access to reception dashboard, patient registration, queue management.
   2. Write prescriptions — access to doctor queue and consult/prescription screen.
   3. View pharmacy — access to pharmacy inventory.
   4. Edit inventory — add, edit, or delete stock and batches.
   5. Dispense and bill — access to dispensing screen and billing.
   6. View analytics — access to analytics dashboard.
-  7. Manage staff — access to staff management screen, letterhead, and plan settings.
-- Role presets: selecting a role automatically checks the appropriate permission flags; you can customise further per person.
+  7. Manage staff — access to staff management, letterhead, clinic settings, and plan settings.
+
+CLINIC SETTINGS — EDIT CLINIC DETAILS (/accounts/clinic/edit/)
+- Edit clinic name, address, city, state, and phone number.
+- Requires "Manage staff" permission.
+- Changes apply immediately to the clinic header and all print views.
+
+CLINIC DELETION (request-based)
+- Doctors or admins can request clinic deletion from the staff management page.
+- Deletion is not instant — a request is submitted to the ClinicAI team, who review and confirm within 24–48 hours.
+- Once approved, the clinic and all its data (patients, prescriptions, inventory, bills) are permanently deleted. This cannot be undone.
+- To cancel a pending deletion request, contact WhatsApp +91-6366671221.
 
 LETTERHEAD (/accounts/letterhead/)
 - Upload a letterhead image (PNG or JPG) — typically a scan of the clinic's printed letterhead.
@@ -134,24 +176,29 @@ LETTERHEAD (/accounts/letterhead/)
 PLAN AND USAGE (/accounts/plan/)
 - Shows the clinic's daily AI prescription count and progress bar toward the free plan limit.
 - 7-day history: a table showing how many AI-assisted prescriptions were generated each day.
-- Free plan: 30 AI-generated prescriptions per day. After the limit is reached, the consult screen shows a comparison card and disables AI generation for the rest of the day. Manual prescriptions are unlimited.
-- Upgrade CTA: click "Upgrade to Pro" to open a WhatsApp chat with the ClinicAI team.
+- Free plan: 30 AI-generated prescriptions per day. After the limit, AI generation is disabled for the rest of the day; manual prescriptions are still unlimited.
+- Upgrade: click "Upgrade to Pro" to open a WhatsApp chat with the ClinicAI team.
 
 MULTI-CLINIC SUPPORT
-- Click the clinic name in the navigation bar to see clinic options.
-- "Add another clinic": fills the setup form to register a second clinic under the same account.
-- Switch between clinics: click the clinic name and select a different clinic from the dropdown to switch your active session to that clinic.
+- Doctors can belong to more than one clinic.
+- Click the clinic name in the navigation bar to see a dropdown to switch between clinics or add a new clinic.
 - Each clinic has completely separate patients, inventory, staff, and prescriptions.
+- To add a second clinic: click the clinic name → "Add another clinic" and fill in the setup form.
 
 CLINIC REGISTRATION (/accounts/register/)
-- Public self-registration form for new clinics.
+- Public self-registration form for new clinics wanting to join ClinicAI.
 - Three sections: clinic details, doctor details, login credentials.
-- After submitting, the request goes to the ClinicAI team for approval.
-- Once approved, the doctor can log in using their 10-digit mobile number as the username.
+- After submitting, the request goes to the ClinicAI team for review.
+- Once approved, the doctor logs in using their 10-digit mobile number as the username.
 
 LOGIN
 - Use your 10-digit mobile number OR username OR email address to log in.
-- Password is set during clinic registration or by an admin.
+- Password is set during clinic registration or by a clinic admin.
+- Forgot password: go to /accounts/forgot-password/ and enter your mobile number. The system notifies your clinic admin, who can reset the password for you.
+
+ACCOUNT SETTINGS — EMAIL UPDATE
+- Go to Staff Management → your name → edit to add or update your email address.
+- Email can also be used to log in once saved.
 
 ---
 

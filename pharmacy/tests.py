@@ -1259,3 +1259,430 @@ class EditItemViewTest(TestCase):
         anon = Client()
         resp = anon.get(f'/pharmacy/item/{self.item.pk}/edit/')
         self.assertIn(resp.status_code, [302, 403])
+
+
+# ===========================================================================
+# New API / Walk-in / Edit Bill Tests
+# ===========================================================================
+
+import decimal as _decimal
+from django.utils import timezone as _tz
+
+
+def _make_clinic(name='Test Clinic'):
+    return Clinic.objects.create(name=name, address='1 Rd', city='Mumbai', phone='9000000099')
+
+
+def _make_user(username, password='testpass123'):
+    return User.objects.create_user(username=username, password=password)
+
+
+def _make_staff(user, clinic, role='pharmacist'):
+    sm = StaffMember.objects.create(user=user, clinic=clinic, role=role, display_name='Test Staff')
+    set_permissions_from_role(sm)
+    sm.save()
+    return sm
+
+
+def _make_item(clinic, name='Paracetamol 500mg'):
+    cat = MedicineCatalog.objects.create(name=name, generic_name='Paracetamol')
+    return PharmacyItem.objects.create(clinic=clinic, medicine=cat)
+
+
+def _make_batch(item, qty=50, price='10.00', batch_no='B001'):
+    return PharmacyBatch.objects.create(
+        item=item, batch_number=batch_no, quantity=qty,
+        unit_price=_decimal.Decimal(price),
+        expiry_date=datetime.date.today() + datetime.timedelta(days=365),
+    )
+
+
+def _make_patient(clinic, phone='9876543210'):
+    from reception.models import Patient
+    return Patient.objects.create(
+        full_name='Test Patient', phone=phone, clinic=clinic,
+        age=30, gender='M',
+    )
+
+
+def _make_visit(patient, clinic):
+    from reception.models import Visit
+    return Visit.objects.create(
+        patient=patient, clinic=clinic,
+        visit_date=_tz.now().date(), token_number=1, status='done',
+    )
+
+
+class ItemDetailApiTest(TestCase):
+    def setUp(self):
+        self.clinic = _make_clinic()
+        self.user = _make_user('pharm_api')
+        _make_staff(self.user, self.clinic)
+        self.item = _make_item(self.clinic)
+        self.batch = _make_batch(self.item)
+        self.client = Client()
+        self.client.login(username='pharm_api', password='testpass123')
+
+    def test_returns_item_details(self):
+        resp = self.client.get(f'/pharmacy/api/item-detail/?id={self.item.pk}')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['id'], self.item.pk)
+        self.assertIn('Paracetamol', data['name'])
+        self.assertEqual(data['batch_id'], self.batch.pk)
+        self.assertTrue(data['in_stock'])
+
+    def test_404_for_wrong_clinic(self):
+        other_clinic = _make_clinic('Other')
+        other_item = _make_item(other_clinic, 'Ibuprofen')
+        resp = self.client.get(f'/pharmacy/api/item-detail/?id={other_item.pk}')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_requires_login(self):
+        c = Client()
+        resp = c.get(f'/pharmacy/api/item-detail/?id={self.item.pk}')
+        self.assertEqual(resp.status_code, 302)
+
+
+class WalkInViewTest(TestCase):
+    def setUp(self):
+        self.clinic = _make_clinic()
+        self.user = _make_user('walkin_user')
+        _make_staff(self.user, self.clinic)
+        self.client = Client()
+        self.client.login(username='walkin_user', password='testpass123')
+
+    def test_get_walk_in_page(self):
+        resp = self.client.get('/pharmacy/walk-in/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_select_existing_patient_creates_visit(self):
+        from reception.models import Visit
+        patient = _make_patient(self.clinic, phone='9111222333')
+        resp = self.client.post('/pharmacy/walk-in/', {
+            'action': 'select',
+            'patient_id': patient.pk,
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Visit.objects.filter(patient=patient, clinic=self.clinic).exists())
+
+    def test_select_existing_patient_reuses_todays_visit(self):
+        from reception.models import Visit
+        patient = _make_patient(self.clinic, phone='9111222334')
+        visit = _make_visit(patient, self.clinic)
+        resp = self.client.post('/pharmacy/walk-in/', {
+            'action': 'select',
+            'patient_id': patient.pk,
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(Visit.objects.filter(patient=patient, clinic=self.clinic).count(), 1)
+
+    def test_register_new_patient_creates_patient_and_visit(self):
+        from reception.models import Patient, Visit
+        resp = self.client.post('/pharmacy/walk-in/', {
+            'action': 'register',
+            'full_name': 'New Patient',
+            'phone': '9000111222',
+            'age': '25',
+            'gender': 'F',
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Patient.objects.filter(phone='9000111222', clinic=self.clinic).exists())
+        patient = Patient.objects.get(phone='9000111222', clinic=self.clinic)
+        self.assertTrue(Visit.objects.filter(patient=patient, clinic=self.clinic).exists())
+
+    def test_register_missing_name_shows_error(self):
+        resp = self.client.post('/pharmacy/walk-in/', {
+            'action': 'register',
+            'full_name': '',
+            'phone': '9000111223',
+        })
+        self.assertEqual(resp.status_code, 200)
+
+    def test_requires_login(self):
+        c = Client()
+        resp = c.get('/pharmacy/walk-in/')
+        self.assertEqual(resp.status_code, 302)
+
+
+class EditBillTest(TestCase):
+    def setUp(self):
+        from pharmacy.models import DispensedItem, PharmacyBill
+        self.clinic = _make_clinic()
+        self.user = _make_user('edit_bill_user')
+        self.sm = _make_staff(self.user, self.clinic)
+        self.patient = _make_patient(self.clinic, phone='9999888777')
+        self.visit = _make_visit(self.patient, self.clinic)
+        self.item = _make_item(self.clinic)
+        self.batch = _make_batch(self.item, qty=50)
+        # Create a dispensed item
+        DispensedItem.objects.create(
+            visit=self.visit, pharmacy_item=self.item,
+            batch=self.batch, quantity_dispensed=5,
+            unit_price=_decimal.Decimal('10.00'),
+            dispensed_by=self.sm,
+        )
+        self.bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number='BILL-TEST-0001',
+            subtotal=_decimal.Decimal('50.00'),
+            discount_percent=0,
+            final_amount=_decimal.Decimal('50.00'),
+            payment_mode='cash',
+            created_by=self.sm,
+        )
+        # Deplete stock (as dispense would)
+        self.batch.quantity = 45  # was 50, dispensed 5
+        self.batch.save()
+        self.client = Client()
+        self.client.login(username='edit_bill_user', password='testpass123')
+
+    def test_edit_bill_reverses_stock(self):
+        from pharmacy.models import PharmacyBill
+        resp = self.client.post(f'/pharmacy/bill/{self.bill.pk}/edit/')
+        self.assertEqual(resp.status_code, 302)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.quantity, 50)  # stock restored
+
+    def test_edit_bill_deletes_bill(self):
+        from pharmacy.models import PharmacyBill
+        pk = self.bill.pk
+        self.client.post(f'/pharmacy/bill/{pk}/edit/')
+        self.assertFalse(PharmacyBill.objects.filter(pk=pk).exists())
+
+    def test_edit_bill_deletes_dispensed_items(self):
+        from pharmacy.models import DispensedItem
+        self.client.post(f'/pharmacy/bill/{self.bill.pk}/edit/')
+        self.assertFalse(DispensedItem.objects.filter(visit=self.visit).exists())
+
+    def test_edit_bill_redirects_to_dispense(self):
+        resp = self.client.post(f'/pharmacy/bill/{self.bill.pk}/edit/')
+        self.assertRedirects(resp, f'/pharmacy/dispense/{self.visit.id}/', fetch_redirect_response=False)
+
+    def test_cannot_edit_other_clinics_bill(self):
+        from pharmacy.models import PharmacyBill
+        other_clinic = _make_clinic('Other')
+        other_user = _make_user('other_pharm')
+        _make_staff(other_user, other_clinic)
+        c = Client()
+        c.login(username='other_pharm', password='testpass123')
+        resp = c.post(f'/pharmacy/bill/{self.bill.pk}/edit/')
+        self.assertEqual(resp.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Tests for _calc_qty: quantity calculation for different preparations
+# ---------------------------------------------------------------------------
+
+from pharmacy.views import _calc_qty
+
+
+class CalcQtyTabletTest(TestCase):
+    """Tablets/capsules: qty = per_day × days"""
+
+    def test_tab_twice_daily_5_days(self):
+        self.assertEqual(_calc_qty('1-0-1', '5 days', 'Tab Metformin 500mg'), 10)
+
+    def test_tab_thrice_daily_7_days(self):
+        self.assertEqual(_calc_qty('1-1-1', '7 days', 'Cap Amoxicillin 500mg'), 21)
+
+    def test_tab_once_daily_1_month(self):
+        self.assertEqual(_calc_qty('1-0-0', '1 month', 'Tab Atorvastatin 10mg'), 30)
+
+    def test_tab_once_daily_2_weeks(self):
+        self.assertEqual(_calc_qty('1-0-0', '2 weeks', 'Tab Pantoprazole'), 14)
+
+    def test_tab_sos(self):
+        # SOS dosage: "SOS" → can't parse to int, falls back to 1
+        self.assertEqual(_calc_qty('SOS', '5 days', 'Tab Crocin'), 1)
+
+    def test_no_duration(self):
+        self.assertEqual(_calc_qty('1-0-1', '', 'Tab Metformin'), 1)
+
+    def test_no_dosage(self):
+        self.assertEqual(_calc_qty('', '5 days', 'Tab Metformin'), 1)
+
+
+class CalcQtyUnitDispenseTest(TestCase):
+    """Syrups, ointments, creams, lotions etc. must always return 1."""
+
+    # --- Syrup ---
+    def test_syrup_twice_daily_5_days_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-1', '5 days', 'Cough Syrup'), 1)
+
+    def test_syrup_case_insensitive(self):
+        self.assertEqual(_calc_qty('1-1-1', '7 days', 'BENADRYL SYRUP'), 1)
+
+    def test_syrup_thrice_daily_10_days_returns_1(self):
+        self.assertEqual(_calc_qty('1-1-1', '10 days', 'Syrup Amoxicillin 125mg'), 1)
+
+    # --- Ointment ---
+    def test_ointment_twice_daily_5_days_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-1', '5 days', 'Mupirocin Ointment'), 1)
+
+    def test_ointment_word_anywhere(self):
+        self.assertEqual(_calc_qty('1-0-1', '7 days', 'Apply Ointment BD'), 1)
+
+    # --- Cream ---
+    def test_cream_twice_daily_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-1', '5 days', 'Betnovate Cream'), 1)
+
+    def test_cream_mixed_case(self):
+        self.assertEqual(_calc_qty('1-0-0', '14 days', 'Clotrimazole CREAM'), 1)
+
+    # --- Lotion ---
+    def test_lotion_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-1', '5 days', 'Calamine Lotion'), 1)
+
+    # --- Gel ---
+    def test_gel_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-1', '7 days', 'Diclofenac Gel'), 1)
+
+    # --- Drops ---
+    def test_drops_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-1', '5 days', 'Eye Drops Tobramycin'), 1)
+
+    def test_drop_singular_returns_1(self):
+        self.assertEqual(_calc_qty('2-2-2', '10 days', 'Ear Drop'), 1)
+
+    # --- Suspension ---
+    def test_suspension_returns_1(self):
+        self.assertEqual(_calc_qty('1-1-1', '5 days', 'Azithromycin Suspension'), 1)
+
+    # --- Solution ---
+    def test_solution_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-0', '7 days', 'Povidone Solution'), 1)
+
+    # --- Patch ---
+    def test_patch_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-0', '7 days', 'Nicotine Patch'), 1)
+
+    # --- Spray ---
+    def test_spray_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-1', '14 days', 'Nasal Spray'), 1)
+
+    # --- Powder / Sachet ---
+    def test_powder_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-0', '5 days', 'Dusting Powder'), 1)
+
+    def test_sachet_returns_1(self):
+        self.assertEqual(_calc_qty('1-0-0', '5 days', 'ORS Sachet'), 1)
+
+    # --- Edge: drug name contains "cream" as substring of tablet name ---
+    def test_cream_in_name_correctly_detected(self):
+        # "Icecream Tab" should NOT be 1 — wait, it contains "cream"
+        # Actually this is an edge case we accept: if "cream" appears in any form we return 1
+        # The regex uses \b word boundary so "Icecream" won't match "cream" as a word
+        self.assertNotEqual(_calc_qty('1-0-1', '5 days', 'Icecream flavored Tab'), 1)
+        # But "Ice Cream" would match
+        self.assertEqual(_calc_qty('1-0-1', '5 days', 'Ice Cream topical'), 1)
+
+    # --- No drug name: falls through to calculation ---
+    def test_no_drug_name_calculates_normally(self):
+        self.assertEqual(_calc_qty('1-0-1', '5 days', ''), 10)
+
+
+# ---------------------------------------------------------------------------
+# Tests for dispense_view: accessible without prescription
+# ---------------------------------------------------------------------------
+
+import uuid as _uuid
+from reception.models import Patient, Visit
+
+
+def _make_visit_fresh(clinic, status='waiting'):
+    patient = Patient.objects.create(
+        clinic=clinic, full_name='Test Patient',
+        phone='9000099999', age=30, gender='M',
+    )
+    visit = Visit.objects.create(
+        clinic=clinic, patient=patient,
+        visit_date=timezone.now().date(),
+        status=status, token_number=1,
+    )
+    return patient, visit
+
+
+class DispenseViewNoPrescriptionTest(TestCase):
+    """Dispense screen must be accessible even with no prescription."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('disp_nopx')
+        self.client = Client()
+        self.client.login(username='disp_nopx', password='testpass123')
+        self.patient, self.visit = _make_visit_fresh(self.clinic, status='waiting')
+
+    def test_dispense_accessible_with_waiting_visit(self):
+        resp = self.client.get(f'/pharmacy/dispense/{self.visit.id}/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_dispense_accessible_with_done_visit(self):
+        self.visit.status = 'done'
+        self.visit.save()
+        resp = self.client.get(f'/pharmacy/dispense/{self.visit.id}/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_dispense_page_contains_med_list(self):
+        """#med-list must always exist in the HTML even with no prescription."""
+        resp = self.client.get(f'/pharmacy/dispense/{self.visit.id}/')
+        self.assertContains(resp, 'id="med-list"')
+
+    def test_dispense_page_shows_manual_add_section(self):
+        resp = self.client.get(f'/pharmacy/dispense/{self.visit.id}/')
+        self.assertContains(resp, 'manual-search')
+
+    def test_no_prescription_shows_helpful_message(self):
+        resp = self.client.get(f'/pharmacy/dispense/{self.visit.id}/')
+        self.assertContains(resp, 'No prescription')
+
+
+# ---------------------------------------------------------------------------
+# Tests for pharmacy dashboard: shows all unbilled visits (not just 'done')
+# ---------------------------------------------------------------------------
+
+class PharmacyDashboardPendingDispenseTest(TestCase):
+    """Dashboard must show waiting/in_consultation visits, not just done."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('dash_test')
+        self.client = Client()
+        self.client.login(username='dash_test', password='testpass123')
+
+    def test_waiting_visit_shown_in_pending(self):
+        _, visit = _make_visit_fresh(self.clinic, status='waiting')
+        resp = self.client.get('/pharmacy/')
+        self.assertContains(resp, 'Test Patient')
+
+    def test_in_consultation_visit_shown(self):
+        _, visit = _make_visit_fresh(self.clinic, status='in_consultation')
+        resp = self.client.get('/pharmacy/')
+        self.assertContains(resp, 'Test Patient')
+
+    def test_done_visit_shown(self):
+        _, visit = _make_visit_fresh(self.clinic, status='done')
+        resp = self.client.get('/pharmacy/')
+        self.assertContains(resp, 'Test Patient')
+
+    def test_no_show_visit_not_shown(self):
+        _, visit = _make_visit_fresh(self.clinic, status='no_show')
+        resp = self.client.get('/pharmacy/')
+        self.assertNotContains(resp, 'Test Patient')
+
+    def test_cancelled_visit_not_shown(self):
+        _, visit = _make_visit_fresh(self.clinic, status='cancelled')
+        resp = self.client.get('/pharmacy/')
+        self.assertNotContains(resp, 'Test Patient')
+
+    def test_billed_visit_not_shown(self):
+        """A visit that already has a bill should NOT appear in pending."""
+        from pharmacy.models import PharmacyBill
+        _, visit = _make_visit_fresh(self.clinic, status='done')
+        import decimal
+        PharmacyBill.objects.create(
+            visit=visit, clinic=self.clinic,
+            bill_number='B001', subtotal=decimal.Decimal('100'),
+            final_amount=decimal.Decimal('100'), payment_mode='cash',
+        )
+        resp = self.client.get('/pharmacy/')
+        self.assertNotContains(resp, 'Test Patient')
+

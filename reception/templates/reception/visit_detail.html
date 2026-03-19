@@ -2,6 +2,80 @@
 {% block title %}Visit Vitals — ClinicAI{% endblock %}
 {% block nav_reception %}active{% endblock %}
 
+{% block extra_head %}
+<style>
+/* Vitals input group: input + unit badge fused together */
+.vital-group {
+  display: flex;
+  align-items: stretch;
+}
+.vital-group input {
+  flex: 1;
+  min-width: 0;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  border-right: none !important;
+}
+.vital-group input:focus {
+  position: relative;
+  z-index: 1;
+  border-right: none !important;
+}
+.vital-unit {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: #F3F4F6;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-left: none;
+  border-top-right-radius: var(--radius-input, 10px);
+  border-bottom-right-radius: var(--radius-input, 10px);
+  font-size: 14px;
+  font-weight: 600;
+  color: #6B7280;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* BP: two inputs fused with / divider */
+.bp-group {
+  display: flex;
+  align-items: stretch;
+}
+.bp-group input {
+  flex: 1;
+  min-width: 0;
+}
+.bp-group input:first-child {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  border-right: none !important;
+}
+.bp-group input:last-child {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  border-left: none !important;
+}
+.bp-slash {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  background: #F3F4F6;
+  border-top: 1px solid rgba(0,0,0,0.12);
+  border-bottom: 1px solid rgba(0,0,0,0.12);
+  font-size: 20px;
+  font-weight: 300;
+  color: #9CA3AF;
+  line-height: 1;
+}
+
+/* Number input — remove spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-container" style="max-width:520px;">
   <a href="/" style="font-size:14px; color:#6B7280; text-decoration:none;">&larr; Back to Dashboard</a>
@@ -12,7 +86,7 @@
   </div>
 
   <div class="card">
-    <form method="post" novalidate>
+    <form method="post" novalidate id="vitals-form">
       {% csrf_token %}
 
       <div class="form-group">
@@ -24,22 +98,55 @@
       <div style="font-size:13px; font-weight:500; color:#6B7280; margin-bottom:12px;">VITALS (optional)</div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+
+        <!-- Blood Pressure -->
         <div class="form-group">
           <label class="form-label">Blood Pressure</label>
-          {{ form.vitals_bp }}
+          <div class="bp-group">
+            <input id="bp-sys" type="number" inputmode="numeric" class="input-field"
+                   placeholder="120" min="0" max="300" maxlength="3"
+                   style="text-align:center;">
+            <div class="bp-slash">/</div>
+            <input id="bp-dia" type="number" inputmode="numeric" class="input-field"
+                   placeholder="80" min="0" max="200" maxlength="3"
+                   style="text-align:center;">
+          </div>
+          <input type="hidden" name="vitals_bp" id="vitals_bp_hidden">
         </div>
+
+        <!-- Temperature -->
         <div class="form-group">
-          <label class="form-label">Temperature (°F)</label>
-          {{ form.vitals_temp }}
+          <label class="form-label">Temperature</label>
+          <div class="vital-group">
+            <input name="vitals_temp" id="vitals_temp_input" type="number"
+                   inputmode="decimal" step="0.1" class="input-field"
+                   placeholder="98.6" min="90" max="110">
+            <div class="vital-unit">°F</div>
+          </div>
         </div>
+
+        <!-- Weight -->
         <div class="form-group">
           <label class="form-label">Weight</label>
-          {{ form.vitals_weight }}
+          <div class="vital-group">
+            <input id="weight-input" type="number" inputmode="numeric" class="input-field"
+                   placeholder="65" min="0" max="300">
+            <div class="vital-unit">kg</div>
+          </div>
+          <input type="hidden" name="vitals_weight" id="vitals_weight_hidden">
         </div>
+
+        <!-- SpO2 -->
         <div class="form-group">
           <label class="form-label">SpO2</label>
-          {{ form.vitals_spo2 }}
+          <div class="vital-group">
+            <input id="spo2-input" type="number" inputmode="numeric" class="input-field"
+                   placeholder="98" min="0" max="100">
+            <div class="vital-unit">%</div>
+          </div>
+          <input type="hidden" name="vitals_spo2" id="vitals_spo2_hidden">
         </div>
+
       </div>
 
       <div style="margin-top:8px; display:flex; gap:10px;">
@@ -49,4 +156,54 @@
     </form>
   </div>
 </div>
+
+{% block extra_js %}
+<script>
+(function () {
+  // ── Pre-fill from existing stored values ────────────────────────
+  const bpStored     = "{{ visit.vitals_bp|escapejs }}";
+  const wtStored     = "{{ visit.vitals_weight|escapejs }}";
+  const spo2Stored   = "{{ visit.vitals_spo2|escapejs }}";
+
+  if (bpStored) {
+    const parts = bpStored.split('/');
+    if (parts.length === 2) {
+      document.getElementById('bp-sys').value = parts[0].trim();
+      document.getElementById('bp-dia').value = parts[1].trim();
+    } else {
+      document.getElementById('bp-sys').value = bpStored.trim();
+    }
+  }
+  if (wtStored) {
+    document.getElementById('weight-input').value = wtStored.replace(/\s*kg\s*/i, '').trim();
+  }
+  if (spo2Stored) {
+    document.getElementById('spo2-input').value = spo2Stored.replace(/%/, '').trim();
+  }
+
+  // ── BP: auto-focus diastolic after 3 systolic digits ────────────
+  document.getElementById('bp-sys').addEventListener('input', function () {
+    if (this.value.length >= 3) {
+      document.getElementById('bp-dia').focus();
+    }
+  });
+
+  // ── On submit: combine inputs into hidden fields ─────────────────
+  document.getElementById('vitals-form').addEventListener('submit', function () {
+    const sys = (document.getElementById('bp-sys').value || '').trim();
+    const dia = (document.getElementById('bp-dia').value || '').trim();
+    if (sys || dia) {
+      document.getElementById('vitals_bp_hidden').value =
+        (sys && dia) ? sys + '/' + dia : (sys || dia);
+    }
+
+    const wt = (document.getElementById('weight-input').value || '').trim();
+    document.getElementById('vitals_weight_hidden').value = wt ? wt + ' kg' : '';
+
+    const spo2 = (document.getElementById('spo2-input').value || '').trim();
+    document.getElementById('vitals_spo2_hidden').value = spo2 ? spo2 + '%' : '';
+  });
+})();
+</script>
+{% endblock %}
 {% endblock %}

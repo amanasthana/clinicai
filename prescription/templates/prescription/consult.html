@@ -165,12 +165,28 @@
 /* RX action buttons */
 .rx-actions { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--color-border); }
 
-/* ── Voice dictation ── */
+/* ── Voice dictation (floating pill, always visible) ── */
 .voice-bar {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 10px;
+  gap: 10px;
+  background: #fff;
+  border-radius: 40px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08);
+  padding: 8px 16px 8px 8px;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+@media (max-width: 640px) {
+  .voice-bar {
+    bottom: 16px;
+    right: 12px;
+    left: 12px;
+    border-radius: 30px;
+  }
 }
 .mic-btn {
   width: 42px; height: 42px;
@@ -271,6 +287,21 @@
 .cat-snippet    { background:#CCFBF1; color:#0F766E; }
 .cat-abbreviation { background:#FFEDD5; color:#C2410C; }
 
+/* ── Clinical note sections ──────────────────────────────────── */
+.note-sect-label {
+  font-size: 11px; font-weight: 700; color: #6B7280;
+  text-transform: uppercase; letter-spacing: .4px;
+  display: block; margin-bottom: 6px;
+}
+.sect-add-btn {
+  font-size: 12px; font-weight: 600; color: #374151;
+  background: #F3F4F6; border: 1px solid #E5E7EB;
+  border-radius: 20px; padding: 5px 12px; cursor: pointer;
+  transition: background 0.15s;
+}
+.sect-add-btn:hover { background: #E5E7EB; }
+.sect-add-btn.hidden { display: none !important; }
+
 /* Drug name typeahead dropdown */
 .drug-suggest-dropdown {
   position:absolute; top:100%; left:0; right:0; z-index:300;
@@ -352,32 +383,82 @@
 
       <!-- Clinical Notes -->
       <div class="card" style="margin-bottom:16px;">
-        <div style="font-size:15px; font-weight:600; margin-bottom:10px;">Clinical Notes</div>
-        <div style="position:relative;">
-        <textarea
-          id="clinical-note"
-          class="input-field"
-          rows="6"
-          placeholder="Type clinical observations, findings, and plan...
-E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add glimepiride 1mg OD before breakfast, check HbA1c after 3 months, diet advice"
-          style="resize:vertical; font-size:15px; line-height:1.6;"
-          oninput="onNoteInput(this.value)"
-        >{% if existing_rx %}{{ existing_rx.raw_clinical_note }}{% endif %}</textarea>
-        <div class="suggest-dropdown" id="suggest-dropdown"></div>
+        <div style="font-size:15px; font-weight:600; margin-bottom:12px;">Clinical Notes</div>
+
+        <!-- Chief Complaints (always visible, required) -->
+        <div class="note-sect" style="margin-bottom:8px;">
+          <label class="note-sect-label">Chief Complaints *</label>
+          <div style="position:relative;">
+            <textarea
+              id="note-chief"
+              class="input-field note-ta"
+              rows="4"
+              placeholder="Symptoms, duration, severity, relevant history...&#10;E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, fatigue, polyuria"
+              style="resize:vertical; font-size:15px; line-height:1.6;"
+              oninput="onNoteInput(this)" onfocus="setActiveTA(this)"
+            >{% if existing_rx %}{{ existing_rx.raw_clinical_note }}{% endif %}</textarea>
+            <div class="suggest-dropdown" id="suggest-dropdown"></div>
+          </div>
         </div>
 
-        <!-- Voice dictation bar -->
-        <div class="voice-bar" id="voice-bar" style="display:none;">
-          <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoice()" title="Dictate clinical notes">
-            <!-- mic icon -->
-            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V21h-2v-5.07z"/>
-            </svg>
-          </button>
-          <div>
-            <div class="voice-status" id="voice-status">Tap to dictate</div>
-            <div class="voice-interim" id="voice-interim"></div>
+        <!-- Add section pills -->
+        <div id="add-section-row" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+          <button class="sect-add-btn" id="btn-eval"      onclick="openSection('eval')">+ Examination</button>
+          <button class="sect-add-btn" id="btn-comorbid"  onclick="openSection('comorbid')">+ Comorbidities</button>
+          <button class="sect-add-btn" id="btn-history"   onclick="openSection('history')">+ Past History</button>
+          <button class="sect-add-btn" id="btn-allergies" onclick="openSection('allergies')">+ Drug Allergies</button>
+        </div>
+
+        <!-- Optional: Clinical Evaluation -->
+        <div class="note-sect" id="sect-eval" style="display:none; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label class="note-sect-label" style="margin-bottom:0;">Examination / Clinical Evaluation</label>
+            <button type="button" onclick="closeSection('eval')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;padding:0;">✕</button>
           </div>
+          <textarea id="note-eval" class="input-field note-ta" rows="2"
+            placeholder="Examination findings, vitals, signs..."
+            style="resize:vertical; font-size:14px; line-height:1.5;"
+            oninput="onNoteInput(this)" onfocus="setActiveTA(this)"
+          >{% if existing_rx %}{{ existing_rx.clinical_evaluation }}{% endif %}</textarea>
+        </div>
+
+        <!-- Optional: Comorbidities -->
+        <div class="note-sect" id="sect-comorbid" style="display:none; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label class="note-sect-label" style="margin-bottom:0;">Comorbidities</label>
+            <button type="button" onclick="closeSection('comorbid')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;padding:0;">✕</button>
+          </div>
+          <textarea id="note-comorbid" class="input-field note-ta" rows="2"
+            placeholder="Existing conditions, e.g.: DM2, HTN, hypothyroidism..."
+            style="resize:vertical; font-size:14px; line-height:1.5;"
+            oninput="onNoteInput(this)" onfocus="setActiveTA(this)"
+          >{% if existing_rx %}{{ existing_rx.comorbidities }}{% endif %}</textarea>
+        </div>
+
+        <!-- Optional: Past History -->
+        <div class="note-sect" id="sect-history" style="display:none; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label class="note-sect-label" style="margin-bottom:0;">Past History</label>
+            <button type="button" onclick="closeSection('history')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;padding:0;">✕</button>
+          </div>
+          <textarea id="note-history" class="input-field note-ta" rows="2"
+            placeholder="Past surgeries, hospitalizations, major illnesses..."
+            style="resize:vertical; font-size:14px; line-height:1.5;"
+            oninput="onNoteInput(this)" onfocus="setActiveTA(this)"
+          >{% if existing_rx %}{{ existing_rx.past_history }}{% endif %}</textarea>
+        </div>
+
+        <!-- Optional: Drug Allergies -->
+        <div class="note-sect" id="sect-allergies" style="display:none; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label class="note-sect-label" style="margin-bottom:0;">Drug Allergies</label>
+            <button type="button" onclick="closeSection('allergies')" style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:16px;line-height:1;padding:0;">✕</button>
+          </div>
+          <textarea id="note-allergies" class="input-field note-ta" rows="2"
+            placeholder="Known drug allergies or adverse reactions..."
+            style="resize:vertical; font-size:14px; line-height:1.5;"
+            oninput="onNoteInput(this)" onfocus="setActiveTA(this)"
+          >{% if existing_rx %}{{ existing_rx.drug_allergies }}{% endif %}</textarea>
         </div>
 
         <!-- PII warning -->
@@ -560,13 +641,6 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
             <input type="text" id="edit-diagnosis" class="input-field" placeholder="Diagnosis..." style="font-size:15px; font-weight:600;">
           </div>
 
-          <!-- Clinical Evaluation -->
-          <div style="margin-bottom:16px;">
-            <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:6px;">CLINICAL EVALUATION / EXAMINATION</div>
-            <textarea id="edit-clinical-eval" class="input-field" rows="2"
-              placeholder="Examination findings, e.g. Chest clear, Abdomen soft, BP 130/90 mmHg..." style="resize:vertical; font-size:13px;"></textarea>
-          </div>
-
           <!-- Medicines — div-based, mobile-friendly -->
           <div style="margin-bottom:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
@@ -589,27 +663,33 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
           <!-- Investigations Suggested -->
           <div style="margin-bottom:16px;">
             <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:6px;">INVESTIGATIONS SUGGESTED</div>
-            <textarea id="edit-investigations" class="input-field" rows="2"
-              placeholder="e.g. CBC, LFT, RFT, HbA1c, Urine R/E, Chest X-ray..." style="resize:vertical; font-size:13px;"></textarea>
+            <textarea id="edit-investigations" class="input-field" rows="4"
+              placeholder="e.g. CBC, LFT, RFT, HbA1c, Urine R/E, Chest X-ray..."
+              style="resize:vertical; font-size:13px;"
+              onfocus="setActiveTA(this)" data-voice-label="Investigations"></textarea>
           </div>
 
           <!-- Advice -->
           <div style="margin-bottom:16px;">
             <div style="font-size:12px; font-weight:500; color:#6B7280; margin-bottom:6px;">ADVICE</div>
-            <textarea id="edit-advice" class="input-field" rows="3"
-              placeholder="Advice and instructions..." style="resize:vertical;"></textarea>
+            <textarea id="edit-advice" class="input-field" rows="5"
+              placeholder="Advice and instructions..."
+              style="resize:vertical;"
+              onfocus="setActiveTA(this)" data-voice-label="Advice"></textarea>
           </div>
 
           <!-- Patient Summary -->
           <div style="background:#EFF6FF; border-radius:12px; padding:16px; margin-bottom:16px;">
             <div style="font-size:12px; font-weight:500; color:#1D4ED8; margin-bottom:8px;">PATIENT SUMMARY (for WhatsApp / handout)</div>
-            <textarea id="edit-summary-en" class="input-field" rows="2"
+            <textarea id="edit-summary-en" class="input-field" rows="4"
               placeholder="English summary for patient..."
-              style="margin-bottom:10px; background:#fff; resize:vertical;"></textarea>
+              style="margin-bottom:10px; background:#fff; resize:vertical;"
+              onfocus="setActiveTA(this)" data-voice-label="Patient Summary (English)"></textarea>
             <hr style="border:none; border-top:1px solid rgba(29,78,216,0.15); margin:10px 0;">
-            <textarea id="edit-summary-hi" class="input-field" rows="2"
+            <textarea id="edit-summary-hi" class="input-field" rows="4"
               placeholder="हिंदी सारांश..."
-              style="background:#fff; font-family:'Noto Sans Devanagari',sans-serif; font-size:15px; line-height:1.8; resize:vertical;"></textarea>
+              style="background:#fff; font-family:'Noto Sans Devanagari',sans-serif; font-size:15px; line-height:1.8; resize:vertical;"
+              onfocus="setActiveTA(this)" data-voice-label="Patient Summary (Hindi)"></textarea>
           </div>
 
           <!-- Follow-up -->
@@ -675,6 +755,19 @@ E.g.: 45yr M, diabetic 8yr, FBS 280, HbA1c 9.2, continue metformin 500 BD, add g
   </div>
 </div>
 
+<!-- Floating voice dictation bar — persists across all steps -->
+<div class="voice-bar" id="voice-bar" style="display:none;">
+  <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoice()" title="Tap to dictate into focused field">
+    <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V21h-2v-5.07z"/>
+    </svg>
+  </button>
+  <div>
+    <div class="voice-status" id="voice-status">Tap mic to dictate</div>
+    <div class="voice-interim" id="voice-interim"></div>
+  </div>
+</div>
+
 <div id="visit-data"
      data-visit-id="{{ visit.id }}"
      data-patient-age="{{ patient.age|default:'' }}"
@@ -721,7 +814,48 @@ function detectPossibleNames(text) {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
-function getNote() { return document.getElementById('clinical-note').value.trim(); }
+let activeTextarea = null;
+
+function setActiveTA(ta) {
+  activeTextarea = ta;
+  const statusEl = document.getElementById('voice-status');
+  // Only update label when not actively recording
+  if (statusEl && !statusEl.classList.contains('active')) {
+    const label = ta.dataset.voiceLabel || 'this field';
+    statusEl.textContent = 'Dictate: ' + label;
+  }
+  // If recording, notify the voice module to reset baseText for the new field
+  if (typeof window._voiceFieldChanged === 'function') window._voiceFieldChanged(ta);
+}
+
+function getNote() {
+  const parts = [];
+  const chief = (document.getElementById('note-chief')?.value || '').trim();
+  const eval_ = (document.getElementById('note-eval')?.value || '').trim();
+  const comorbid = (document.getElementById('note-comorbid')?.value || '').trim();
+  const history = (document.getElementById('note-history')?.value || '').trim();
+  const allergies = (document.getElementById('note-allergies')?.value || '').trim();
+  if (chief) parts.push(chief);
+  if (eval_) parts.push('Examination: ' + eval_);
+  if (comorbid) parts.push('Comorbidities: ' + comorbid);
+  if (history) parts.push('Past History: ' + history);
+  if (allergies) parts.push('Drug Allergies: ' + allergies);
+  return parts.join('\n');
+}
+
+function openSection(name) {
+  document.getElementById('sect-' + name).style.display = 'block';
+  const btn = document.getElementById('btn-' + name);
+  if (btn) btn.classList.add('hidden');
+  const ta = document.getElementById('note-' + name);
+  if (ta) { ta.focus(); setActiveTA(ta); }
+}
+
+function closeSection(name) {
+  document.getElementById('sect-' + name).style.display = 'none';
+  const btn = document.getElementById('btn-' + name);
+  if (btn) btn.classList.remove('hidden');
+}
 
 function checkPii(note) {
   // Purely informational — never blocks AI generation.
@@ -955,7 +1089,7 @@ function renderInvItem(item, container) {
   div.htmlFor = id;
   div.style.cssText = 'display:flex; align-items:flex-start; gap:10px; background:#fff; border:1px solid rgba(0,0,0,0.08); border-radius:10px; padding:12px 14px; cursor:pointer; transition:border-color 0.15s;';
   div.innerHTML = `
-    <input type="checkbox" id="${id}" checked style="margin-top:3px; accent-color:#059669; width:16px; height:16px; flex-shrink:0;">
+    <input type="checkbox" id="${id}" style="margin-top:3px; accent-color:#059669; width:16px; height:16px; flex-shrink:0;">
     <div style="flex:1;">
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:3px;">
         <span style="font-size:14px; font-weight:600; color:#111827;">${esc(item.name)}</span>
@@ -970,10 +1104,42 @@ function renderInvItem(item, container) {
 function renderInvestigations(inv) {
   const immContainer = document.getElementById('inv-immediate');
   const elcContainer = document.getElementById('inv-elective');
-  (inv.immediate || []).forEach(item => renderInvItem(item, immContainer));
-  (inv.elective   || []).forEach(item => renderInvItem(item, elcContainer));
-  if (!inv.immediate?.length) immContainer.innerHTML = '<div style="font-size:13px; color:#9CA3AF; padding:8px 0;">None required immediately</div>';
-  if (!inv.elective?.length)  elcContainer.innerHTML = '<div style="font-size:13px; color:#9CA3AF; padding:8px 0;">None required</div>';
+  // Always clear both containers first
+  immContainer.innerHTML = '';
+  elcContainer.innerHTML = '';
+  // Deduplicate across both lists — strip parenthetical content and normalize
+  const seen = new Set();
+  function deduped(items) {
+    return (items || []).filter(item => {
+      const key = item.name.replace(/\(.*?\)/g, '').trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+  const immediate = deduped(inv.immediate);
+  const elective  = deduped(inv.elective);
+  immediate.forEach(item => renderInvItem(item, immContainer));
+  elective.forEach(item  => renderInvItem(item, elcContainer));
+  if (!immediate.length) immContainer.innerHTML = '<div style="font-size:13px; color:#9CA3AF; padding:8px 0;">None required immediately</div>';
+  if (!elective.length)  elcContainer.innerHTML = '<div style="font-size:13px; color:#9CA3AF; padding:8px 0;">None required</div>';
+}
+
+// Build comma-separated list from the doctor's checked Step-2 checkboxes
+function buildSelectedInvestigations() {
+  const seen  = new Set();
+  const names = [];
+  document.querySelectorAll(
+    '#inv-immediate input[type=checkbox]:checked, #inv-elective input[type=checkbox]:checked'
+  ).forEach(cb => {
+    const nameEl = cb.closest('label').querySelector('span[style*="font-weight:600"]');
+    if (nameEl) {
+      const name = nameEl.textContent.trim();
+      const key  = name.toLowerCase();
+      if (!seen.has(key)) { seen.add(key); names.push(name); }
+    }
+  });
+  return names.join(', ');
 }
 
 // Step 2 → Step 3: Generate prescription using confirmed diagnosis
@@ -1004,6 +1170,9 @@ async function proceedToPrescription() {
       // Pre-fill diagnosis with confirmed choice
       data.prescription.diagnosis = data.prescription.diagnosis || _selectedDiagnosis;
       renderPrescription(data.prescription);
+      // Override investigations with what the doctor actually checked in Step 2
+      const selInv = buildSelectedInvestigations();
+      document.getElementById('edit-investigations').value = selInv || data.prescription.investigations_text || '';
       showStep(3);
     } else if (data.limit_reached) {
       showLimitGate(data.count, data.limit);
@@ -1028,7 +1197,6 @@ function renderPrescription(rx) {
   document.getElementById('edit-summary-en').value = rx.patient_summary_en || '';
   document.getElementById('edit-summary-hi').value = rx.patient_summary_hi || '';
   document.getElementById('edit-followup-days').value = rx.follow_up_days || '';
-  document.getElementById('edit-clinical-eval').value = rx.clinical_evaluation || '';
   document.getElementById('edit-investigations').value = rx.investigations_text || '';
   // Reset validity to 30 days on fresh AI generation
   document.querySelectorAll('#validity-pills .rx-pill').forEach(p => p.classList.remove('selected'));
@@ -1340,7 +1508,7 @@ function readPrescription() {
     patient_summary_en: document.getElementById('edit-summary-en').value.trim(),
     patient_summary_hi: document.getElementById('edit-summary-hi').value.trim(),
     follow_up_days:     parseInt(document.getElementById('edit-followup-days').value) || null,
-    clinical_evaluation: document.getElementById('edit-clinical-eval').value.trim(),
+
     investigations_text: document.getElementById('edit-investigations').value.trim(),
     validity_days:       parseInt(document.querySelector('#validity-pills .rx-pill.selected')?.dataset.days) || 30,
   };
@@ -1388,7 +1556,6 @@ function showLimitGate(count, limit) {
   const micBtn    = document.getElementById('mic-btn');
   const statusEl  = document.getElementById('voice-status');
   const interimEl = document.getElementById('voice-interim');
-  const textarea  = document.getElementById('clinical-note');
 
   function setUI(recording) {
     if (recording) {
@@ -1398,7 +1565,14 @@ function showLimitGate(count, limit) {
     } else {
       micBtn.classList.remove('recording');
       statusEl.className = 'voice-status';
-      statusEl.textContent = 'Tap to dictate';
+      // Show active field label if a field is focused, else generic prompt
+      if (activeTextarea && activeTextarea.dataset.voiceLabel) {
+        statusEl.textContent = 'Dictate: ' + activeTextarea.dataset.voiceLabel;
+      } else if (activeTextarea) {
+        statusEl.textContent = 'Tap mic to dictate';
+      } else {
+        statusEl.textContent = 'Tap mic to dictate';
+      }
       interimEl.textContent = '';
       interimEl.classList.remove('visible');
     }
@@ -1420,7 +1594,7 @@ function showLimitGate(count, limit) {
       }
     }
     const sep = baseText && !baseText.endsWith(' ') ? ' ' : '';
-    textarea.value = baseText + (baseText ? sep : '') + confirmed;
+    (activeTextarea || document.getElementById('note-chief')).value = baseText + (baseText ? sep : '') + confirmed;
 
     if (interim) {
       interimEl.textContent = interim + '…';
@@ -1442,7 +1616,7 @@ function showLimitGate(count, limit) {
     if (active) {
       // Commit whatever landed in the textarea as the new base, clear interim,
       // then immediately start the next utterance session.
-      baseText = textarea.value;
+      baseText = (activeTextarea || document.getElementById('note-chief')).value;
       interimEl.textContent = '';
       interimEl.classList.remove('visible');
       try { recognition.start(); } catch (_) {}
@@ -1457,9 +1631,17 @@ function showLimitGate(count, limit) {
       recognition.stop();
       setUI(false);
     } else {
-      baseText = textarea.value.trim();
+      baseText = (activeTextarea || document.getElementById('note-chief')).value.trim();
       active   = true;
       try { recognition.start(); } catch (_) {}
+    }
+  };
+
+  // Called when the doctor focuses a different textarea while recording.
+  // Resets baseText so voice appends to the new field's existing content.
+  window._voiceFieldChanged = function(ta) {
+    if (active) {
+      baseText = ta.value.trim();
     }
   };
 })();
@@ -1497,10 +1679,12 @@ function handleRemarksToggle(checked) {
 let _suggestTimer = null;
 let _lastSuggestWord = '';
 
-function onNoteInput(value) {
+function onNoteInput(ta) {
+  const value = ta.value;
+  setActiveTA(ta);
+  if (ta.id === 'note-chief') checkPii(value);
   clearTimeout(_suggestTimer);
   _suggestTimer = setTimeout(() => {
-    // Extract last word being typed
     const words = value.split(/\s+/);
     const lastWord = words[words.length - 1];
     if (lastWord.length >= 2 && lastWord !== _lastSuggestWord) {
@@ -1544,7 +1728,7 @@ function renderSuggestions(items) {
 }
 
 function insertSuggestion(term, isSnippet) {
-  const ta = document.getElementById('clinical-note');
+  const ta = activeTextarea || document.getElementById('note-chief');
   const cursorPos = ta.selectionStart;
   const before = ta.value.substring(0, cursorPos);
   const after = ta.value.substring(cursorPos);
@@ -1576,8 +1760,19 @@ function closeSuggestDropdown() {
 
 document.addEventListener('click', function(e) {
   const dd = document.getElementById('suggest-dropdown');
-  const ta = document.getElementById('clinical-note');
-  if (dd && !dd.contains(e.target) && e.target !== ta) closeSuggestDropdown();
+  if (!dd) return;
+  const isNoteTA = e.target.classList.contains('note-ta');
+  if (!dd.contains(e.target) && !isNoteTA) closeSuggestDropdown();
+});
+
+// ── Auto-open note sections that have existing content ─────────
+document.addEventListener('DOMContentLoaded', function() {
+  ['eval', 'comorbid', 'history', 'allergies'].forEach(name => {
+    const ta = document.getElementById('note-' + name);
+    if (ta && ta.value.trim()) openSection(name);
+  });
+  // Set default active textarea
+  activeTextarea = document.getElementById('note-chief');
 });
 
 // ── Init remarks toggle state on page load ─────────────────────
@@ -1674,13 +1869,16 @@ async function savePrescription() {
     alert('Please add at least a diagnosis or a medicine before saving.');
     return;
   }
-  const note = document.getElementById('clinical-note').value.trim();
   try {
     const resp = await fetch(visitData.saveUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
       body: JSON.stringify({
-        raw_clinical_note: note,
+        raw_clinical_note: (document.getElementById('note-chief')?.value || '').trim(),
+        clinical_evaluation: (document.getElementById('note-eval')?.value || '').trim(),
+        comorbidities: (document.getElementById('note-comorbid')?.value || '').trim(),
+        past_history: (document.getElementById('note-history')?.value || '').trim(),
+        drug_allergies: (document.getElementById('note-allergies')?.value || '').trim(),
         prescription: rx,
         differential_diagnoses: _differentials.length ? _differentials : null,
         investigations: Object.keys(_investigations).length ? _investigations : null,

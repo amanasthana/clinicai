@@ -35,15 +35,20 @@ def dashboard_view(request):
         .order_by('token_number')
     )
 
-    # Today's stats
-    total_today = queue.count()
+    # Today's stats — exclude no_show/cancelled from meaningful counts
     waiting = queue.filter(status='waiting').count()
     in_consult = queue.filter(status='in_consultation').count()
-    done = Visit.objects.filter(clinic=clinic, visit_date=today, status='done').count()
+    done = queue.filter(status='done').count()
+    total_today = waiting + in_consult + done  # actual patients seen/being seen
 
-    # Weekly stats (last 7 days including today)
+    # Weekly stats (last 7 days including today) — exclude no_show/cancelled
     week_ago = today - timedelta(days=6)
-    week_visits = Visit.objects.filter(clinic=clinic, visit_date__gte=week_ago).count()
+    week_visits = (
+        Visit.objects
+        .filter(clinic=clinic, visit_date__gte=week_ago)
+        .exclude(status__in=['no_show', 'cancelled'])
+        .count()
+    )
     total_patients = Patient.objects.filter(clinic=clinic).count()
     new_patients_week = Patient.objects.filter(
         clinic=clinic, created_at__date__gte=week_ago
@@ -54,7 +59,7 @@ def dashboard_view(request):
         'queue': queue,
         'today': today,
         'stats': {
-            'total': total_today + done,
+            'total': total_today,
             'waiting': waiting,
             'in_consult': in_consult,
             'done': done,
@@ -196,7 +201,11 @@ def analytics_view(request):
         days = 30
     since = today - timedelta(days=days - 1)
 
-    visits_qs = Visit.objects.filter(clinic=clinic, visit_date__gte=since)
+    visits_qs = (
+        Visit.objects
+        .filter(clinic=clinic, visit_date__gte=since)
+        .exclude(status__in=['no_show', 'cancelled'])
+    )
 
     # ── 1. Patient volume — daily counts ──────────────────────────────────
     daily_counts_qs = (
@@ -270,7 +279,16 @@ def analytics_view(request):
     total_visits = visits_qs.count()
     total_patients = Patient.objects.filter(clinic=clinic).count()
     new_patients = Patient.objects.filter(clinic=clinic, created_at__date__gte=since).count()
-    avg_daily = round(total_visits / days, 1)
+    # Divide by actual elapsed days (not the full range) so avg isn't deflated on day 1
+    elapsed_days = (today - since).days + 1
+    avg_daily = round(total_visits / elapsed_days, 1) if elapsed_days > 0 else 0
+
+    # ── Patient visit log ─────────────────────────────────────────────────
+    visit_log = (
+        visits_qs
+        .select_related('patient', 'prescription')
+        .order_by('-visit_date', 'token_number')
+    )
 
     return render(request, 'reception/analytics.html', {
         'clinic': clinic,
@@ -288,13 +306,151 @@ def analytics_view(request):
         'volume_data': json.dumps(volume_data),
         'top_complaints': top_complaints,
         'top_medicines': top_medicines,
+        'visit_log': visit_log,
     })
+
+
+def _get_clinic_data_context(clinic, question):
+    """
+    Fetch live aggregate data from this clinic relevant to the question.
+    PRIVACY: never includes individual patient names, phones, diagnoses, or any PII.
+    Only aggregate counts, medicine names (inventory items), and revenue totals.
+    """
+    q = question.lower()
+    parts = []
+
+    # ── Inventory context ────────────────────────────────────────────────────
+    inv_keywords = {'inventory', 'stock', 'expir', 'medicine', 'pharmacy',
+                    'low stock', 'out of stock', 'batch', 'reorder', 'tablet',
+                    'syrup', 'ointment', 'cream', 'drug'}
+    if any(kw in q for kw in inv_keywords):
+        import datetime as _dt
+        from pharmacy.models import PharmacyItem, PharmacyBatch
+        today = timezone.now().date()
+        soon90  = today + _dt.timedelta(days=90)
+        soon30  = today + _dt.timedelta(days=30)
+
+        items = list(
+            PharmacyItem.objects.filter(clinic=clinic)
+            .select_related('medicine').prefetch_related('batches')
+        )
+        total_items = len(items)
+        out_of_stock = [i.display_name for i in items if not i.in_stock]
+        low_stock    = [i.display_name for i in items if i.low_stock and i.in_stock]
+
+        # Expiring batches (medicine name + expiry + qty, no patient link)
+        exp_batches = (
+            PharmacyBatch.objects
+            .filter(item__clinic=clinic, quantity__gt=0,
+                    expiry_date__isnull=False,
+                    expiry_date__lte=soon90, expiry_date__gte=today)
+            .select_related('item__medicine')
+            .order_by('expiry_date')[:20]
+        )
+
+        lines = [f"Total medicines in inventory: {total_items}"]
+        if out_of_stock:
+            lines.append(f"Out of stock ({len(out_of_stock)}): {', '.join(out_of_stock[:15])}")
+        if low_stock:
+            lines.append(f"Low stock ({len(low_stock)}): {', '.join(low_stock[:15])}")
+        if exp_batches:
+            exp30  = [b for b in exp_batches if b.expiry_date <= soon30]
+            exp90  = [b for b in exp_batches if b.expiry_date > soon30]
+            if exp30:
+                lines.append("Expiring within 30 days: " + "; ".join(
+                    f"{b.item.display_name} (exp {b.expiry_date.strftime('%d %b %Y')}, qty {b.quantity})"
+                    for b in exp30))
+            if exp90:
+                lines.append("Expiring in 30–90 days: " + "; ".join(
+                    f"{b.item.display_name} (exp {b.expiry_date.strftime('%d %b %Y')}, qty {b.quantity})"
+                    for b in exp90))
+        else:
+            lines.append("No medicines expiring in the next 90 days.")
+        parts.append("INVENTORY STATUS:\n" + "\n".join(lines))
+
+    # ── Patient analytics context ─────────────────────────────────────────────
+    analytics_keywords = {'patient', 'visit', 'how many', 'analytics',
+                          'week', 'today', 'yesterday', 'month', 'consultation',
+                          'busy', 'footfall', 'count', 'saw', 'see', 'seen'}
+    if any(kw in q for kw in analytics_keywords):
+        import datetime as _dt
+        from django.db.models import Count
+        from django.db.models.functions import TruncDate
+        today = timezone.now().date()
+        base = Visit.objects.filter(clinic=clinic).exclude(status__in=['no_show', 'cancelled'])
+
+        today_v    = base.filter(visit_date=today).count()
+        week_v     = base.filter(visit_date__gte=today - _dt.timedelta(days=6)).count()
+        month_v    = base.filter(visit_date__gte=today - _dt.timedelta(days=29)).count()
+        total_pts  = Patient.objects.filter(clinic=clinic).count()
+        new_week   = Patient.objects.filter(
+            clinic=clinic, created_at__date__gte=today - _dt.timedelta(days=6)).count()
+
+        # Daily breakdown last 7 days
+        daily = (
+            base.filter(visit_date__gte=today - _dt.timedelta(days=6))
+            .annotate(day=TruncDate('visit_date'))
+            .values('day').annotate(n=Count('id')).order_by('day')
+        )
+        daily_str = ", ".join(
+            f"{r['day'].strftime('%a %d %b')}: {r['n']}" for r in daily
+        ) or "no data"
+
+        parts.append(
+            f"PATIENT ANALYTICS:\n"
+            f"Today's visits: {today_v}\n"
+            f"This week (7 days): {week_v}\n"
+            f"This month (30 days): {month_v}\n"
+            f"Total registered patients: {total_pts}\n"
+            f"New patients this week: {new_week}\n"
+            f"Daily breakdown (last 7 days): {daily_str}"
+        )
+
+    # ── Billing / revenue context ─────────────────────────────────────────────
+    billing_keywords = {'bill', 'revenue', 'collection', 'payment', 'income',
+                        'earn', 'money', 'cash', 'upi', 'amount', 'total',
+                        'rupee', 'rs ', '₹', 'sales', 'pharmacy revenue'}
+    if any(kw in q for kw in billing_keywords):
+        import datetime as _dt
+        from django.db.models import Sum
+        from pharmacy.models import PharmacyBill
+        today = timezone.now().date()
+
+        def rev(qs): return qs.aggregate(t=Sum('final_amount'))['t'] or 0
+
+        bills = PharmacyBill.objects.filter(clinic=clinic)
+        today_r = rev(bills.filter(created_at__date=today))
+        week_r  = rev(bills.filter(created_at__date__gte=today - _dt.timedelta(days=6)))
+        month_r = rev(bills.filter(created_at__date__gte=today - _dt.timedelta(days=29)))
+
+        # Payment mode breakdown this month
+        mode_qs = (
+            bills.filter(created_at__date__gte=today - _dt.timedelta(days=29))
+            .values('payment_mode')
+            .annotate(total=Sum('final_amount'))
+            .order_by('-total')
+        )
+        mode_str = ", ".join(
+            f"{r['payment_mode'].upper()}: Rs {r['total']:.0f}" for r in mode_qs
+        ) or "no billing data"
+
+        parts.append(
+            f"BILLING & REVENUE (pharmacy only — does not include consultation fees):\n"
+            f"Today's collection: Rs {today_r:.0f}\n"
+            f"This week (7 days): Rs {week_r:.0f}\n"
+            f"This month (30 days): Rs {month_r:.0f}\n"
+            f"Payment mode breakdown this month: {mode_str}"
+        )
+
+    return "\n\n".join(parts) if parts else None
 
 
 @login_required
 @require_POST
 def help_api(request):
-    """Streaming SSE — answers questions about ClinicAI using Claude Haiku."""
+    """Streaming SSE — answers questions about ClinicAI using Claude Haiku.
+    Injects live aggregate clinic data (no PII) when the question is about
+    inventory, analytics, or billing."""
     import json as _json
     from core.help_content import HELP_SYSTEM_PROMPT
 
@@ -318,19 +474,37 @@ def help_api(request):
         return JsonResponse({'error': 'You have reached the daily help limit. Try again tomorrow.'}, status=429)
     request.session[today_key] = count + 1
 
+    # Live clinic data is only injected for admin/doctor roles (can_view_analytics).
+    # Receptionists and pharmacists get help-only answers — no aggregate data access.
+    staff = request.user.staff_profile
+    clinic = staff.clinic
+    can_see_data = getattr(staff, 'can_view_analytics', False)
+    clinic_context = _get_clinic_data_context(clinic, question) if can_see_data else None
+
+    system_prompt = HELP_SYSTEM_PROMPT
+    if clinic_context:
+        system_prompt = (
+            HELP_SYSTEM_PROMPT.rstrip()
+            + "\n\n---\n\nLIVE CLINIC DATA (use this to answer the doctor's question accurately):\n"
+            + clinic_context
+            + "\n\nIMPORTANT: This data is aggregate only — no individual patient names, "
+              "phone numbers, or personal details are included. Use it to give specific, "
+              "accurate answers. Amounts are in Indian Rupees (Rs)."
+        )
+
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
     def _stream():
         try:
             with client.messages.stream(
                 model='claude-haiku-4-5-20251001',
-                max_tokens=500,
-                system=HELP_SYSTEM_PROMPT,
+                max_tokens=600,
+                system=system_prompt,
                 messages=[{'role': 'user', 'content': question}],
             ) as stream:
                 for text in stream.text_stream:
                     yield f'data: {_json.dumps({"text": text})}\n\n'
-        except Exception as e:
+        except Exception:
             yield f'data: {_json.dumps({"error": "Something went wrong. Please try again."})}\n\n'
         yield 'data: [DONE]\n\n'
 

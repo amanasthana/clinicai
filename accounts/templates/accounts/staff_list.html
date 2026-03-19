@@ -28,7 +28,10 @@
       <h1 class="page-title">Staff Members</h1>
       <p class="page-subtitle">{{ clinic.name }}</p>
     </div>
-    <a href="/accounts/staff/add/" class="btn btn-primary">Add Staff</a>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a href="/accounts/staff/add/" class="btn btn-primary">Add Staff</a>
+      <a href="/accounts/clinic/edit/" class="btn btn-secondary">Edit Clinic</a>
+    </div>
   </div>
 
   <!-- Understanding roles info box -->
@@ -52,6 +55,19 @@
       </div>
     </div>
   </div>
+
+  <!-- WhatsApp link after reset -->
+  {% if wa_reset_url %}
+  <div class="card" style="background:#F0FDF4; border:1px solid #BBF7D0; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <div style="font-size:14px; color:#166534;">
+      <strong>Password reset done for {{ wa_reset_name }}.</strong> Temporary password shown above — now notify them via WhatsApp.
+    </div>
+    <a href="{{ wa_reset_url }}" target="_blank" rel="noopener"
+       style="display:inline-flex; align-items:center; gap:6px; background:#25D366; color:#fff; font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px; text-decoration:none;">
+      WhatsApp {{ wa_reset_name }}
+    </a>
+  </div>
+  {% endif %}
 
   <!-- Staff cards -->
   <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -94,9 +110,17 @@
       </div>
 
       <!-- Actions -->
-      <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0; margin-top: 4px;">
+      <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0; margin-top: 4px; flex-wrap:wrap;">
         <a href="/accounts/staff/{{ member.pk }}/edit/" class="btn btn-secondary btn-sm">Edit</a>
         {% if member.user != request.user %}
+        <form method="post" action="/accounts/staff/{{ member.pk }}/reset-password/" style="margin:0;"
+              onsubmit="return confirm('Reset password for {{ member.display_name }}? A temporary password will be shown.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm"
+                  style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;">
+            Reset PW
+          </button>
+        </form>
         <form method="post" action="/accounts/staff/{{ member.pk }}/delete/" style="margin:0;"
               onsubmit="return confirm('Remove {{ member.display_name }} from {{ clinic.name }}? This cannot be undone.');">
           {% csrf_token %}
@@ -113,6 +137,55 @@
       No staff members yet. <a href="/accounts/staff/add/" style="color:#2563EB;">Add your first team member.</a>
     </div>
     {% endfor %}
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="card" style="margin-top:32px; border:1.5px solid #FECACA; background:#FFF5F5;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <svg width="18" height="18" fill="none" stroke="#DC2626" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span style="font-size:15px; font-weight:700; color:#DC2626;">Danger Zone</span>
+    </div>
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+      <div>
+        <div style="font-size:14px; font-weight:600; color:#111827; margin-bottom:4px;">Delete this clinic</div>
+        <div style="font-size:13px; color:#6B7280; line-height:1.6; max-width:420px;">
+          Deleting <strong>{{ clinic.name }}</strong> will permanently remove all patient records, prescriptions, pharmacy inventory, and billing data for this clinic. Each clinic maintains its own separate inventory and data.<br>
+          <span style="color:#DC2626; font-weight:500;">Your deletion request will be reviewed and completed within 24–48 hours.</span>
+        </div>
+      </div>
+      <div>
+        {% if pending_deletion %}
+        <div style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:10px; padding:12px 16px;">
+          <div style="font-size:13px; font-weight:700; color:#92400E; margin-bottom:4px;">⏳ Deletion request submitted</div>
+          <div style="font-size:13px; color:#78350F; line-height:1.5;">
+            Submitted {{ pending_deletion.created_at|date:"j M Y, g:i A" }}<br>
+            The ClinicAI team will review and delete the clinic within 24–48 hours. You will be contacted on WhatsApp.
+          </div>
+        </div>
+        {% else %}
+        <button type="button" onclick="document.getElementById('delete-clinic-form').style.display='block'; this.style.display='none';"
+          class="btn btn-sm" style="background:#FEF2F2; color:#DC2626; border:1.5px solid #FECACA; white-space:nowrap;">
+          Request Clinic Deletion
+        </button>
+        <div id="delete-clinic-form" style="display:none; margin-top:12px; background:#FEF2F2; border:1px solid #FECACA; border-radius:10px; padding:14px;">
+          <div style="font-size:13px; font-weight:600; color:#DC2626; margin-bottom:8px;">Confirm deletion request for {{ clinic.name }}</div>
+          <form method="post" action="{% url 'accounts:request_clinic_deletion' %}">
+            {% csrf_token %}
+            <textarea name="reason" class="input-field" rows="2" placeholder="Reason for deletion (optional)..."
+              style="margin-bottom:10px; font-size:13px;"></textarea>
+            <div style="display:flex; gap:8px;">
+              <button type="submit" class="btn btn-sm" style="background:#DC2626; color:#fff; border:none;"
+                onclick="return confirm('Submit deletion request for {{ clinic.name }}? All clinic data will be permanently deleted after admin approval.');">
+                Submit Request
+              </button>
+              <button type="button" onclick="document.getElementById('delete-clinic-form').style.display='none'; document.querySelector('[onclick*=delete-clinic-form]').style.display='';"
+                class="btn btn-secondary btn-sm">Cancel</button>
+            </div>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+    </div>
   </div>
 
 </div>

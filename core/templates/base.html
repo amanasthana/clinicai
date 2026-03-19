@@ -40,6 +40,9 @@
       {% if user.staff_profile.can_view_pharmacy %}
       <a href="/pharmacy/" class="nav-link {% block nav_pharmacy %}{% endblock %}">Pharmacy</a>
       {% endif %}
+      {% if user.staff_profile.can_dispense_bill %}
+      <a href="/pharmacy/walk-in/" class="nav-link {% block nav_walkin %}{% endblock %}">Dispense</a>
+      {% endif %}
       {% if user.staff_profile.can_view_analytics %}
       <a href="/analytics/" class="nav-link {% block nav_analytics %}{% endblock %}" title="Clinical Analytics">Analytics</a>
       {% endif %}
@@ -138,6 +141,9 @@
     {% endif %}
     {% if user.staff_profile.can_view_pharmacy %}
     <a href="/pharmacy/">Pharmacy</a>
+    {% endif %}
+    {% if user.staff_profile.can_dispense_bill %}
+    <a href="/pharmacy/walk-in/">Dispense</a>
     {% endif %}
     {% if user.staff_profile.can_view_analytics %}
     <a href="/analytics/">Analytics</a>

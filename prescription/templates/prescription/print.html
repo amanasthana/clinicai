@@ -50,6 +50,8 @@
   .tb-back   { background: #fff; color: var(--text); border: 1.5px solid var(--border); }
   .tb-hindi  { background: #fff; color: var(--navy); border: 1.5px solid var(--border); }
   .tb-hindi.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .tb-size   { background: #fff; color: #374151; border: 1.5px solid var(--border); }
+  .tb-size.a5-active { background: #F3F4F6; }
 
   /* ─── A5 card (screen preview) ──────────────────────────────── */
   .rx-card {
@@ -204,7 +206,7 @@
   body.hindi-mode .rx-summary-div  { display: none !important; }
 
   /* ═══════════════════════════════════════════════════════════════
-     PRINT — ONE A5 PAGE
+     PRINT — A4 (default) or A5 (toggle)
      Key technique: medicines rendered as a compact table/grid
      where every medicine fits on ONE line.
   ═══════════════════════════════════════════════════════════════ */
@@ -212,76 +214,115 @@
     body   { background: #fff !important; -webkit-print-color-adjust: exact; color-adjust: exact; }
     .rx-toolbar { display: none !important; }
 
-    @page { size: A5 portrait; margin: 5mm 8mm 5mm 8mm; }
+    /* ── A4 default ── */
+    @page { size: A4 portrait; margin: 8mm 12mm; }
 
-    /* Card resets */
     .rx-card {
       max-width: 100%; margin: 0; border-radius: 0;
-      box-shadow: none; font-size: 7.5pt; line-height: 1.3;
+      box-shadow: none; font-size: 9pt; line-height: 1.35;
     }
 
-    /* Header: compact */
-    .rx-header  { padding: 6pt 11pt 5pt; }
-    .rx-clinic-name { font-size: 11pt; letter-spacing: -.2px; }
-    .rx-clinic-addr { font-size: 6.5pt; }
-    .rx-doctor-name { font-size: 7.5pt; }
-    .rx-doctor-qual { font-size: 6.5pt; }
+    /* Header */
+    .rx-header  { padding: 8pt 14pt 6pt; }
+    .rx-clinic-name { font-size: 13pt; letter-spacing: -.2px; }
+    .rx-clinic-addr { font-size: 8pt; }
+    .rx-doctor-name { font-size: 9pt; }
+    .rx-doctor-qual { font-size: 8pt; }
 
-    /* Patient strip: one tight row */
-    .rx-patient  { padding: 4pt 11pt; }
-    .rx-pt-name  { font-size: 9pt; }
-    .rx-pt-meta, .rx-pt-date { font-size: 7pt; }
+    /* Patient strip */
+    .rx-patient  { padding: 5pt 14pt; }
+    .rx-pt-name  { font-size: 11pt; }
+    .rx-pt-meta, .rx-pt-date { font-size: 8.5pt; }
 
     /* Body */
-    .rx-body { padding: 5pt 11pt 4pt; }
-    .rx-symbol-row { margin-bottom: 5pt; }
-    .rx-symbol    { font-size: 16pt; }
-    .rx-diagnosis { font-size: 7.5pt; }
+    .rx-body { padding: 6pt 14pt 5pt; }
+    .rx-symbol-row { margin-bottom: 6pt; }
+    .rx-symbol    { font-size: 19pt; }
+    .rx-diagnosis { font-size: 9pt; }
 
-    /* ─── MEDICINE TABLE — one row per medicine ──────────────── */
-    /* Hide the screen-only card layout */
+    /* ─── MEDICINE TABLE ──────────────────────────────────────── */
     .rx-meds-screen { display: none !important; }
-
-    /* Show the print table (hidden on screen) */
-    .rx-meds-print  { display: block !important; margin-bottom: 5pt; }
+    .rx-meds-print  { display: block !important; margin-bottom: 6pt; }
 
     /* Advice */
-    .rx-advice-wrap  { padding: 4pt 8pt; margin-bottom: 5pt; border-radius: 4pt; }
-    .rx-advice-label { font-size: 6pt; margin-bottom: 1.5pt; }
-    .rx-advice-text  { font-size: 7pt; }
+    .rx-advice-wrap  { padding: 5pt 10pt; margin-bottom: 6pt; border-radius: 4pt; }
+    .rx-advice-label { font-size: 7pt; margin-bottom: 2pt; }
+    .rx-advice-text  { font-size: 8.5pt; }
 
     /* Footer row */
-    .rx-footer-row { margin-top: 5pt; padding-top: 5pt; }
-    .rx-followup-lbl { font-size: 6pt; }
-    .rx-followup   { font-size: 7.5pt; }
-    .rx-sig-line   { width: 68pt; height: 14pt; }
-    .rx-sig-name   { font-size: 7pt; }
+    .rx-footer-row { margin-top: 6pt; padding-top: 6pt; }
+    .rx-followup-lbl { font-size: 7pt; }
+    .rx-followup   { font-size: 9pt; }
+    .rx-sig-line   { width: 82pt; height: 17pt; }
+    .rx-sig-name   { font-size: 8.5pt; }
 
     /* Clinical strip */
-    .rx-clinical  { padding: 3pt 11pt 4pt; gap: 2pt; }
-    .rx-clin-row  { font-size: 6.5pt; line-height: 1.25; }
-    .rx-clin-label { font-size: 5.5pt; min-width: 48pt; }
-    .rx-clin-value { font-size: 6.5pt; }
+    .rx-clinical  { padding: 4pt 14pt 5pt; gap: 2.5pt; }
+    .rx-clin-row  { font-size: 8pt; line-height: 1.3; }
+    .rx-clin-label { font-size: 7pt; min-width: 58pt; }
+    .rx-clin-value { font-size: 8pt; }
 
     /* Investigations */
-    .rx-inv-wrap  { padding: 3.5pt 7pt; margin-bottom: 4pt; border-radius: 3pt; }
-    .rx-inv-label { font-size: 6pt; margin-bottom: 1.5pt; }
-    .rx-inv-text  { font-size: 6.5pt; line-height: 1.25; }
+    .rx-inv-wrap  { padding: 4.5pt 9pt; margin-bottom: 5pt; border-radius: 3pt; }
+    .rx-inv-label { font-size: 7pt; margin-bottom: 2pt; }
+    .rx-inv-text  { font-size: 8pt; line-height: 1.3; }
 
     /* Summary */
-    .rx-summary-outer { padding: 0 11pt 6pt; }
-    .rx-summary-inner { padding: 5pt 8pt; border-radius: 4pt; }
-    .rx-summary-title { font-size: 6pt; margin-bottom: 2.5pt; }
-    .rx-summary-en    { font-size: 7pt; line-height: 1.3; }
-    .rx-summary-div   { margin: 3pt 0; }
-    .rx-summary-hi    { font-size: 7.5pt; line-height: 1.45; }
+    .rx-summary-outer { padding: 0 14pt 8pt; }
+    .rx-summary-inner { padding: 6pt 10pt; border-radius: 4pt; }
+    .rx-summary-title { font-size: 7pt; margin-bottom: 3pt; }
+    .rx-summary-en    { font-size: 8.5pt; line-height: 1.35; }
+    .rx-summary-div   { margin: 4pt 0; }
+    .rx-summary-hi    { font-size: 9pt; line-height: 1.5; }
 
-    .rx-branding { padding: 3pt 11pt 4pt; font-size: 6pt; }
+    .rx-branding { padding: 4pt 14pt 5pt; font-size: 7pt; }
 
     /* Letterhead mode */
     .has-letterhead .rx-header { display: none !important; }
     .has-letterhead .lh-spacer { display: block !important; }
+
+    /* ── A5 override (body.print-a5) ── */
+    body.print-a5 .rx-card {
+      font-size: 7.5pt; line-height: 1.3;
+    }
+    body.print-a5 .rx-header  { padding: 6pt 11pt 5pt; }
+    body.print-a5 .rx-clinic-name { font-size: 11pt; }
+    body.print-a5 .rx-clinic-addr { font-size: 6.5pt; }
+    body.print-a5 .rx-doctor-name { font-size: 7.5pt; }
+    body.print-a5 .rx-doctor-qual { font-size: 6.5pt; }
+    body.print-a5 .rx-patient  { padding: 4pt 11pt; }
+    body.print-a5 .rx-pt-name  { font-size: 9pt; }
+    body.print-a5 .rx-pt-meta, body.print-a5 .rx-pt-date { font-size: 7pt; }
+    body.print-a5 .rx-body { padding: 5pt 11pt 4pt; }
+    body.print-a5 .rx-symbol-row { margin-bottom: 5pt; }
+    body.print-a5 .rx-symbol    { font-size: 16pt; }
+    body.print-a5 .rx-diagnosis { font-size: 7.5pt; }
+    body.print-a5 .rx-meds-print { margin-bottom: 5pt; }
+    body.print-a5 .rx-advice-wrap  { padding: 4pt 8pt; margin-bottom: 5pt; }
+    body.print-a5 .rx-advice-label { font-size: 6pt; margin-bottom: 1.5pt; }
+    body.print-a5 .rx-advice-text  { font-size: 7pt; }
+    body.print-a5 .rx-footer-row { margin-top: 5pt; padding-top: 5pt; }
+    body.print-a5 .rx-followup-lbl { font-size: 6pt; }
+    body.print-a5 .rx-followup   { font-size: 7.5pt; }
+    body.print-a5 .rx-sig-line   { width: 68pt; height: 14pt; }
+    body.print-a5 .rx-sig-name   { font-size: 7pt; }
+    body.print-a5 .rx-clinical  { padding: 3pt 11pt 4pt; gap: 2pt; }
+    body.print-a5 .rx-clin-row  { font-size: 6.5pt; line-height: 1.25; }
+    body.print-a5 .rx-clin-label { font-size: 5.5pt; min-width: 48pt; }
+    body.print-a5 .rx-clin-value { font-size: 6.5pt; }
+    body.print-a5 .rx-inv-wrap  { padding: 3.5pt 7pt; margin-bottom: 4pt; }
+    body.print-a5 .rx-inv-label { font-size: 6pt; margin-bottom: 1.5pt; }
+    body.print-a5 .rx-inv-text  { font-size: 6.5pt; line-height: 1.25; }
+    body.print-a5 .rx-summary-outer { padding: 0 11pt 6pt; }
+    body.print-a5 .rx-summary-inner { padding: 5pt 8pt; }
+    body.print-a5 .rx-summary-title { font-size: 6pt; margin-bottom: 2.5pt; }
+    body.print-a5 .rx-summary-en    { font-size: 7pt; line-height: 1.3; }
+    body.print-a5 .rx-summary-div   { margin: 3pt 0; }
+    body.print-a5 .rx-summary-hi    { font-size: 7.5pt; line-height: 1.45; }
+    body.print-a5 .rx-branding { padding: 3pt 11pt 4pt; font-size: 6pt; }
   }
+
+  /* Dynamic @page rule — updated by toggleSize() JS below */
 
   /* ─── Print medicine table (hidden on screen) ────────────────── */
   .rx-meds-print {
@@ -360,6 +401,8 @@
     font-family: 'Noto Sans Devanagari', sans-serif;
   }
   </style>
+<!-- A4 default; toggleSize() swaps this to A5 when needed -->
+<style id="page-size-style">@media print { @page { size: A4 portrait; margin: 8mm 12mm; } }</style>
 </head>
 <body>
 
@@ -370,6 +413,7 @@
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Download PDF
   </button>
+  <button class="tb-btn tb-size" id="size-toggle" onclick="toggleSize()">A4 / A5</button>
   <button class="tb-btn tb-hindi" id="hindi-toggle" onclick="toggleHindi()">
     <span style="font-family:'Noto Sans Devanagari',sans-serif;font-size:15px;line-height:1;">अ</span>
     हिंदी
@@ -381,6 +425,7 @@
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
     Print
   </button>
+  <button class="tb-btn tb-size" id="size-toggle" onclick="toggleSize()">A4 / A5</button>
   <button class="tb-btn tb-hindi" id="hindi-toggle" onclick="toggleHindi()">
     <span style="font-family:'Noto Sans Devanagari',sans-serif;font-size:15px;line-height:1;">अ</span>
     Hindi
@@ -446,6 +491,24 @@
     <div class="rx-clin-row">
       <span class="rx-clin-label">Examination</span>
       <span class="rx-clin-value">{{ rx.clinical_evaluation }}</span>
+    </div>
+    {% endif %}
+    {% if rx.comorbidities %}
+    <div class="rx-clin-row">
+      <span class="rx-clin-label">Comorbidities</span>
+      <span class="rx-clin-value">{{ rx.comorbidities }}</span>
+    </div>
+    {% endif %}
+    {% if rx.past_history %}
+    <div class="rx-clin-row">
+      <span class="rx-clin-label">Past History</span>
+      <span class="rx-clin-value">{{ rx.past_history }}</span>
+    </div>
+    {% endif %}
+    {% if rx.drug_allergies %}
+    <div class="rx-clin-row">
+      <span class="rx-clin-label">Drug Allergies</span>
+      <span class="rx-clin-value">{{ rx.drug_allergies }}</span>
     </div>
     {% endif %}
   </div>
@@ -654,6 +717,24 @@ function toggleHindi() {
   if (_hindi) applyHindi();
 }
 
+let _isA5 = false;
+function toggleSize() {
+  _isA5 = !_isA5;
+  document.body.classList.toggle('print-a5', _isA5);
+  const btn = document.getElementById('size-toggle');
+  if (_isA5) {
+    btn.textContent = 'A5 ✓';
+    btn.classList.add('a5-active');
+    document.getElementById('page-size-style').textContent =
+      '@media print { @page { size: A5 portrait; margin: 5mm 8mm; } }';
+  } else {
+    btn.textContent = 'A4 / A5';
+    btn.classList.remove('a5-active');
+    document.getElementById('page-size-style').textContent =
+      '@media print { @page { size: A4 portrait; margin: 8mm 12mm; } }';
+  }
+}
+
 // ── Download PDF (patient share page) ─────────────────────────
 async function downloadPdf() {
   const btn = document.querySelector('.tb-btn.tb-print');
@@ -662,12 +743,13 @@ async function downloadPdf() {
   btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Preparing…</span>';
   try {
     const card = document.querySelector('.rx-card');
+    const fmt  = _isA5 ? 'a5' : 'a4';
     const opt = {
-      margin:      [4, 5, 4, 5],
+      margin:      _isA5 ? [4, 5, 4, 5] : [6, 8, 6, 8],
       filename:    'prescription-{{ patient.full_name|slugify }}.pdf',
       image:       { type: 'jpeg', quality: 0.97 },
       html2canvas: { scale: 2.5, useCORS: true, logging: false },
-      jsPDF:       { unit: 'mm', format: 'a5', orientation: 'portrait' },
+      jsPDF:       { unit: 'mm', format: fmt, orientation: 'portrait' },
     };
     await html2pdf().set(opt).from(card).save();
   } catch (err) {
@@ -679,36 +761,49 @@ async function downloadPdf() {
 }
 
 // ── Send PDF via WhatsApp ──────────────────────────────────────
-// Generates PDF client-side (no print dialog), auto-downloads it,
-// then opens WhatsApp to the patient so doctor can attach and send.
+// Generates PDF as in-memory blob and shares directly via Web Share API
+// (opens native share sheet → WhatsApp, no file saved to disk).
+// Falls back to WhatsApp link if Web Share API not supported.
 async function sendPdfWhatsApp(waUrl) {
   const btn = document.querySelector('.tb-wa');
   const origHtml = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Generating PDF…</span>';
+  btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Preparing…</span>';
 
   try {
     const card = document.querySelector('.rx-card');
-
-    // Temporarily hide toolbar inside card if any, show full card
+    const fmt  = _isA5 ? 'a5' : 'a4';
+    const fname = 'prescription-{{ patient.full_name|slugify }}.pdf';
     const opt = {
-      margin:      [4, 5, 4, 5],   // top right bottom left in mm
-      filename:    'prescription-{{ patient.full_name|slugify }}.pdf',
+      margin:      _isA5 ? [4, 5, 4, 5] : [6, 8, 6, 8],
+      filename:    fname,
       image:       { type: 'jpeg', quality: 0.97 },
       html2canvas: { scale: 2.5, useCORS: true, logging: false },
-      jsPDF:       { unit: 'mm', format: 'a5', orientation: 'portrait' },
+      jsPDF:       { unit: 'mm', format: fmt, orientation: 'portrait' },
     };
 
-    // Generate and auto-download PDF (no dialog on most desktop browsers)
-    await html2pdf().set(opt).from(card).save();
-
-    // After PDF downloads, open WhatsApp to patient's number
-    // Doctor attaches the PDF that just downloaded to their Downloads folder
-    setTimeout(() => window.open(waUrl, '_blank'), 600);
+    // Try Web Share API — shares PDF blob directly (no download to disk)
+    // Supported on Android Chrome, iOS Safari 15+, and some desktop browsers
+    if (navigator.share) {
+      const blob = await html2pdf().set(opt).from(card).output('blob');
+      const file = new File([blob], fname, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Prescription — {{ patient.full_name }}',
+          text:  'Prescription from {{ clinic.name }}',
+        });
+        return;
+      }
+    }
+    // Fallback: open WhatsApp with prescription link
+    window.open(waUrl, '_blank');
 
   } catch (err) {
-    // Fallback: open WhatsApp, doctor prints manually
-    window.open(waUrl, '_blank');
+    // User cancelled share or error — fall back to link
+    if (err.name !== 'AbortError') {
+      window.open(waUrl, '_blank');
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = origHtml;

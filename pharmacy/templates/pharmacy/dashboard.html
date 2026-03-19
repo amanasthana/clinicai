@@ -43,13 +43,33 @@
 <div class="page-container" style="max-width:800px;">
 
   <!-- ── Page heading ── -->
-  <div class="flex items-center justify-between flex-wrap gap-3 mb-6">
+  <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
     <div>
       <h1 class="text-lg font-bold text-gray-900 m-0">Pharmacy</h1>
       <p class="text-xs text-gray-500 mt-0.5">Inventory management</p>
     </div>
     <a href="/pharmacy/add/" class="btn btn-primary" style="font-size:13px;">+ Add Stock</a>
   </div>
+
+  <!-- ── Default discount setting ── -->
+  {% if request.user.staff_profile.can_dispense_bill or request.user.staff_profile.can_manage_staff %}
+  <form method="post" action="/pharmacy/settings/" style="margin-bottom:20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px;">
+    {% csrf_token %}
+    <span style="font-size:13px; font-weight:500; color:#374151;">Default Bill Discount:</span>
+    <div style="display:flex; align-items:center; gap:6px;">
+      <input type="number" name="default_discount" min="0" max="100"
+             value="{{ clinic.default_medicine_discount }}"
+             style="width:70px; padding:6px 10px; border:1px solid #D1D5DB; border-radius:8px; font-size:14px; font-family:inherit; outline:none;">
+      <span style="font-size:14px; color:#6B7280;">%</span>
+    </div>
+    <button type="submit" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;">Save</button>
+    {% if clinic.default_medicine_discount %}
+    <span style="font-size:12px; color:#059669; font-weight:500;">{{ clinic.default_medicine_discount }}% pre-filled on every bill</span>
+    {% else %}
+    <span style="font-size:12px; color:#9CA3AF;">No default discount set</span>
+    {% endif %}
+  </form>
+  {% endif %}
 
   <!-- ── Pending dispense section ── -->
   {% if pending_dispense %}
@@ -96,20 +116,16 @@
       <div class="text-xl font-bold" style="color:#E11D48;">{{ out_of_stock_items|length }}</div>
       <div class="text-xs mt-0.5" style="color:#9F1239;">Out of Stock</div>
     </div>
-    {% if expiring_6m_count %}
     <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="exp6m"
          style="background:#FFF7ED; border:1px solid #FED7AA; min-height:58px; cursor:pointer; user-select:none;">
       <div class="text-xl font-bold" style="color:#EA580C;">{{ expiring_6m_count }}</div>
       <div class="text-xs mt-0.5" style="color:#9A3412;">Exp &lt; 6 Months</div>
     </div>
-    {% endif %}
-    {% if expiring_3m_count %}
     <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="exp3m"
          style="background:#FFF1F2; border:1px solid #FECDD3; min-height:58px; cursor:pointer; user-select:none;">
       <div class="text-xl font-bold" style="color:#E11D48;">{{ expiring_3m_count }}</div>
       <div class="text-xs mt-0.5" style="color:#9F1239;">Exp &lt; 3 Months</div>
     </div>
-    {% endif %}
   </div>
   <div id="active-filter-label" style="display:none; font-size:12px; color:#6B7280; margin-bottom:12px; padding:0 2px;">
     Showing filtered results. <button onclick="clearChipFilters()" style="color:#2563EB; background:none; border:none; cursor:pointer; font-size:12px; font-family:inherit; padding:0;">Show all</button>
@@ -171,6 +187,7 @@
 
       <div class="ph-item"
            data-name="{{ item.display_name|lower }}"
+           data-generic="{{ item.display_generic|lower }}"
            data-status="{% if not item.in_stock %}out{% elif item.low_stock %}low{% else %}ok{% endif %}"
            data-exp3m="{% for b in item.batches.all %}{% if b.is_near_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
            data-exp6m="{% for b in item.batches.all %}{% if b.is_approaching_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
@@ -414,11 +431,15 @@ function clearChipFilters() {
 
 // ── Text search (respects chip filter) ──
 let searchQuery = '';
+function _rowMatchesSearch(row) {
+  if (!searchQuery) return true;
+  return row.dataset.name.includes(searchQuery) || (row.dataset.generic || '').includes(searchQuery);
+}
 function applySearchFilter() {
   document.querySelectorAll('#inv-list .ph-item').forEach(row => {
-    if (activeChips.size > 0 && row.style.display === 'none') return; // already hidden by chip
+    if (activeChips.size > 0 && row.style.display === 'none') return;
     if (activeChips.size === 0) {
-      row.style.display = (!searchQuery || row.dataset.name.includes(searchQuery)) ? '' : 'none';
+      row.style.display = _rowMatchesSearch(row) ? '' : 'none';
     }
   });
 }
@@ -426,15 +447,14 @@ function applySearchFilter() {
 function filterInv(q) {
   searchQuery = q.toLowerCase().trim();
   if (activeChips.size > 0) {
-    // Re-apply chip filter first, then further restrict by search
     applyChipFilters();
     document.querySelectorAll('#inv-list .ph-item').forEach(row => {
       if (row.style.display === 'none') return;
-      if (searchQuery && !row.dataset.name.includes(searchQuery)) row.style.display = 'none';
+      if (!_rowMatchesSearch(row)) row.style.display = 'none';
     });
   } else {
     document.querySelectorAll('#inv-list .ph-item').forEach(row => {
-      row.style.display = (!searchQuery || row.dataset.name.includes(searchQuery)) ? '' : 'none';
+      row.style.display = _rowMatchesSearch(row) ? '' : 'none';
     });
   }
 }

@@ -302,3 +302,107 @@ class HelpApiTest(TestCase):
         # Should contain the streamed text chunks
         self.assertIn('Hello', content)
         self.assertIn('world', content)
+
+
+# ── Analytics stats correctness tests ────────────────────────────────────────
+
+class DashboardStatsTotalTest(TestCase):
+    """Dashboard stats['total'] must equal waiting+in_consult+done (no double-count)."""
+
+    def setUp(self):
+        self.clinic, self.user = make_clinic_and_user('dash_stats_user', 'Dash Stats Clinic')
+        self.client = Client()
+        self.client.login(username='dash_stats_user', password='testpass')
+        self.patient = make_patient(self.clinic, phone='9100000001')
+
+    def _make_visit(self, status, token):
+        return Visit.objects.create(
+            clinic=self.clinic, patient=self.patient,
+            visit_date=timezone.now().date(),
+            status=status, token_number=token,
+        )
+
+    def test_total_equals_waiting_plus_in_consult_plus_done(self):
+        """3 done visits → total=3, not 6."""
+        self._make_visit('done', 1)
+        self._make_visit('done', 2)
+        self._make_visit('done', 3)
+        resp = self.client.get('/')
+        self.assertEqual(resp.status_code, 200)
+        stats = resp.context['stats']
+        self.assertEqual(stats['done'], 3)
+        self.assertEqual(stats['total'], 3)  # was 6 before fix
+
+    def test_no_show_excluded_from_total(self):
+        """no_show visits must not count toward total."""
+        self._make_visit('done', 1)
+        self._make_visit('no_show', 2)
+        resp = self.client.get('/')
+        stats = resp.context['stats']
+        self.assertEqual(stats['total'], 1)
+
+    def test_cancelled_excluded_from_total(self):
+        """cancelled visits must not count toward total."""
+        self._make_visit('done', 1)
+        self._make_visit('cancelled', 2)
+        resp = self.client.get('/')
+        stats = resp.context['stats']
+        self.assertEqual(stats['total'], 1)
+
+    def test_mixed_statuses(self):
+        """2 done + 1 waiting + 1 no_show → total=3."""
+        self._make_visit('done', 1)
+        self._make_visit('done', 2)
+        self._make_visit('waiting', 3)
+        self._make_visit('no_show', 4)
+        resp = self.client.get('/')
+        stats = resp.context['stats']
+        self.assertEqual(stats['total'], 3)
+        self.assertEqual(stats['done'], 2)
+        self.assertEqual(stats['waiting'], 1)
+
+
+class AnalyticsViewTest(TestCase):
+    """Analytics view visit counts must exclude no_show/cancelled."""
+
+    def setUp(self):
+        self.clinic, self.user = make_clinic_and_user('analytics_user', 'Analytics Clinic')
+        self.client = Client()
+        self.client.login(username='analytics_user', password='testpass')
+        self.patient = make_patient(self.clinic, phone='9200000002')
+
+    def _make_visit(self, status, token):
+        return Visit.objects.create(
+            clinic=self.clinic, patient=self.patient,
+            visit_date=timezone.now().date(),
+            status=status, token_number=token,
+        )
+
+    def test_analytics_excludes_no_show(self):
+        self._make_visit('done', 1)
+        self._make_visit('no_show', 2)
+        resp = self.client.get('/analytics/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['summary']['total_visits'], 1)
+
+    def test_analytics_excludes_cancelled(self):
+        self._make_visit('done', 1)
+        self._make_visit('cancelled', 2)
+        resp = self.client.get('/analytics/')
+        self.assertEqual(resp.context['summary']['total_visits'], 1)
+
+    def test_analytics_counts_all_real_statuses(self):
+        """waiting, in_consultation, done should all be counted."""
+        self._make_visit('waiting', 1)
+        self._make_visit('in_consultation', 2)
+        self._make_visit('done', 3)
+        resp = self.client.get('/analytics/')
+        self.assertEqual(resp.context['summary']['total_visits'], 3)
+
+    def test_avg_daily_not_zero_on_first_day(self):
+        """avg_daily should be > 0 when there are visits today."""
+        self._make_visit('done', 1)
+        self._make_visit('done', 2)
+        resp = self.client.get('/analytics/?range=7')
+        avg = resp.context['summary']['avg_daily']
+        self.assertGreater(avg, 0)

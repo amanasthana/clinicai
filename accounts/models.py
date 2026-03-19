@@ -21,6 +21,10 @@ class Clinic(models.Model):
         default=False,
         help_text='If True, hide digital header and start content below letterhead_height_mm.'
     )
+    default_medicine_discount = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='Default discount % pre-filled on every pharmacy bill at this clinic (0 = no discount).'
+    )
 
     def __str__(self):
         return self.name
@@ -55,6 +59,7 @@ class StaffMember(models.Model):
     can_dispense_bill     = models.BooleanField(default=False)
     can_view_analytics    = models.BooleanField(default=False)
     can_manage_staff      = models.BooleanField(default=False)
+    must_change_password  = models.BooleanField(default=False)
     updated_at            = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -110,6 +115,20 @@ class ClinicRegistrationRequest(models.Model):
         return f"{self.clinic_name} ({self.get_status_display()})"
 
 
+class PasswordResetRequest(models.Model):
+    """Tracks staff password reset requests — handled manually by clinic admin via WhatsApp."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reset_requests')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    handled = models.BooleanField(default=False)
+    handled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-requested_at']
+
+    def __str__(self):
+        return f"Reset request for {self.user.username} at {self.requested_at}"
+
+
 class ContactMessage(models.Model):
     INQUIRY_TYPES = [
         ('new_clinic', 'Interested in joining ClinicAI'),
@@ -132,3 +151,26 @@ class ContactMessage(models.Model):
 
     def __str__(self):
         return f"{self.name} — {self.get_inquiry_type_display()}"
+
+
+class ClinicDeletionRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='deletion_requests')
+    clinic_name_snapshot = models.CharField(max_length=200)  # keep name even after deletion
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='clinic_deletion_requests'
+    )
+    reason = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Deletion request: {self.clinic_name_snapshot} [{self.status}]"

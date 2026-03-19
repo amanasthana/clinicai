@@ -49,8 +49,11 @@
 
   <!-- Patient volume chart -->
   <div class="card" style="margin-bottom:24px;">
-    <div style="font-size:14px; font-weight:600; color:#111827; margin-bottom:16px;">Patient Volume — Daily</div>
-    <div style="position:relative; height:220px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+      <div style="font-size:14px; font-weight:600; color:#111827;">Patient Volume — Last {{ days }} Days</div>
+      <div style="font-size:12px; color:#6B7280;">{{ summary.total_visits }} total visits</div>
+    </div>
+    <div style="position:relative; height:240px;">
       <canvas id="volumeChart"></canvas>
     </div>
   </div>
@@ -104,26 +107,111 @@
 
   </div>
 
+  <!-- Patient visit log -->
+  <div class="card" style="margin-bottom:24px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+      <div style="font-size:14px; font-weight:600; color:#111827;">Patient Visit Log</div>
+      <div style="font-size:12px; color:#6B7280;">{{ visit_log|length }} visit{{ visit_log|length|pluralize }} in this period</div>
+    </div>
+    {% if visit_log %}
+    <!-- Search filter -->
+    <input type="text" id="log-search" placeholder="Search by name, mobile, or diagnosis…"
+      oninput="filterLog(this.value)"
+      style="width:100%; padding:9px 12px; border:1px solid #E5E7EB; border-radius:8px; font-size:13px; font-family:inherit; outline:none; box-sizing:border-box; margin-bottom:14px;"
+      onfocus="this.style.borderColor='#2563EB'" onblur="this.style.borderColor='#E5E7EB'">
+    <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+      <table id="visit-log-table" style="width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed;">
+        <colgroup>
+          <col style="width:68px;">
+          <col style="width:30%; min-width:110px;">
+          <col style="width:72px;">
+          <col style="width:106px;">
+          <col>
+        </colgroup>
+        <thead>
+          <tr style="border-bottom:2px solid #E5E7EB;">
+            <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600; white-space:nowrap;">Date</th>
+            <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600;">Patient</th>
+            <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600; white-space:nowrap;">Age</th>
+            <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600;">Mobile</th>
+            <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600;">Diagnosis</th>
+          </tr>
+        </thead>
+        <tbody id="log-tbody">
+          {% for visit in visit_log %}
+          <tr class="log-row" style="border-bottom:1px solid #F3F4F6; transition:background 0.1s;"
+              onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background=''">
+            <td style="padding:10px 8px; white-space:nowrap; color:#6B7280; font-size:12px;">{{ visit.visit_date|date:"j M" }}</td>
+            <td style="padding:10px 8px; overflow:hidden;">
+              <a href="/reception/patient/{{ visit.patient.id }}/" style="font-weight:600; color:#111827; text-decoration:none; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                {{ visit.patient.full_name }}
+              </a>
+            </td>
+            <td style="padding:10px 8px; white-space:nowrap; color:#374151; font-size:12px;">
+              {{ visit.patient.age }}y
+            </td>
+            <td style="padding:10px 8px; overflow:hidden;">
+              <a href="tel:{{ visit.patient.phone }}" style="color:#2563EB; text-decoration:none; white-space:nowrap; font-size:12px;">
+                {{ visit.patient.phone }}
+              </a>
+            </td>
+            <td style="padding:10px 8px; color:#374151; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:0;">
+              {% if visit.prescription and visit.prescription.diagnosis %}
+                <span title="{{ visit.prescription.diagnosis }}">{{ visit.prescription.diagnosis }}</span>
+              {% else %}
+                <span style="color:#9CA3AF; font-style:italic;">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div id="log-empty" style="display:none; text-align:center; padding:20px; color:#9CA3AF; font-size:13px;">No patients match your search.</div>
+    {% else %}
+    <p style="font-size:13px; color:#9CA3AF; text-align:center; padding:20px 0;">No visits in this period.</p>
+    {% endif %}
+  </div>
+
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const labels = {{ volume_labels }};
-const data   = {{ volume_data }};
+const labels = {{ volume_labels|safe }};
+const data   = {{ volume_data|safe }};
 
 const ctx = document.getElementById('volumeChart').getContext('2d');
+
+// Gradient is created as a function so it has access to chartArea dimensions
+// (Chart.js 4.x requires this — gradients created before layout have zero height)
+function makeGradient(chart) {
+  const { ctx: c, chartArea } = chart;
+  if (!chartArea) return 'rgba(37,99,235,0.2)';
+  const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+  g.addColorStop(0,   'rgba(37, 99, 235, 0.45)');
+  g.addColorStop(0.5, 'rgba(37, 99, 235, 0.12)');
+  g.addColorStop(1,   'rgba(37, 99, 235, 0)');
+  return g;
+}
+
 new Chart(ctx, {
-  type: 'bar',
+  type: 'line',
   data: {
     labels: labels,
     datasets: [{
       label: 'Visits',
       data: data,
-      backgroundColor: 'rgba(37, 99, 235, 0.15)',
-      borderColor: 'rgba(37, 99, 235, 0.8)',
-      borderWidth: 1.5,
-      borderRadius: 4,
+      fill: true,
+      backgroundColor: (context) => makeGradient(context.chart),
+      borderColor: 'rgba(37, 99, 235, 0.9)',
+      borderWidth: 2.5,
+      tension: 0.4,
+      pointRadius: data.length <= 14 ? 4 : 2,
+      pointBackgroundColor: '#fff',
+      pointBorderColor: 'rgba(37, 99, 235, 0.9)',
+      pointBorderWidth: 2,
+      pointHoverRadius: 6,
     }]
   },
   options: {
@@ -132,27 +220,50 @@ new Chart(ctx, {
     plugins: {
       legend: { display: false },
       tooltip: {
+        backgroundColor: 'rgba(17,24,39,0.85)',
+        padding: 10,
         callbacks: {
-          label: ctx => `${ctx.parsed.y} visit${ctx.parsed.y !== 1 ? 's' : ''}`,
+          label: c => ` ${c.parsed.y} visit${c.parsed.y !== 1 ? 's' : ''}`,
         }
       }
     },
     scales: {
       y: {
         beginAtZero: true,
-        ticks: { stepSize: 1, font: { size: 11 } },
+        ticks: {
+          precision: 0,
+          font: { size: 11 },
+          color: '#9CA3AF',
+        },
         grid: { color: 'rgba(0,0,0,0.05)' },
+        border: { display: false },
       },
       x: {
         ticks: {
           font: { size: 10 },
-          maxTicksLimit: {% if days > 30 %}12{% else %}{{ days }}{% endif %},
-          maxRotation: 45,
+          color: '#9CA3AF',
+          maxTicksLimit: {% if days > 14 %}10{% else %}{{ days }}{% endif %},
+          maxRotation: 30,
         },
         grid: { display: false },
+        border: { display: false },
       }
     }
   }
 });
+
+function filterLog(q) {
+  const rows = document.querySelectorAll('#log-tbody .log-row');
+  const term = q.trim().toLowerCase();
+  let visible = 0;
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const show = !term || text.includes(term);
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const empty = document.getElementById('log-empty');
+  if (empty) empty.style.display = (visible === 0 && term) ? '' : 'none';
+}
 </script>
 {% endblock %}

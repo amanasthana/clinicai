@@ -1,5 +1,4 @@
 from django.urls import path
-from django.contrib.auth import views as auth_views
 from . import views
 
 app_name = 'accounts'
@@ -25,24 +24,16 @@ urlpatterns = [
     path('letterhead/', views.letterhead_view, name='letterhead'),
     path('admin-panel/check-user/<str:phone>/', views.check_user_view, name='check_user'),
     path('admin-panel/reset-password/<int:pk>/', views.reset_clinic_password_view, name='reset_clinic_password'),
+    path('admin-panel/pw-reset/<int:pk>/', views.superuser_reset_password_view, name='superuser_reset_password'),
     path('switch-clinic/', views.switch_clinic_view, name='switch_clinic'),
     path('add-clinic/', views.add_clinic_view, name='add_clinic'),
-    path('forgot-password/', auth_views.PasswordResetView.as_view(
-        template_name='accounts/forgot_password.html',
-        email_template_name='accounts/password_reset_email.html',
-        subject_template_name='accounts/password_reset_subject.txt',
-        success_url='/accounts/forgot-password/sent/',
-    ), name='forgot_password'),
-    path('forgot-password/sent/', auth_views.PasswordResetDoneView.as_view(
-        template_name='accounts/forgot_password_done.html',
-    ), name='password_reset_done'),
-    path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(
-        template_name='accounts/reset_password_confirm.html',
-        success_url='/accounts/reset/done/',
-    ), name='password_reset_confirm'),
-    path('reset/done/', auth_views.PasswordResetCompleteView.as_view(
-        template_name='accounts/reset_password_complete.html',
-    ), name='password_reset_complete'),
+    path('forgot-password/', views.forgot_password_view, name='forgot_password'),
+    path('staff/<int:pk>/reset-password/', views.staff_reset_password_view, name='staff_reset_password'),
     path('update-email/', views.update_email_view, name='update_email'),
     path('change-password/', views.change_password_view, name='change_password'),
+    path('clinic/edit/', views.clinic_edit_view, name='clinic_edit'),
+    path('clinic/<int:pk>/delete/', views.clinic_delete_view, name='clinic_delete'),
+    path('clinic/request-deletion/', views.request_clinic_deletion_view, name='request_clinic_deletion'),
+    path('admin-panel/clinic-deletion/<int:pk>/approve/', views.approve_clinic_deletion_view, name='approve_clinic_deletion'),
+    path('admin-panel/clinic-deletion/<int:pk>/reject/', views.reject_clinic_deletion_view, name='reject_clinic_deletion'),
 ]

@@ -21,13 +21,14 @@ def _get_clinic(request):
 def pharmacy_dashboard(request):
     clinic = _get_clinic(request)
 
-    # Pending dispense: visits marked done today without a bill
+    # Pending dispense: all today's visits without a bill (any status except no_show/cancelled)
     from reception.models import Visit
     from django.utils import timezone as tz
     today = tz.now().date()
     pending_dispense = (
         Visit.objects
-        .filter(clinic=clinic, visit_date=today, status='done')
+        .filter(clinic=clinic, visit_date=today)
+        .exclude(status__in=['no_show', 'cancelled'])
         .exclude(pharmacy_bill__isnull=False)
         .select_related('patient')
         .prefetch_related('prescription__doctor')
@@ -64,6 +65,7 @@ def pharmacy_dashboard(request):
 
     return render(request, 'pharmacy/dashboard.html', {
         'items': items,
+        'clinic': clinic,
         'low_stock_items': low_stock_items,
         'out_of_stock_items': out_of_stock_items,
         'total_in_stock': total_in_stock,
@@ -311,12 +313,26 @@ def catalog_search_api(request):
 # Helper: calculate suggested quantity from dosage + duration strings
 # ---------------------------------------------------------------------------
 
-def _calc_qty(dosage, duration):
+_UNIT_DISPENSE_KEYWORDS = re.compile(
+    r'\b(syrup|ointment|cream|lotion|gel|drops|drop|suspension|solution|linctus|'
+    r'emulsion|spray|inhaler|nebulization|patch|sachet|powder|dusting|liniment|oil)\b',
+    re.IGNORECASE,
+)
+
+
+def _calc_qty(dosage, duration, drug_name=''):
     """
     Calculate suggested quantity to dispense based on dosage schedule and duration.
-    dosage:   e.g. "1-0-1" or "1-1-1"
-    duration: e.g. "5 days", "2 weeks", "1 month", "10 din"
+    dosage:    e.g. "1-0-1" or "1-1-1"
+    duration:  e.g. "5 days", "2 weeks", "1 month", "10 din"
+    drug_name: e.g. "Tab Metformin 500mg" or "Betnovate Cream" or "Cough Syrup"
+
+    For unit-dispensed forms (syrup, ointment, cream, lotion, gel, drops, etc.)
+    the quantity is always 1 — these come as a single bottle/tube/vial.
     """
+    if drug_name and _UNIT_DISPENSE_KEYWORDS.search(drug_name):
+        return 1
+
     parts = [p.strip() for p in dosage.split('-')]
     per_day = sum(int(p) for p in parts if p.isdigit())
     days = 0
@@ -355,8 +371,9 @@ def dispense_view(request, visit_id):
     medicine_rows = []
     if existing_rx:
         for pm in existing_rx.medicines.all():
-            suggested_qty = _calc_qty(pm.dosage, pm.duration)
+            suggested_qty = _calc_qty(pm.dosage, pm.duration, pm.drug_name)
             # Try to match pharmacy item by name (case-insensitive)
+            # Stage 1: inventory name contains prescription name (or exact match)
             drug_name_clean = pm.drug_name.strip()
             item = (
                 PharmacyItem.objects
@@ -371,6 +388,15 @@ def dispense_view(request, visit_id):
                 .prefetch_related('batches')
                 .first()
             )
+            # Stage 2: prescription name contains inventory name
+            # e.g. drug_name="Tab Ultracet" while inventory is stored as "Ultracet"
+            if not item:
+                drug_lower = drug_name_clean.lower()
+                for candidate in PharmacyItem.objects.filter(clinic=clinic).select_related('medicine').prefetch_related('batches'):
+                    inv_name = (candidate.medicine.name if candidate.medicine else candidate.custom_name or '').lower()
+                    if inv_name and inv_name in drug_lower:
+                        item = candidate
+                        break
             batch = item.use_first_batch if item else None
             medicine_rows.append({
                 'prescription_med_id': pm.pk,
@@ -400,6 +426,7 @@ def dispense_view(request, visit_id):
     return render(request, 'pharmacy/dispense.html', {
         'visit': visit,
         'patient': visit.patient,
+        'clinic': clinic,
         'existing_rx': existing_rx,
         'medicine_rows': medicine_rows,
         'all_items': all_items,
@@ -508,15 +535,73 @@ def confirm_dispense_api(request, visit_id):
 @require_permission('can_dispense_bill')
 def bill_view(request, bill_id):
     """GET. Shows a printable bill/receipt."""
+    import urllib.parse
     clinic = _get_clinic(request)
     bill = get_object_or_404(PharmacyBill, pk=bill_id, clinic=clinic)
-    dispensed_items = bill.visit.dispensed_items.select_related('pharmacy_item', 'pharmacy_item__medicine', 'batch').all()
+    dispensed_items = bill.visit.dispensed_items.select_related(
+        'pharmacy_item', 'pharmacy_item__medicine', 'batch'
+    ).all()
+    prescription = getattr(bill.visit, 'prescription', None)
+    discount_amount = bill.subtotal - bill.final_amount
+
+    # WhatsApp deeplink for patient (if phone available)
+    wa_url = ''
+    phone = bill.visit.patient.phone
+    if phone:
+        msg = (
+            f"Dear patient, your medicine bill from {clinic.name} is ready.\n"
+            f"Bill No: {bill.bill_number} | Total: Rs {bill.final_amount}\n"
+            f"Please save the PDF sent to you for your records."
+        )
+        wa_url = f"https://wa.me/91{phone}?text={urllib.parse.quote(msg)}"
+
     return render(request, 'pharmacy/bill.html', {
         'bill': bill,
         'visit': bill.visit,
         'patient': bill.visit.patient,
         'clinic': clinic,
         'dispensed_items': dispensed_items,
+        'prescription': prescription,
+        'discount_amount': discount_amount,
+        'wa_url': wa_url,
+    })
+
+
+@require_permission('can_dispense_bill')
+@require_POST
+def pharmacy_settings_view(request):
+    """POST. Save clinic-level pharmacy settings (default discount %)."""
+    from django.contrib import messages
+    clinic = _get_clinic(request)
+    try:
+        disc = int(request.POST.get('default_discount', 0))
+        clinic.default_medicine_discount = max(0, min(100, disc))
+        clinic.save(update_fields=['default_medicine_discount'])
+        messages.success(request, f'Default discount set to {clinic.default_medicine_discount}%.')
+    except (ValueError, TypeError):
+        messages.error(request, 'Invalid discount value.')
+    return redirect('pharmacy:dashboard')
+
+
+# ---------------------------------------------------------------------------
+# Item detail API
+# ---------------------------------------------------------------------------
+
+@require_permission('can_dispense_bill')
+@require_GET
+def item_detail_api(request):
+    """GET JSON. Returns item + FEFO batch info for use in dispense manual-add."""
+    clinic = _get_clinic(request)
+    item_id = request.GET.get('id')
+    item = get_object_or_404(PharmacyItem, pk=item_id, clinic=clinic)
+    batch = item.use_first_batch
+    return JsonResponse({
+        'id': item.pk,
+        'name': item.display_name,
+        'batch_id': batch.pk if batch else None,
+        'unit_price': str(batch.unit_price) if batch else '0',
+        'stock_qty': batch.quantity if batch else 0,
+        'in_stock': item.in_stock,
     })
 
 
@@ -601,3 +686,80 @@ def alternatives_api(request, item_id):
 def add_stock_scan_view(request):
     """GET only — renders the scan upload page. Actual scanning is done by prescription scan_bill_api."""
     return render(request, 'pharmacy/add_stock_scan.html')
+
+
+# ---------------------------------------------------------------------------
+# Walk-in dispense
+# ---------------------------------------------------------------------------
+
+@require_permission('can_dispense_bill')
+def walk_in_view(request):
+    """Direct walk-in dispense — search/register patient then go straight to dispense."""
+    from reception.models import Patient, Visit
+    from django.utils import timezone as tz
+
+    clinic = _get_clinic(request)
+
+    if request.method == 'POST':
+        action = request.POST.get('action', '')
+        if action == 'select':
+            patient_id = request.POST.get('patient_id', '')
+            patient = get_object_or_404(Patient, pk=patient_id, clinic=clinic)
+        elif action == 'register':
+            full_name = request.POST.get('full_name', '').strip()
+            phone = request.POST.get('phone', '').strip()
+            if not full_name or not phone:
+                from django.contrib import messages as _messages
+                _messages.error(request, 'Name and phone are required.')
+                return render(request, 'pharmacy/walk_in.html', {'clinic': clinic})
+            try:
+                age_val = int(request.POST.get('age') or 0) or None
+            except (ValueError, TypeError):
+                age_val = None
+            patient, _ = Patient.objects.get_or_create(
+                phone=phone, clinic=clinic,
+                defaults={
+                    'full_name': full_name,
+                    'age': age_val,
+                    'gender': request.POST.get('gender', 'M'),
+                }
+            )
+        else:
+            return redirect('pharmacy:walk_in')
+
+        # Find today's visit or create one
+        today = tz.now().date()
+        visit = Visit.objects.filter(patient=patient, clinic=clinic, visit_date=today).first()
+        if not visit:
+            last = Visit.objects.filter(clinic=clinic, visit_date=today).order_by('-token_number').first()
+            token = (last.token_number + 1) if last else 1
+            visit = Visit.objects.create(
+                patient=patient, clinic=clinic,
+                visit_date=today, token_number=token,
+                status='done',
+            )
+        return redirect('pharmacy:dispense', visit_id=visit.id)
+
+    return render(request, 'pharmacy/walk_in.html', {'clinic': clinic})
+
+
+# ---------------------------------------------------------------------------
+# Edit / Re-dispense bill
+# ---------------------------------------------------------------------------
+
+@require_permission('can_dispense_bill')
+@require_POST
+def edit_bill_view(request, bill_id):
+    """POST. Reverse a bill — restore stock and delete bill so dispense can redo."""
+    clinic = _get_clinic(request)
+    bill = get_object_or_404(PharmacyBill, pk=bill_id, clinic=clinic)
+    visit = bill.visit
+    with transaction.atomic():
+        for di in visit.dispensed_items.select_related('batch').all():
+            di.batch.quantity += di.quantity_dispensed
+            di.batch.save(update_fields=['quantity'])
+        visit.dispensed_items.all().delete()
+        bill.delete()
+    from django.contrib import messages as _messages
+    _messages.success(request, 'Bill reversed. Please re-dispense.')
+    return redirect('pharmacy:dispense', visit_id=visit.id)

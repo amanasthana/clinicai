@@ -657,110 +657,96 @@ class RBACAnalyticsTest(TestCase):
 # Email Nudge and Password Reset Tests
 # ---------------------------------------------------------------------------
 
-from unittest.mock import patch
-from django.core.cache import cache
+from accounts.models import PasswordResetRequest
 
 
-class EmailNudgeAndUpdateTest(TestCase):
-    """Tests for email nudge and update_email endpoint."""
-
-    def setUp(self):
-        self.clinic = make_clinic('Email Nudge Clinic')
-        self.user_no_email = make_user('9111000001', password='testpass123')
-        self.user_no_email.email = ''
-        self.user_no_email.save()
-        make_membership(self.user_no_email, self.clinic, role='doctor', display_name='No Email Doc')
-
-        self.user_with_email = make_user('9111000002', password='testpass123')
-        self.user_with_email.email = 'doc@clinic.com'
-        self.user_with_email.save()
-        make_membership(self.user_with_email, self.clinic, role='doctor', display_name='Has Email Doc')
-
-    def test_nudge_shown_when_email_missing(self):
-        self.client.login(username='9111000001', password='testpass123')
-        resp = self.client.get('/')
-        self.assertContains(resp, 'Add your email')
-
-    def test_nudge_hidden_when_email_present(self):
-        self.client.login(username='9111000002', password='testpass123')
-        resp = self.client.get('/')
-        self.assertNotContains(resp, 'Add your email')
-
-    def test_update_email_requires_login(self):
-        resp = self.client.post('/accounts/update-email/', {'email': 'x@x.com'})
-        self.assertEqual(resp.status_code, 302)
-
-    def test_update_email_saves_valid_email(self):
-        self.client.login(username='9111000001', password='testpass123')
-        resp = self.client.post('/accounts/update-email/', {'email': 'newemail@clinic.com'})
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertTrue(data['ok'])
-        self.user_no_email.refresh_from_db()
-        self.assertEqual(self.user_no_email.email, 'newemail@clinic.com')
-
-    def test_update_email_rejects_invalid_email(self):
-        self.client.login(username='9111000001', password='testpass123')
-        resp = self.client.post('/accounts/update-email/', {'email': 'notanemail'})
-        data = resp.json()
-        self.assertFalse(data['ok'])
-
-    def test_update_email_rejects_duplicate(self):
-        self.client.login(username='9111000001', password='testpass123')
-        resp = self.client.post('/accounts/update-email/', {'email': 'doc@clinic.com'})
-        data = resp.json()
-        self.assertFalse(data['ok'])
-        self.assertIn('already linked', data['error'])
-
-    def test_update_email_rejects_empty(self):
-        self.client.login(username='9111000001', password='testpass123')
-        resp = self.client.post('/accounts/update-email/', {'email': ''})
-        data = resp.json()
-        self.assertFalse(data['ok'])
-
-
-class ForgotPasswordEmailTest(TestCase):
-    """Tests for email-based password reset flow."""
+class ForgotPasswordRequestTest(TestCase):
+    """Tests for admin-mediated password reset request flow."""
 
     def setUp(self):
-        self.clinic = make_clinic('Reset Email Clinic')
+        self.clinic = make_clinic('Reset Request Clinic')
         self.user = make_user('9222000001', password='oldpass123')
-        self.user.email = 'reset@clinic.com'
-        self.user.save()
         make_membership(self.user, self.clinic, role='doctor', display_name='Reset Doc')
+
+        self.admin_user = make_user('9222000099', password='adminpass123')
+        make_membership(self.admin_user, self.clinic, role='admin', display_name='Clinic Admin')
 
     def test_forgot_password_page_loads(self):
         resp = self.client.get('/accounts/forgot-password/')
         self.assertEqual(resp.status_code, 200)
 
-    def test_forgot_password_with_known_email_sends_email(self):
-        from django.core import mail
-        with self.settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
-            resp = self.client.post('/accounts/forgot-password/', {'email': 'reset@clinic.com'})
-        self.assertRedirects(resp, '/accounts/forgot-password/sent/')
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('reset@clinic.com', mail.outbox[0].to)
+    def test_forgot_password_shows_security_message(self):
+        resp = self.client.get('/accounts/forgot-password/')
+        self.assertContains(resp, 'WhatsApp')
 
-    def test_forgot_password_with_unknown_email_no_error(self):
-        """Security: don't reveal whether email exists."""
-        from django.core import mail
-        with self.settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
-            resp = self.client.post('/accounts/forgot-password/', {'email': 'nobody@x.com'})
-        self.assertRedirects(resp, '/accounts/forgot-password/sent/')
-        self.assertEqual(len(mail.outbox), 0)
-
-    def test_forgot_password_done_page_loads(self):
-        resp = self.client.get('/accounts/forgot-password/sent/')
+    def test_forgot_password_post_with_known_phone_creates_request(self):
+        resp = self.client.post('/accounts/forgot-password/', {'phone': '9222000001'})
         self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Request received')
+        self.assertTrue(PasswordResetRequest.objects.filter(user=self.user, handled=False).exists())
 
-    def test_reset_confirm_with_invalid_token_shows_error(self):
-        resp = self.client.get('/accounts/reset/bad-uid/bad-token/')
+    def test_forgot_password_post_with_unknown_phone_no_error(self):
+        """Security: don't reveal whether the account exists."""
+        resp = self.client.post('/accounts/forgot-password/', {'phone': '9999999999'})
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'invalid or has expired')
+        self.assertContains(resp, 'Request received')
 
-    def test_reset_complete_page_loads(self):
-        resp = self.client.get('/accounts/reset/done/')
-        self.assertEqual(resp.status_code, 200)
+    def test_forgot_password_does_not_duplicate_pending_requests(self):
+        self.client.post('/accounts/forgot-password/', {'phone': '9222000001'})
+        self.client.post('/accounts/forgot-password/', {'phone': '9222000001'})
+        self.assertEqual(PasswordResetRequest.objects.filter(user=self.user, handled=False).count(), 1)
+
+    def test_superuser_can_see_pending_reset_in_admin_panel(self):
+        PasswordResetRequest.objects.create(user=self.user)
+        superuser = User.objects.create_superuser('su_reset_test', 'su@test.com', 'supass')
+        self.client.login(username='su_reset_test', password='supass')
+        resp = self.client.get('/accounts/admin-panel/')
+        self.assertContains(resp, 'Password Reset Requests')
+
+    def test_admin_reset_password_sets_must_change_flag(self):
+        sm = self.user.staff_memberships.first()
+        self.client.login(username='9222000099', password='adminpass123')
+        resp = self.client.post(f'/accounts/staff/{sm.pk}/reset-password/')
+        self.assertEqual(resp.status_code, 302)
+        sm.refresh_from_db()
+        self.assertTrue(sm.must_change_password)
+
+    def test_admin_reset_password_marks_requests_handled(self):
+        PasswordResetRequest.objects.create(user=self.user)
+        sm = self.user.staff_memberships.first()
+        self.client.login(username='9222000099', password='adminpass123')
+        self.client.post(f'/accounts/staff/{sm.pk}/reset-password/')
+        self.assertFalse(PasswordResetRequest.objects.filter(user=self.user, handled=False).exists())
+
+    def test_login_redirects_to_change_password_when_forced(self):
+        sm = self.user.staff_memberships.first()
+        sm.must_change_password = True
+        sm.save()
+        resp = self.client.post('/accounts/login/', {
+            'username': '9222000001', 'password': 'oldpass123'
+        })
+        self.assertRedirects(resp, '/accounts/change-password/')
+
+    def test_change_password_clears_must_change_flag(self):
+        sm = self.user.staff_memberships.first()
+        sm.must_change_password = True
+        sm.save()
+        self.client.login(username='9222000001', password='oldpass123')
+        self.client.post('/accounts/change-password/', {
+            'current_password': 'oldpass123',
+            'password1': 'newpass9876',
+            'password2': 'newpass9876',
+        })
+        sm.refresh_from_db()
+        self.assertFalse(sm.must_change_password)
+
+    def test_change_password_forced_banner_shown(self):
+        sm = self.user.staff_memberships.first()
+        sm.must_change_password = True
+        sm.save()
+        self.client.login(username='9222000001', password='oldpass123')
+        resp = self.client.get('/accounts/change-password/')
+        self.assertContains(resp, 'Temporary Password')
 
 
 class ChangePasswordTest(TestCase):
@@ -836,3 +822,71 @@ class AddStaffEmailTest(TestCase):
             'email': '',
         })
         self.assertRedirects(resp, '/accounts/staff/')
+
+
+class ClinicEditTest(TestCase):
+    def setUp(self):
+        self.clinic = make_clinic('Test Clinic')
+        self.user = make_user('clinic_edit_doc')
+        self.sm = make_membership(self.user, self.clinic, role='admin', display_name='Admin Doc')
+        self.client = Client()
+        self.client.login(username='clinic_edit_doc', password='testpass123')
+
+    def test_get_edit_page(self):
+        resp = self.client.get('/accounts/clinic/edit/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Test Clinic')
+
+    def test_edit_saves_name(self):
+        resp = self.client.post('/accounts/clinic/edit/', {
+            'name': 'Updated Clinic', 'address': '2 New Rd', 'city': 'Pune',
+            'state': 'Maharashtra', 'phone': '9111111111',
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.clinic.refresh_from_db()
+        self.assertEqual(self.clinic.name, 'Updated Clinic')
+
+    def test_edit_rejects_empty_name(self):
+        resp = self.client.post('/accounts/clinic/edit/', {
+            'name': '', 'address': '', 'city': '', 'state': '', 'phone': '',
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.clinic.refresh_from_db()
+        self.assertEqual(self.clinic.name, 'Test Clinic')
+
+    def test_non_admin_cannot_edit(self):
+        user2 = make_user('recept_edit')
+        make_membership(user2, self.clinic, role='receptionist', display_name='Recept')
+        c2 = Client()
+        c2.login(username='recept_edit', password='testpass123')
+        resp = c2.get('/accounts/clinic/edit/')
+        self.assertEqual(resp.status_code, 403)
+
+
+class ClinicDeleteTest(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser('su_del', 'su@test.com', 'testpass123')
+        self.clinic = make_clinic('Delete Me Clinic')
+        self.user = make_user('regular_del')
+        self.sm = make_membership(self.user, self.clinic, role='admin', display_name='Admin')
+
+    def test_superuser_can_get_confirm_page(self):
+        c = Client()
+        c.login(username='su_del', password='testpass123')
+        resp = c.get(f'/accounts/clinic/{self.clinic.pk}/delete/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_superuser_can_delete(self):
+        c = Client()
+        c.login(username='su_del', password='testpass123')
+        pk = self.clinic.pk
+        resp = c.post(f'/accounts/clinic/{pk}/delete/')
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Clinic.objects.filter(pk=pk).exists())
+
+    def test_regular_user_cannot_delete(self):
+        c = Client()
+        c.login(username='regular_del', password='testpass123')
+        resp = c.post(f'/accounts/clinic/{self.clinic.pk}/delete/')
+        self.assertNotEqual(resp.status_code, 200)
+        self.assertTrue(Clinic.objects.filter(pk=self.clinic.pk).exists())
