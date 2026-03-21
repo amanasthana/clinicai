@@ -56,6 +56,32 @@
 .total-row { display: flex; justify-content: space-between; font-size: 14px; color: #374151; margin-bottom: 6px; }
 .total-final { font-size: 19px; font-weight: 700; color: #111827; border-top: 1px solid #D1D5DB; padding-top: 10px; margin-top: 6px; }
 
+/* ── Mobile: card layout replaces table ─────────────────────── */
+@media (max-width: 560px) {
+  .bill-toolbar { gap: 6px; }
+  .tb-btn { padding: 8px 12px; font-size: 12px; }
+  .bill-header  { padding: 14px 16px; }
+  .bill-patient { padding: 10px 16px; }
+  .bill-items   { padding: 12px 16px; }
+  .bill-totals  { padding: 12px 16px; }
+  .bill-footer  { padding: 10px 16px; }
+
+  /* Hide table, show cards */
+  .bill-table-wrap { display: none; }
+  .bill-item-cards { display: block !important; }
+}
+.bill-item-cards { display: none; }
+.bill-item-card {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 10px 0; border-bottom: 1px solid #F3F4F6; gap: 8px;
+}
+.bill-item-card:last-child { border-bottom: none; }
+.bill-item-card-name { font-weight: 600; color: #111827; font-size: 13px; }
+.bill-item-card-meta { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
+.bill-item-card-right { text-align: right; white-space: nowrap; }
+.bill-item-card-amt { font-weight: 700; color: #111827; font-size: 14px; }
+.bill-item-card-qty { font-size: 11px; color: #6B7280; margin-top: 2px; }
+
 /* ── WhatsApp info box ───────────────────────────────────────── */
 .wa-info {
   background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px;
@@ -164,16 +190,16 @@
       </div>
     </div>
 
-    <!-- Items table -->
-    <div class="bill-items" style="overflow-x:auto;">
-      <table class="bill-table" style="min-width:360px;">
+    <!-- Items table (desktop) -->
+    <div class="bill-items bill-table-wrap">
+      <table class="bill-table">
         <thead>
           <tr>
             <th style="width:40%;">Medicine</th>
             <th style="width:18%;">Batch / Exp</th>
             <th class="r" style="width:10%;">Qty</th>
-            <th class="r" style="width:16%;">Rate (Rs)</th>
-            <th class="r" style="width:16%;">Amount (Rs)</th>
+            <th class="r" style="width:16%;">Rate</th>
+            <th class="r" style="width:16%;">Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -196,6 +222,25 @@
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <!-- Items cards (mobile ≤560px) -->
+    <div class="bill-items bill-item-cards">
+      {% for item in dispensed_items %}
+      <div class="bill-item-card">
+        <div style="flex:1; min-width:0;">
+          <div class="bill-item-card-name">{{ item.pharmacy_item.display_name }}</div>
+          <div class="bill-item-card-meta">
+            {% if item.batch.batch_number %}{{ item.batch.batch_number }}{% endif %}{% if item.batch.expiry_date %} · Exp {{ item.batch.expiry_date|date:"M Y" }}{% endif %}
+            {% if item.is_substitute %} · <span style="color:#D97706;">substitute</span>{% endif %}
+          </div>
+        </div>
+        <div class="bill-item-card-right">
+          <div class="bill-item-card-amt">Rs {{ item.line_amount|floatformat:2 }}</div>
+          <div class="bill-item-card-qty">{{ item.quantity_dispensed }} × {{ item.unit_price }}</div>
+        </div>
+      </div>
+      {% endfor %}
     </div>
 
     <!-- Totals -->

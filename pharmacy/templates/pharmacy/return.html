@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Medicine Return — {{ clinic.name }}{% endblock %}
 
+{% block extra_head %}
+<style>
+@media (max-width: 480px) {
+  .return-row { flex-direction: column !important; align-items: flex-start !important; gap: 8px !important; }
+  .return-row-right { display: flex; align-items: center; gap: 10px; width: 100%; justify-content: space-between; }
+  .return-total-row { flex-direction: column !important; gap: 10px !important; }
+  .return-total-row button { width: 100%; justify-content: center; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-container" style="max-width:700px;">
 
@@ -47,30 +58,30 @@
     <div id="return-error" style="display:none; background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:#B91C1C;"></div>
     <div id="return-items">
       {% for item in dispensed_items %}
-      <div class="return-row" style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #F3F4F6; flex-wrap:wrap;"
+      <div class="return-row" style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #F3F4F6;"
            data-di-id="{{ item.pk }}" data-max="{{ item.quantity_dispensed }}" data-unit-price="{{ item.unit_price }}">
-        <div style="flex:1; min-width:140px;">
+        <div style="flex:1; min-width:0;">
           <div style="font-size:14px; font-weight:600; color:#111827;">{{ item.pharmacy_item.display_name }}</div>
           <div style="font-size:12px; color:#6B7280; margin-top:2px;">
             Dispensed: {{ item.quantity_dispensed }} · Rs {{ item.unit_price }} each
-            {% if item.quantity_returned %}<span style="color:#DC2626;"> · {{ item.quantity_returned }} already returned</span>{% endif %}
+            {% if item.quantity_returned %}<span style="color:#DC2626;"> · {{ item.quantity_returned }} returned</span>{% endif %}
           </div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <label style="font-size:12px; color:#6B7280;">Return qty:</label>
+        <div class="return-row-right" style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <label style="font-size:12px; color:#6B7280; white-space:nowrap;">Return qty:</label>
           <input type="number" class="return-qty input-field" min="0"
             max="{{ item.quantity_dispensed }}" value="0"
-            style="width:70px; font-size:14px; text-align:center;"
+            style="width:64px; font-size:14px; text-align:center; padding:6px 8px;"
             oninput="updateReturnTotal()">
-        </div>
-        <div class="return-line-amt" style="font-size:13px; font-weight:600; color:#059669; min-width:70px; text-align:right;">
-          Rs 0.00
+          <div class="return-line-amt" style="font-size:13px; font-weight:600; color:#059669; min-width:60px; text-align:right;">
+            Rs 0.00
+          </div>
         </div>
       </div>
       {% endfor %}
     </div>
 
-    <div style="margin-top:16px; padding-top:12px; border-top:2px solid #E5E7EB; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div class="return-total-row" style="margin-top:16px; padding-top:12px; border-top:2px solid #E5E7EB; display:flex; justify-content:space-between; align-items:center; gap:10px;">
       <div style="font-size:15px; font-weight:700; color:#059669;">
         Total Refund: <span id="return-total">Rs 0.00</span>
       </div>

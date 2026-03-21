@@ -7,8 +7,8 @@ class Command(BaseCommand):
     help = 'Seed medical terms (symptoms, diagnoses, investigations, advice, snippets, abbreviations)'
 
     def handle(self, *args, **options):
-        if MedicalTerm.objects.count() >= 1000:
-            self.stdout.write('Already seeded (>= 800 terms). Skipping.')
+        if MedicalTerm.objects.exists():
+            self.stdout.write('MedicalTerm already seeded — skipping.')
             return
 
         MedicalTerm.objects.all().delete()

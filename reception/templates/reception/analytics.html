@@ -4,6 +4,11 @@
 
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+@media (max-width: 560px) {
+  .log-col-age, .log-col-mobile { display: none; }
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -132,8 +137,8 @@
           <tr style="border-bottom:2px solid #E5E7EB;">
             <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600; white-space:nowrap;">Date</th>
             <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600;">Patient</th>
-            <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600; white-space:nowrap;">Age</th>
-            <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600;">Mobile</th>
+            <th class="log-col-age" style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600; white-space:nowrap;">Age</th>
+            <th class="log-col-mobile" style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600;">Mobile</th>
             <th style="text-align:left; padding:8px 8px; color:#6B7280; font-weight:600;">Diagnosis</th>
           </tr>
         </thead>
@@ -147,10 +152,10 @@
                 {{ visit.patient.full_name }}
               </a>
             </td>
-            <td style="padding:10px 8px; white-space:nowrap; color:#374151; font-size:12px;">
+            <td class="log-col-age" style="padding:10px 8px; white-space:nowrap; color:#374151; font-size:12px;">
               {{ visit.patient.age }}y
             </td>
-            <td style="padding:10px 8px; overflow:hidden;">
+            <td class="log-col-mobile" style="padding:10px 8px; overflow:hidden;">
               <a href="tel:{{ visit.patient.phone }}" style="color:#2563EB; text-decoration:none; white-space:nowrap; font-size:12px;">
                 {{ visit.patient.phone }}
               </a>
