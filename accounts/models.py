@@ -9,6 +9,8 @@ class Clinic(models.Model):
     city = models.CharField(max_length=100)
     state = models.CharField(max_length=100, default='Maharashtra')
     phone = models.CharField(max_length=15, blank=True)
+    drug_license_number = models.CharField(max_length=100, blank=True)
+    medical_license_number = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Custom letterhead for printing on pre-printed prescription pads

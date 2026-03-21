@@ -30,9 +30,19 @@
           <input name="state" value="{{ clinic.state }}" class="input-field">
         </div>
       </div>
-      <div class="form-group" style="margin-bottom:0;">
+      <div class="form-group">
         <label class="form-label">Phone</label>
         <input name="phone" value="{{ clinic.phone }}" class="input-field" inputmode="tel">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:4px;">Drug License Number</label>
+        <input type="text" name="drug_license_number" value="{{ clinic.drug_license_number }}"
+          class="input-field" placeholder="e.g. MH-MUM-123456" style="font-size:14px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:4px;">Medical License Number</label>
+        <input type="text" name="medical_license_number" value="{{ clinic.medical_license_number }}"
+          class="input-field" placeholder="e.g. MMC-2024-XXXXX" style="font-size:14px;">
       </div>
       <div style="margin-top:20px; display:flex; gap:10px;">
         <button type="submit" class="btn btn-primary" style="flex:1;">Save Changes</button>

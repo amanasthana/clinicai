@@ -23,4 +23,7 @@ urlpatterns = [
     path('bill/<int:bill_id>/edit/', views.edit_bill_view, name='edit_bill'),
     path('scan/', views.add_stock_scan_view, name='scan'),
     path('settings/', views.pharmacy_settings_view, name='settings'),
+    path('return/', views.medicine_return_view, name='return'),
+    path('return/<int:bill_id>/', views.medicine_return_view, name='return_bill'),
+    path('return/<int:bill_id>/process/', views.process_return_view, name='process_return'),
 ]

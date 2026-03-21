@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Medicine Return — {{ clinic.name }}{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:700px;">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+    <a href="/pharmacy/" style="color:#6B7280; text-decoration:none; font-size:13px;">← Pharmacy</a>
+    <h1 class="page-title" style="margin:0;">Return Medicines</h1>
+  </div>
+
+  <!-- Step 1: Bill number lookup -->
+  {% if not bill %}
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:14px; font-weight:600; color:#111827; margin-bottom:14px;">Enter Bill Number</div>
+    {% if error %}
+    <div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:#B91C1C;">{{ error }}</div>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="text" name="bill_number" placeholder="e.g. BILL-20260320-0001"
+          class="input-field" style="flex:1; min-width:200px; font-size:14px;"
+          autofocus required>
+        <button type="submit" class="btn btn-primary">Load Bill →</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- Step 2: Bill loaded, show items -->
+  {% if bill %}
+  <div class="card" style="margin-bottom:16px; background:#FFFBEB; border:1px solid #FDE68A;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+      <div>
+        <div style="font-size:13px; font-weight:700; color:#92400E;">{{ bill.bill_number }}</div>
+        <div style="font-size:13px; color:#78350F; margin-top:2px;">
+          {{ bill.visit.patient.full_name }} · {{ bill.created_at|date:"d M Y" }} · Rs {{ bill.final_amount }}
+        </div>
+      </div>
+      <a href="/pharmacy/return/" style="font-size:12px; color:#9CA3AF;">Use different bill →</a>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div style="font-size:14px; font-weight:600; color:#111827; margin-bottom:14px;">Select Medicines to Return</div>
+    <div id="return-error" style="display:none; background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:#B91C1C;"></div>
+    <div id="return-items">
+      {% for item in dispensed_items %}
+      <div class="return-row" style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #F3F4F6; flex-wrap:wrap;"
+           data-di-id="{{ item.pk }}" data-max="{{ item.quantity_dispensed }}" data-unit-price="{{ item.unit_price }}">
+        <div style="flex:1; min-width:140px;">
+          <div style="font-size:14px; font-weight:600; color:#111827;">{{ item.pharmacy_item.display_name }}</div>
+          <div style="font-size:12px; color:#6B7280; margin-top:2px;">
+            Dispensed: {{ item.quantity_dispensed }} · Rs {{ item.unit_price }} each
+            {% if item.quantity_returned %}<span style="color:#DC2626;"> · {{ item.quantity_returned }} already returned</span>{% endif %}
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label style="font-size:12px; color:#6B7280;">Return qty:</label>
+          <input type="number" class="return-qty input-field" min="0"
+            max="{{ item.quantity_dispensed }}" value="0"
+            style="width:70px; font-size:14px; text-align:center;"
+            oninput="updateReturnTotal()">
+        </div>
+        <div class="return-line-amt" style="font-size:13px; font-weight:600; color:#059669; min-width:70px; text-align:right;">
+          Rs 0.00
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div style="margin-top:16px; padding-top:12px; border-top:2px solid #E5E7EB; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div style="font-size:15px; font-weight:700; color:#059669;">
+        Total Refund: <span id="return-total">Rs 0.00</span>
+      </div>
+      <button type="button" onclick="submitReturn()" class="btn btn-primary" id="return-btn" disabled>
+        Process Return
+      </button>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if bill %}
+<script>
+const BILL_ID = {{ bill.pk }};
+const CSRF = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+
+const rows = document.querySelectorAll('.return-row');
+
+function updateReturnTotal() {
+  let total = 0;
+  rows.forEach(row => {
+    const qty = parseInt(row.querySelector('.return-qty').value) || 0;
+    const unitPrice = parseFloat(row.dataset.unitPrice) || 0;
+    const lineAmt = qty * unitPrice;
+    total += lineAmt;
+    row.querySelector('.return-line-amt').textContent = 'Rs ' + lineAmt.toFixed(2);
+  });
+  document.getElementById('return-total').textContent = 'Rs ' + total.toFixed(2);
+  document.getElementById('return-btn').disabled = (total <= 0);
+}
+
+async function submitReturn() {
+  const returns = [];
+  rows.forEach(row => {
+    const qty = parseInt(row.querySelector('.return-qty').value) || 0;
+    if (qty > 0) {
+      returns.push({
+        dispensed_item_id: parseInt(row.dataset.diId),
+        return_qty: qty,
+      });
+    }
+  });
+  if (!returns.length) return;
+
+  const btn = document.getElementById('return-btn');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
+  try {
+    const resp = await fetch('/pharmacy/return/' + BILL_ID + '/process/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({returns}),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      alert('Return processed successfully. Total refund: Rs ' + data.total_returned);
+      window.location.href = data.redirect;
+    } else {
+      document.getElementById('return-error').textContent = data.error;
+      document.getElementById('return-error').style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Process Return';
+    }
+  } catch(e) {
+    document.getElementById('return-error').textContent = 'Network error. Please try again.';
+    document.getElementById('return-error').style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Process Return';
+  }
+}
+</script>
+{% endif %}
+{% endblock %}

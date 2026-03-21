@@ -116,6 +116,7 @@ class DispensedItem(models.Model):
     pharmacy_item = models.ForeignKey(PharmacyItem, on_delete=models.PROTECT)
     batch = models.ForeignKey(PharmacyBatch, on_delete=models.PROTECT)
     quantity_dispensed = models.PositiveIntegerField()
+    quantity_returned = models.PositiveIntegerField(default=0)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     is_substitute = models.BooleanField(default=False)
     notes = models.CharField(max_length=200, blank=True)

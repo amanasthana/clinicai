@@ -1236,16 +1236,19 @@ const DOSAGE_PILLS = [
 ];
 
 const FREQ_PILLS = [
-  { v: 'After meals',      label: 'After meals' },
-  { v: 'Before meals',     label: 'Before meals' },
-  { v: 'Empty stomach',    label: 'Empty stomach' },
-  { v: 'At bedtime',       label: 'At bedtime' },
-  { v: 'SOS/As needed',    label: 'SOS / As needed' },
-  { v: 'With food',        label: 'With food',    extra: true },
-  { v: '30 min before food', label: '30 min before food', extra: true },
-  { v: 'With milk',        label: 'With milk',    extra: true },
-  { v: 'Sublingual',       label: 'Sublingual',   extra: true },
+  { v: 'After meals',      label: 'After meals',      hi: 'खाने के बाद' },
+  { v: 'Before meals',     label: 'Before meals',     hi: 'खाने से पहले' },
+  { v: 'Empty stomach',    label: 'Empty stomach',    hi: 'खाली पेट' },
+  { v: 'At bedtime',       label: 'At bedtime',       hi: 'सोने से पहले' },
+  { v: 'SOS/As needed',    label: 'SOS / As needed',  hi: 'जरूरत पड़ने पर' },
+  { v: 'With food',        label: 'With food',        hi: 'खाने के साथ', extra: true },
+  { v: '30 min before food', label: '30 min before food', hi: '30 मिनट पहले', extra: true },
+  { v: 'With milk',        label: 'With milk',        hi: 'दूध के साथ',  extra: true },
+  { v: 'Sublingual',       label: 'Sublingual',       hi: 'जीभ के नीचे',  extra: true },
 ];
+
+// Track Hindi mode for frequency pills
+let _hindiFreq = false;
 
 const DUR_PILLS = [
   { v: '3 days',   label: '3d' },
@@ -1293,7 +1296,8 @@ function buildPillGroup(pills, fieldName, currentVal) {
     const extra = p.extra ? ' pill-extra' : '';
     const extraHide = p.extra ? ' style="display:none"' : '';
     const sel = (p.v === currentVal) ? ' selected' : '';
-    html += `<button type="button" class="rx-pill${extra}${sel}" data-val="${esc(p.v)}"${extraHide}>${p.label}</button>`;
+    const displayLabel = (fieldName === 'frequency' && _hindiFreq && p.hi) ? p.hi : p.label;
+    html += `<button type="button" class="rx-pill${extra}${sel}" data-val="${esc(p.v)}"${extraHide}>${displayLabel}</button>`;
   }
   // More button
   const anyExtra = pills.some(p => p.extra);
@@ -1346,7 +1350,13 @@ function addMedicineRow(m) {
     </div>
 
     <div class="pill-section">
-      <div class="pill-label">When</div>
+      <div class="pill-label" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>When</span>
+        <button type="button" class="hi-toggle" onclick="toggleHindi(this)"
+          style="font-size:10px; padding:2px 7px; border-radius:10px; border:1px solid #BFDBFE; background:#EFF6FF; color:#1D4ED8; cursor:pointer; font-family:'Noto Sans Devanagari',sans-serif;">
+          अ हिंदी
+        </button>
+      </div>
       ${buildPillGroup(FREQ_PILLS, 'frequency', frequency)}
     </div>
 
@@ -1895,6 +1905,37 @@ async function savePrescription() {
   } catch (e) {
     alert('Network error. Please try again.');
   }
+}
+
+function toggleHindi(btn) {
+  const row = btn.closest('.med-row');
+  const pillGroup = row.querySelector('[data-field="frequency"]');
+  if (!pillGroup) return;
+  _hindiFreq = !_hindiFreq;
+  btn.style.background = _hindiFreq ? '#EDE9FE' : '#EFF6FF';
+  btn.style.borderColor = _hindiFreq ? '#8B5CF6' : '#BFDBFE';
+  btn.style.color = _hindiFreq ? '#5B21B6' : '#1D4ED8';
+  // Re-render the frequency pills with Hindi labels
+  const currentVal = row.dataset.frequency || '';
+  const pills = FREQ_PILLS.filter(p => !p.extra);
+  const extras = FREQ_PILLS.filter(p => p.extra);
+  const extraVisible = pillGroup.querySelector('.pill-extra:not([style*="display:none"])') !== null;
+  let html = '';
+  pills.forEach(p => {
+    const sel = p.v === currentVal ? ' selected' : '';
+    html += `<button type="button" class="rx-pill${sel}" data-val="${p.v}">${_hindiFreq ? p.hi : p.label}</button>`;
+  });
+  extras.forEach(p => {
+    const sel = p.v === currentVal ? ' selected' : '';
+    const hide = (!extraVisible && p.v !== currentVal) ? ' style="display:none"' : '';
+    html += `<button type="button" class="rx-pill pill-extra${sel}" data-val="${p.v}"${hide}>${_hindiFreq ? p.hi : p.label}</button>`;
+  });
+  if (!extraVisible && !extras.some(p => p.v === currentVal)) {
+    html += `<button type="button" class="rx-pill pill-more">More ▾</button>`;
+  }
+  html += `<button type="button" class="rx-pill pill-custom">Custom</button>`;
+  html += `<input type="text" class="pill-custom-input" placeholder="Type...">`;
+  pillGroup.innerHTML = html;
 }
 </script>
 {% endblock %}

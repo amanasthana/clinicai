@@ -101,6 +101,9 @@
     </button>
     {% endif %}
     <a href="/pharmacy/" class="tb-btn tb-back">← Pharmacy</a>
+    <a href="/pharmacy/return/{{ bill.pk }}/" class="tb-btn" style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;">
+      ↩ Return Medicines
+    </a>
     <form method="post" action="/pharmacy/bill/{{ bill.pk }}/edit/"
           onsubmit="return confirm('This will reverse the bill and restore stock. You can re-dispense after. Continue?');"
           style="margin:0; display:inline;">
@@ -131,6 +134,8 @@
           <div style="font-size:12px; color:#6B7280; margin-top:2px;">{{ clinic.address }}{% if clinic.city %}, {{ clinic.city }}{% endif %}{% if clinic.state %}, {{ clinic.state }}{% endif %}</div>
           {% endif %}
           {% if clinic.phone %}<div style="font-size:12px; color:#6B7280;">Tel: {{ clinic.phone }}</div>{% endif %}
+          {% if clinic.drug_license_number %}<div style="font-size:12px; color:#6B7280;">Drug Lic: {{ clinic.drug_license_number }}</div>{% endif %}
+          {% if clinic.medical_license_number %}<div style="font-size:12px; color:#6B7280;">Med Lic: {{ clinic.medical_license_number }}</div>{% endif %}
         </div>
         <div style="text-align:right;">
           <div style="font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.6px;">Medicine Bill</div>
@@ -164,12 +169,11 @@
       <table class="bill-table">
         <thead>
           <tr>
-            <th style="width:34%;">Medicine</th>
-            <th style="width:22%;">Generic / Composition</th>
-            <th style="width:12%;">Batch / Exp</th>
-            <th class="r" style="width:8%;">Qty</th>
-            <th class="r" style="width:12%;">Rate (Rs)</th>
-            <th class="r" style="width:12%;">Amount (Rs)</th>
+            <th style="width:40%;">Medicine</th>
+            <th style="width:18%;">Batch / Exp</th>
+            <th class="r" style="width:10%;">Qty</th>
+            <th class="r" style="width:16%;">Rate (Rs)</th>
+            <th class="r" style="width:16%;">Amount (Rs)</th>
           </tr>
         </thead>
         <tbody>
@@ -180,9 +184,6 @@
               {% if item.is_substitute %}<div style="font-size:11px; color:#D97706; margin-top:1px;">(substitute)</div>{% endif %}
               {% if item.notes %}<div style="font-size:11px; color:#9CA3AF; margin-top:1px;">{{ item.notes }}</div>{% endif %}
             </td>
-            <td style="color:#6B7280; font-size:12px;">
-              {{ item.pharmacy_item.display_generic|default:"—" }}
-            </td>
             <td style="font-size:11px; color:#6B7280;">
               {% if item.batch.batch_number %}<div>{{ item.batch.batch_number }}</div>{% endif %}
               {% if item.batch.expiry_date %}<div>Exp: {{ item.batch.expiry_date|date:"M Y" }}</div>{% endif %}
@@ -190,7 +191,7 @@
             </td>
             <td class="r">{{ item.quantity_dispensed }}</td>
             <td class="r">{{ item.unit_price }}</td>
-            <td class="r" style="font-weight:600;">{% widthratio item.quantity_dispensed 1 item.unit_price %}</td>
+            <td class="r" style="font-weight:600;">{{ item.line_amount|floatformat:2 }}</td>
           </tr>
           {% endfor %}
         </tbody>

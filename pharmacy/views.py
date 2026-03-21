@@ -541,6 +541,10 @@ def bill_view(request, bill_id):
     dispensed_items = bill.visit.dispensed_items.select_related(
         'pharmacy_item', 'pharmacy_item__medicine', 'batch'
     ).all()
+    # Pre-calculate line amounts (avoids widthratio integer truncation in template)
+    dispensed_items = list(dispensed_items)
+    for item in dispensed_items:
+        item.line_amount = item.quantity_dispensed * item.unit_price
     prescription = getattr(bill.visit, 'prescription', None)
     discount_amount = bill.subtotal - bill.final_amount
 
@@ -746,6 +750,87 @@ def walk_in_view(request):
 # ---------------------------------------------------------------------------
 # Edit / Re-dispense bill
 # ---------------------------------------------------------------------------
+
+@require_permission('can_dispense_bill')
+def medicine_return_view(request, bill_id=None):
+    """Show return form. GET with bill_id pre-loads the bill."""
+    clinic = _get_clinic(request)
+    bill = None
+    dispensed_items = []
+    error = None
+
+    if request.method == 'POST' and not bill_id:
+        # Step 1: lookup bill by number
+        bill_number = request.POST.get('bill_number', '').strip()
+        try:
+            bill = PharmacyBill.objects.get(bill_number=bill_number, clinic=clinic)
+            return redirect('pharmacy:return_bill', bill_id=bill.pk)
+        except PharmacyBill.DoesNotExist:
+            error = f'Bill number "{bill_number}" not found.'
+
+    if bill_id:
+        bill = get_object_or_404(PharmacyBill, pk=bill_id, clinic=clinic)
+        dispensed_items = bill.visit.dispensed_items.select_related(
+            'pharmacy_item', 'batch'
+        ).all()
+        # annotate with line_amount
+        dispensed_items = list(dispensed_items)
+        for item in dispensed_items:
+            item.line_amount = item.quantity_dispensed * item.unit_price
+
+    return render(request, 'pharmacy/return.html', {
+        'clinic': clinic,
+        'bill': bill,
+        'dispensed_items': dispensed_items,
+        'error': error,
+    })
+
+
+@require_permission('can_dispense_bill')
+@require_POST
+def process_return_view(request, bill_id):
+    """Process the medicine return: restore inventory, record return."""
+    import json as _json
+    clinic = _get_clinic(request)
+    bill = get_object_or_404(PharmacyBill, pk=bill_id, clinic=clinic)
+
+    try:
+        data = _json.loads(request.body)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'Invalid request.'}, status=400)
+
+    returns = data.get('returns', [])  # [{dispensed_item_id, return_qty}, ...]
+    if not returns:
+        return JsonResponse({'ok': False, 'error': 'No items to return.'}, status=400)
+
+    with transaction.atomic():
+        total_returned = decimal.Decimal('0.00')
+        for r in returns:
+            di_id = r.get('dispensed_item_id')
+            return_qty = int(r.get('return_qty', 0) or 0)
+            if return_qty <= 0:
+                continue
+            di = get_object_or_404(DispensedItem, pk=di_id, visit=bill.visit)
+            if return_qty > di.quantity_dispensed:
+                return JsonResponse({
+                    'ok': False,
+                    'error': f'Cannot return more than dispensed for {di.pharmacy_item.display_name}.'
+                }, status=400)
+            # Restore inventory
+            batch = PharmacyBatch.objects.select_for_update().get(pk=di.batch_id)
+            batch.quantity += return_qty
+            batch.save(update_fields=['quantity', 'updated_at'])
+            # Record the return on the dispensed item
+            di.quantity_returned = (di.quantity_returned or 0) + return_qty
+            di.save(update_fields=['quantity_returned'])
+            total_returned += di.unit_price * return_qty
+
+    return JsonResponse({
+        'ok': True,
+        'total_returned': str(total_returned),
+        'redirect': f'/pharmacy/bill/{bill.pk}/',
+    })
+
 
 @require_permission('can_dispense_bill')
 @require_POST
