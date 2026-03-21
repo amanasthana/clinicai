@@ -1686,3 +1686,253 @@ class PharmacyDashboardPendingDispenseTest(TestCase):
         resp = self.client.get('/pharmacy/')
         self.assertNotContains(resp, 'Test Patient')
 
+
+# ===========================================================================
+# Phase 6 — Bill decimal fix, generic removal, license numbers, medicine return
+# ===========================================================================
+
+import decimal as _decimal_module
+
+
+class BillDecimalAmountTest(TestCase):
+    """Bill line amounts must use full decimal precision (not integer-truncated)."""
+
+    def setUp(self):
+        self.clinic = _make_clinic('Decimal Clinic')
+        self.user = _make_user('decimal_user')
+        self.sm = _make_staff(self.user, self.clinic)
+        self.patient = _make_patient(self.clinic, phone='9100000001')
+        self.visit = _make_visit(self.patient, self.clinic)
+        # Price with decimal: Rs 10.75 per unit
+        self.item = _make_item(self.clinic, name='Decimal Med')
+        self.batch = PharmacyBatch.objects.create(
+            item=self.item, batch_number='BD01',
+            expiry_date=datetime.date.today() + datetime.timedelta(days=180),
+            quantity=100,
+            unit_price=_decimal_module.Decimal('10.75'),
+        )
+        self.client = Client()
+        self.client.login(username='decimal_user', password='testpass123')
+
+    def _create_bill(self, qty, price):
+        di = DispensedItem.objects.create(
+            visit=self.visit,
+            pharmacy_item=self.item,
+            batch=self.batch,
+            quantity_dispensed=qty,
+            unit_price=_decimal_module.Decimal(str(price)),
+            dispensed_by=self.sm,
+        )
+        bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number='BILL-DEC-001',
+            subtotal=_decimal_module.Decimal(str(qty * price)),
+            final_amount=_decimal_module.Decimal(str(qty * price)),
+            payment_mode='cash',
+        )
+        return bill, di
+
+    def test_line_amount_annotated_correctly_in_view(self):
+        """bill_view must annotate item.line_amount = qty * unit_price (decimal)."""
+        bill, _ = self._create_bill(3, 10.75)
+        resp = self.client.get(f'/pharmacy/bill/{bill.pk}/')
+        self.assertEqual(resp.status_code, 200)
+        items = resp.context['dispensed_items']
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].line_amount, _decimal_module.Decimal('32.25'))
+
+    def test_bill_shows_decimal_amount_in_html(self):
+        """Bill HTML must show 32.25 not 32 for 3 x 10.75."""
+        bill, _ = self._create_bill(3, 10.75)
+        resp = self.client.get(f'/pharmacy/bill/{bill.pk}/')
+        self.assertContains(resp, '32.25')
+
+    def test_bill_does_not_show_generic_column(self):
+        """Generic composition column must not appear in bill HTML."""
+        bill, _ = self._create_bill(1, 10.00)
+        resp = self.client.get(f'/pharmacy/bill/{bill.pk}/')
+        content = resp.content.decode()
+        self.assertNotIn('Generic', content)
+        self.assertNotIn('Composition', content)
+
+
+class LicenseNumberBillTest(TestCase):
+    """License numbers should appear on bill when set on the clinic."""
+
+    def setUp(self):
+        self.clinic = _make_clinic('License Clinic')
+        self.clinic.drug_license_number = 'DL-MH-12345'
+        self.clinic.medical_license_number = 'ML-MH-67890'
+        self.clinic.save()
+        self.user = _make_user('license_user')
+        _make_staff(self.user, self.clinic)
+        self.patient = _make_patient(self.clinic, phone='9100000002')
+        self.visit = _make_visit(self.patient, self.clinic)
+        self.item = _make_item(self.clinic, name='Lic Med')
+        self.batch = _make_batch(self.item, qty=20, price='5.00', batch_no='BL01')
+        self.bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number='BILL-LIC-001',
+            subtotal=_decimal_module.Decimal('5.00'),
+            final_amount=_decimal_module.Decimal('5.00'),
+            payment_mode='cash',
+        )
+        self.client = Client()
+        self.client.login(username='license_user', password='testpass123')
+
+    def test_drug_license_shown_on_bill(self):
+        resp = self.client.get(f'/pharmacy/bill/{self.bill.pk}/')
+        self.assertContains(resp, 'DL-MH-12345')
+
+    def test_medical_license_shown_on_bill(self):
+        resp = self.client.get(f'/pharmacy/bill/{self.bill.pk}/')
+        self.assertContains(resp, 'ML-MH-67890')
+
+    def test_bill_loads_without_license_numbers(self):
+        """If clinic has no license numbers, bill must still render correctly."""
+        self.clinic.drug_license_number = ''
+        self.clinic.medical_license_number = ''
+        self.clinic.save()
+        resp = self.client.get(f'/pharmacy/bill/{self.bill.pk}/')
+        self.assertEqual(resp.status_code, 200)
+
+
+class MedicineReturnTest(TestCase):
+    """Medicine return: inventory restored, quantity_returned tracked."""
+
+    def setUp(self):
+        self.clinic = _make_clinic('Return Clinic')
+        self.user = _make_user('return_user')
+        self.sm = _make_staff(self.user, self.clinic)
+        self.patient = _make_patient(self.clinic, phone='9100000003')
+        self.visit = _make_visit(self.patient, self.clinic)
+        self.item = _make_item(self.clinic, name='Return Med')
+        self.batch = _make_batch(self.item, qty=45, price='15.00', batch_no='BR01')
+        self.di = DispensedItem.objects.create(
+            visit=self.visit,
+            pharmacy_item=self.item,
+            batch=self.batch,
+            quantity_dispensed=5,
+            unit_price=_decimal_module.Decimal('15.00'),
+            dispensed_by=self.sm,
+        )
+        self.bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number='BILL-RET-001',
+            subtotal=_decimal_module.Decimal('75.00'),
+            final_amount=_decimal_module.Decimal('75.00'),
+            payment_mode='cash',
+            created_by=self.sm,
+        )
+        self.client = Client()
+        self.client.login(username='return_user', password='testpass123')
+
+    def test_return_view_loads_without_bill(self):
+        resp = self.client.get('/pharmacy/return/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_return_view_loads_with_bill_id(self):
+        resp = self.client.get(f'/pharmacy/return/{self.bill.pk}/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_return_view_shows_dispensed_items(self):
+        resp = self.client.get(f'/pharmacy/return/{self.bill.pk}/')
+        self.assertContains(resp, 'Return Med')
+
+    def test_return_view_bill_lookup_by_number(self):
+        resp = self.client.post('/pharmacy/return/', {'bill_number': 'BILL-RET-001'})
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(str(self.bill.pk), resp['Location'])
+
+    def test_return_view_invalid_bill_shows_error(self):
+        resp = self.client.post('/pharmacy/return/', {'bill_number': 'NONEXISTENT-999'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'not found')
+
+    def test_process_return_restores_inventory(self):
+        initial_qty = self.batch.quantity
+        payload = json.dumps({'returns': [
+            {'dispensed_item_id': self.di.pk, 'return_qty': 2}
+        ]})
+        resp = self.client.post(
+            f'/pharmacy/return/{self.bill.pk}/process/',
+            data=payload, content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()['ok'])
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.quantity, initial_qty + 2)
+
+    def test_process_return_records_quantity_returned(self):
+        payload = json.dumps({'returns': [
+            {'dispensed_item_id': self.di.pk, 'return_qty': 3}
+        ]})
+        self.client.post(
+            f'/pharmacy/return/{self.bill.pk}/process/',
+            data=payload, content_type='application/json',
+        )
+        self.di.refresh_from_db()
+        self.assertEqual(self.di.quantity_returned, 3)
+
+    def test_process_return_calculates_total_returned_amount(self):
+        payload = json.dumps({'returns': [
+            {'dispensed_item_id': self.di.pk, 'return_qty': 2}
+        ]})
+        resp = self.client.post(
+            f'/pharmacy/return/{self.bill.pk}/process/',
+            data=payload, content_type='application/json',
+        )
+        data = resp.json()
+        # 2 × Rs 15.00 = Rs 30.00
+        self.assertEqual(_decimal_module.Decimal(data['total_returned']),
+                         _decimal_module.Decimal('30.00'))
+
+    def test_process_return_rejects_excess_quantity(self):
+        """Cannot return more than what was dispensed."""
+        payload = json.dumps({'returns': [
+            {'dispensed_item_id': self.di.pk, 'return_qty': 10}  # only 5 dispensed
+        ]})
+        resp = self.client.post(
+            f'/pharmacy/return/{self.bill.pk}/process/',
+            data=payload, content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.json()['ok'])
+
+    def test_process_return_empty_returns_400(self):
+        payload = json.dumps({'returns': []})
+        resp = self.client.post(
+            f'/pharmacy/return/{self.bill.pk}/process/',
+            data=payload, content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_process_return_wrong_clinic_returns_404(self):
+        other_clinic = _make_clinic('Other Return')
+        other_user = _make_user('other_ret')
+        _make_staff(other_user, other_clinic)
+        c = Client()
+        c.login(username='other_ret', password='testpass123')
+        payload = json.dumps({'returns': [
+            {'dispensed_item_id': self.di.pk, 'return_qty': 1}
+        ]})
+        resp = c.post(
+            f'/pharmacy/return/{self.bill.pk}/process/',
+            data=payload, content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_process_return_zero_qty_skipped_and_returns_400(self):
+        """A return with only return_qty=0 should be treated as no items to return."""
+        initial_qty = self.batch.quantity
+        payload = json.dumps({'returns': [
+            {'dispensed_item_id': self.di.pk, 'return_qty': 0}
+        ]})
+        resp = self.client.post(
+            f'/pharmacy/return/{self.bill.pk}/process/',
+            data=payload, content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.quantity, initial_qty)  # unchanged
+

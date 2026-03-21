@@ -805,6 +805,7 @@ def process_return_view(request, bill_id):
 
     with transaction.atomic():
         total_returned = decimal.Decimal('0.00')
+        processed = 0
         for r in returns:
             di_id = r.get('dispensed_item_id')
             return_qty = int(r.get('return_qty', 0) or 0)
@@ -824,6 +825,10 @@ def process_return_view(request, bill_id):
             di.quantity_returned = (di.quantity_returned or 0) + return_qty
             di.save(update_fields=['quantity_returned'])
             total_returned += di.unit_price * return_qty
+            processed += 1
+
+    if processed == 0:
+        return JsonResponse({'ok': False, 'error': 'No items to return.'}, status=400)
 
     return JsonResponse({
         'ok': True,
