@@ -63,6 +63,14 @@ def pharmacy_dashboard(request):
                 elif 90 < days <= 180:
                     expiring_6m_count += 1
 
+    # Layer 1: batches with ₹0 price that still have stock — warn the pharmacist
+    zero_price_batches = list(
+        PharmacyBatch.objects
+        .filter(item__clinic=clinic, unit_price=0, quantity__gt=0)
+        .select_related('item__medicine')
+        .order_by('item__medicine__name', 'item__custom_name')
+    )
+
     return render(request, 'pharmacy/dashboard.html', {
         'items': items,
         'clinic': clinic,
@@ -74,6 +82,7 @@ def pharmacy_dashboard(request):
         'expiring_6m_count': expiring_6m_count,
         'today_plus_90': today_plus_90,
         'pending_dispense': pending_dispense,
+        'zero_price_batches': zero_price_batches,
     })
 
 
@@ -88,7 +97,7 @@ def add_stock_view(request):
         batch_number = request.POST.get('batch_number', '').strip()
         expiry_date = request.POST.get('expiry_date') or None
         quantity = int(request.POST.get('quantity', 0) or 0)
-        unit_price = request.POST.get('unit_price', '0') or '0'
+        unit_price_raw = request.POST.get('unit_price', '0') or '0'
         reorder_level = int(request.POST.get('reorder_level', 10) or 10)
 
         medicine = None
@@ -102,6 +111,18 @@ def add_stock_view(request):
             return render(request, 'pharmacy/add_stock.html', {
                 'error': 'Please select a medicine from catalog or enter a custom name.'
             })
+
+        # Layer 3: reject zero/missing price at the server side
+        try:
+            unit_price_dec = decimal.Decimal(str(unit_price_raw))
+        except decimal.InvalidOperation:
+            unit_price_dec = decimal.Decimal('0')
+        if unit_price_dec <= 0:
+            return render(request, 'pharmacy/add_stock.html', {
+                'error': 'Unit price (MRP per unit) must be greater than ₹0. '
+                         'Medicines with no price will bill patients ₹0.',
+            })
+        unit_price = unit_price_raw
 
         # Check if this medicine already exists in the clinic's inventory
         existing_item = None
@@ -145,11 +166,16 @@ def add_stock_view(request):
 
     # On GET: check if the URL has an item_id shortcut (from "Add Batch" button)
     prefill_item = None
+    suggested_price = ''
     item_id = request.GET.get('item_id')
     if item_id:
-        prefill_item = PharmacyItem.objects.filter(pk=item_id, clinic=clinic).select_related('medicine').first()
+        prefill_item = PharmacyItem.objects.filter(pk=item_id, clinic=clinic).select_related('medicine').prefetch_related('batches').first()
+        if prefill_item:
+            last_batch = prefill_item.batches.order_by('-received_date', '-id').first()
+            if last_batch and last_batch.unit_price > 0:
+                suggested_price = str(last_batch.unit_price)
 
-    return render(request, 'pharmacy/add_stock.html', {'prefill_item': prefill_item})
+    return render(request, 'pharmacy/add_stock.html', {'prefill_item': prefill_item, 'suggested_price': suggested_price})
 
 
 @require_permission('can_edit_inventory')
@@ -162,19 +188,33 @@ def add_batch_view(request, pk):
         batch_number = request.POST.get('batch_number', '').strip()
         expiry_date = request.POST.get('expiry_date') or None
         quantity = int(request.POST.get('quantity', 0) or 0)
-        unit_price = request.POST.get('unit_price', '0') or '0'
+        unit_price_raw = request.POST.get('unit_price', '0') or '0'
+
+        # Layer 3: reject zero/missing price
+        try:
+            unit_price_dec = decimal.Decimal(str(unit_price_raw))
+        except decimal.InvalidOperation:
+            unit_price_dec = decimal.Decimal('0')
+        if unit_price_dec <= 0:
+            return render(request, 'pharmacy/add_batch.html', {
+                'item': item,
+                'error': 'Unit price (MRP per unit) must be greater than ₹0. '
+                         'Medicines with no price will bill patients ₹0.',
+            })
 
         PharmacyBatch.objects.create(
             item=item,
             batch_number=batch_number,
             expiry_date=expiry_date,
             quantity=quantity,
-            unit_price=unit_price,
+            unit_price=unit_price_raw,
         )
         return redirect('pharmacy:dashboard')
 
-    # GET: show a small form pre-filled with the item
-    return render(request, 'pharmacy/add_batch.html', {'item': item})
+    # GET: pre-fill price from most recently added batch so pharmacist doesn't re-type unchanged MRPs
+    last_batch = item.batches.order_by('-received_date', '-id').first()
+    suggested_price = str(last_batch.unit_price) if last_batch and last_batch.unit_price > 0 else ''
+    return render(request, 'pharmacy/add_batch.html', {'item': item, 'suggested_price': suggested_price})
 
 
 @require_permission('can_edit_inventory')
@@ -184,10 +224,24 @@ def edit_batch_view(request, pk):
     batch = get_object_or_404(PharmacyBatch, pk=pk, item__clinic=clinic)
 
     if request.method == 'POST':
+        unit_price_raw = request.POST.get('unit_price', '0') or '0'
+
+        # Layer 3: reject zero/missing price
+        try:
+            unit_price_dec = decimal.Decimal(str(unit_price_raw))
+        except decimal.InvalidOperation:
+            unit_price_dec = decimal.Decimal('0')
+        if unit_price_dec <= 0:
+            return render(request, 'pharmacy/edit_batch.html', {
+                'batch': batch,
+                'error': 'Unit price (MRP per unit) must be greater than ₹0. '
+                         'Medicines with no price will bill patients ₹0.',
+            })
+
         batch.batch_number = request.POST.get('batch_number', '').strip()
         batch.expiry_date = request.POST.get('expiry_date') or None
         batch.quantity = int(request.POST.get('quantity', 0) or 0)
-        batch.unit_price = request.POST.get('unit_price', '0') or '0'
+        batch.unit_price = unit_price_raw
         batch.save()
         # Also save generic composition on the item if it's a custom medicine
         if not batch.item.medicine:
@@ -398,6 +452,8 @@ def dispense_view(request, visit_id):
                         item = candidate
                         break
             batch = item.use_first_batch if item else None
+            # Use total_quantity across ALL batches so multi-batch dispensing shows correct stock
+            total_qty = item.total_quantity if item else 0
             medicine_rows.append({
                 'prescription_med_id': pm.pk,
                 'drug_name': pm.drug_name,
@@ -408,7 +464,7 @@ def dispense_view(request, visit_id):
                 'item_name': item.display_name if item else '',
                 'batch_id': batch.pk if batch else None,
                 'unit_price': str(batch.unit_price) if batch else '0',
-                'stock_qty': batch.quantity if batch else 0,
+                'stock_qty': total_qty,
                 'in_stock': item.in_stock if item else False,
             })
 
@@ -423,6 +479,12 @@ def dispense_view(request, visit_id):
     # Check if already billed
     already_billed = hasattr(visit, 'pharmacy_bill')
 
+    # Layer 2: warn about any matched medicines whose first batch has price=0
+    zero_price_names = [
+        row['drug_name'] for row in medicine_rows
+        if row['item_id'] and row['unit_price'] == '0'
+    ]
+
     return render(request, 'pharmacy/dispense.html', {
         'visit': visit,
         'patient': visit.patient,
@@ -431,6 +493,7 @@ def dispense_view(request, visit_id):
         'medicine_rows': medicine_rows,
         'all_items': all_items,
         'already_billed': already_billed,
+        'zero_price_names': zero_price_names,
     })
 
 
@@ -465,17 +528,39 @@ def confirm_dispense_api(request, visit_id):
     if not items_data:
         return JsonResponse({'ok': False, 'error': 'No items to dispense.'}, status=400)
 
-    # Validate all items before writing anything
+    from django.db.models import Sum
+
+    # Validate all items before writing anything — check stock and price
     for item_data in items_data:
         batch_id = item_data.get('batch_id')
         qty = int(item_data.get('qty', 0) or 0)
         if not batch_id or qty <= 0:
             return JsonResponse({'ok': False, 'error': 'Invalid item data.'}, status=400)
         batch = get_object_or_404(PharmacyBatch, pk=batch_id, item__clinic=clinic)
-        if batch.quantity < qty:
+        pharmacy_item = batch.item
+        total_available = pharmacy_item.batches.filter(quantity__gt=0).aggregate(
+            total=Sum('quantity')
+        )['total'] or 0
+        if total_available < qty:
             return JsonResponse({
                 'ok': False,
-                'error': f'Not enough stock for {batch.item.display_name}. Available: {batch.quantity}'
+                'error': (
+                    f'Not enough total stock for {pharmacy_item.display_name}. '
+                    f'Total available across all batches: {total_available}'
+                )
+            }, status=400)
+        # Layer 2: block dispense if the billing batch (first FEFO batch) has price=0
+        first_fefo = (
+            pharmacy_item.batches.filter(quantity__gt=0).order_by('expiry_date').first()
+        )
+        billing_price_check = first_fefo.unit_price if first_fefo else decimal.Decimal('0')
+        if billing_price_check <= 0:
+            return JsonResponse({
+                'ok': False,
+                'error': (
+                    f'Cannot dispense {pharmacy_item.display_name} — MRP is ₹0. '
+                    f'Please go to Pharmacy → Edit Batch and set the correct price first.'
+                )
             }, status=400)
 
     # All validations passed — write atomically
@@ -489,26 +574,44 @@ def confirm_dispense_api(request, visit_id):
             is_substitute = bool(item_data.get('is_substitute', False))
             notes = (item_data.get('notes') or '')[:200]
 
-            batch = PharmacyBatch.objects.select_for_update().get(pk=batch_id)
-            pharmacy_item = batch.item
-            unit_price = batch.unit_price
+            # Load the preferred (first) batch to identify the PharmacyItem
+            first_batch = PharmacyBatch.objects.select_for_update().get(pk=batch_id)
+            pharmacy_item = first_batch.item
+            # Use the first (FEFO) batch's price for ALL splits of this medicine.
+            # Overflow batches may have unit_price=0 if added without a price — using
+            # their individual price would silently under-bill patients.
+            billing_price = first_batch.unit_price
 
-            # Decrement stock
-            batch.quantity -= qty
-            batch.save(update_fields=['quantity', 'updated_at'])
-
-            DispensedItem.objects.create(
-                visit=visit,
-                prescription_med_id=prescription_med_id or None,
-                pharmacy_item=pharmacy_item,
-                batch=batch,
-                quantity_dispensed=qty,
-                unit_price=unit_price,
-                is_substitute=is_substitute,
-                notes=notes,
-                dispensed_by=request.user.staff_profile,
+            # FEFO multi-batch: get all batches with stock in expiry order, lock them
+            fefo_batches = list(
+                PharmacyBatch.objects
+                .select_for_update()
+                .filter(item=pharmacy_item, quantity__gt=0)
+                .order_by('expiry_date')
             )
-            subtotal += unit_price * qty
+
+            remaining = qty
+            for batch in fefo_batches:
+                if remaining <= 0:
+                    break
+                use = min(batch.quantity, remaining)
+
+                batch.quantity -= use
+                batch.save(update_fields=['quantity', 'updated_at'])
+
+                DispensedItem.objects.create(
+                    visit=visit,
+                    prescription_med_id=prescription_med_id or None,
+                    pharmacy_item=pharmacy_item,
+                    batch=batch,
+                    quantity_dispensed=use,
+                    unit_price=billing_price,  # always use first batch's price
+                    is_substitute=is_substitute,
+                    notes=notes,
+                    dispensed_by=request.user.staff_profile,
+                )
+                subtotal += billing_price * use
+                remaining -= use
 
         # Calculate final amount
         discount_amount = subtotal * discount_percent / 100
@@ -853,3 +956,167 @@ def edit_bill_view(request, bill_id):
     from django.contrib import messages as _messages
     _messages.success(request, 'Bill reversed. Please re-dispense.')
     return redirect('pharmacy:dispense', visit_id=visit.id)
+
+
+# ---------------------------------------------------------------------------
+# Bill history
+# ---------------------------------------------------------------------------
+
+@require_permission('can_dispense_bill')
+def bill_list_view(request):
+    """List all bills for the clinic with date/search filtering."""
+    clinic = _get_clinic(request)
+    from django.utils import timezone as tz
+    from django.db.models import Sum, Count
+    import datetime
+
+    range_param = request.GET.get('range', '30')
+    try:
+        days = int(range_param)
+        if days not in (7, 30, 90, 365):
+            days = 30
+    except ValueError:
+        days = 30
+    today = tz.now().date()
+    since = today - datetime.timedelta(days=days - 1)
+
+    bills_qs = (
+        PharmacyBill.objects
+        .filter(clinic=clinic, created_at__date__gte=since)
+        .select_related('visit__patient', 'created_by')
+        .order_by('-created_at')
+    )
+
+    # Optional search by patient name or bill number
+    search = request.GET.get('q', '').strip()
+    if search:
+        bills_qs = bills_qs.filter(
+            visit__patient__full_name__icontains=search
+        ) | PharmacyBill.objects.filter(
+            clinic=clinic, created_at__date__gte=since,
+            bill_number__icontains=search
+        ).select_related('visit__patient', 'created_by').order_by('-created_at')
+
+    total_revenue = bills_qs.aggregate(t=Sum('final_amount'))['t'] or 0
+
+    return render(request, 'pharmacy/bill_list.html', {
+        'clinic': clinic,
+        'bills': bills_qs,
+        'days': days,
+        'since': since,
+        'today': today,
+        'search': search,
+        'range_choices': [(7, '7 Days'), (30, '30 Days'), (90, '3 Months'), (365, '1 Year')],
+        'total_revenue': total_revenue,
+        'total_bills': bills_qs.count(),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Inventory analytics
+# ---------------------------------------------------------------------------
+
+@require_permission('can_view_analytics')
+def pharmacy_analytics_view(request):
+    """Pharmacy analytics: dispensing history, top medicines, returns, revenue."""
+    clinic = _get_clinic(request)
+    from django.utils import timezone as tz
+    from django.db.models import Sum, Count, F, ExpressionWrapper, DecimalField
+    from django.db.models.functions import TruncDate
+    import datetime
+    import json as _json
+
+    range_param = request.GET.get('range', '30')
+    try:
+        days = int(range_param)
+        if days not in (7, 30, 90, 365):
+            days = 30
+    except ValueError:
+        days = 30
+    today = tz.now().date()
+    since = today - datetime.timedelta(days=days - 1)
+
+    # Revenue by day for chart
+    daily_revenue = (
+        PharmacyBill.objects
+        .filter(clinic=clinic, created_at__date__gte=since)
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(total=Sum('final_amount'), bill_count=Count('id'))
+        .order_by('day')
+    )
+    daily_map = {r['day']: {'total': float(r['total'] or 0), 'count': r['bill_count']}
+                 for r in daily_revenue}
+    chart_labels = []
+    chart_revenue = []
+    chart_bills = []
+    for i in range(days):
+        d = since + datetime.timedelta(days=i)
+        chart_labels.append(d.strftime('%d %b'))
+        chart_revenue.append(daily_map.get(d, {}).get('total', 0))
+        chart_bills.append(daily_map.get(d, {}).get('count', 0))
+
+    # Top dispensed medicines by quantity
+    top_medicines_qs = (
+        DispensedItem.objects
+        .filter(visit__clinic=clinic, dispensed_at__date__gte=since)
+        .values('pharmacy_item__medicine__name', 'pharmacy_item__custom_name')
+        .annotate(
+            total_qty=Sum('quantity_dispensed'),
+            total_rev=Sum(ExpressionWrapper(
+                F('quantity_dispensed') * F('unit_price'),
+                output_field=DecimalField()
+            ))
+        )
+        .order_by('-total_qty')[:15]
+    )
+    top_meds_list = []
+    for row in top_medicines_qs:
+        name = row['pharmacy_item__medicine__name'] or row['pharmacy_item__custom_name'] or 'Unknown'
+        top_meds_list.append({
+            'name': name,
+            'qty': row['total_qty'],
+            'rev': float(row['total_rev'] or 0),
+        })
+
+    # Recent returns
+    returns_qs = (
+        DispensedItem.objects
+        .filter(visit__clinic=clinic, dispensed_at__date__gte=since, quantity_returned__gt=0)
+        .select_related('pharmacy_item__medicine', 'visit__patient')
+        .order_by('-dispensed_at')[:50]
+    )
+
+    # Summary totals
+    total_revenue = PharmacyBill.objects.filter(
+        clinic=clinic, created_at__date__gte=since
+    ).aggregate(t=Sum('final_amount'))['t'] or 0
+
+    total_bills = PharmacyBill.objects.filter(
+        clinic=clinic, created_at__date__gte=since
+    ).count()
+
+    total_items_dispensed = DispensedItem.objects.filter(
+        visit__clinic=clinic, dispensed_at__date__gte=since
+    ).aggregate(t=Sum('quantity_dispensed'))['t'] or 0
+
+    total_returned = DispensedItem.objects.filter(
+        visit__clinic=clinic, dispensed_at__date__gte=since
+    ).aggregate(t=Sum('quantity_returned'))['t'] or 0
+
+    return render(request, 'pharmacy/analytics.html', {
+        'clinic': clinic,
+        'days': days,
+        'since': since,
+        'today': today,
+        'range_choices': [(7, '7 Days'), (30, '30 Days'), (90, '3 Months'), (365, '1 Year')],
+        'chart_labels': _json.dumps(chart_labels),
+        'chart_revenue': _json.dumps(chart_revenue),
+        'chart_bills': _json.dumps(chart_bills),
+        'top_meds_list': top_meds_list,
+        'returns_qs': returns_qs,
+        'total_revenue': total_revenue,
+        'total_bills': total_bills,
+        'total_items_dispensed': total_items_dispensed,
+        'total_returned': total_returned,
+    })

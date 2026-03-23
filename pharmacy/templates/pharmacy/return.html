@@ -6,8 +6,14 @@
 @media (max-width: 480px) {
   .return-row { flex-direction: column !important; align-items: flex-start !important; gap: 8px !important; }
   .return-row-right { display: flex; align-items: center; gap: 10px; width: 100%; justify-content: space-between; }
+  .return-row-right .return-qty { width: 80px !important; }
   .return-total-row { flex-direction: column !important; gap: 10px !important; }
   .return-total-row button { width: 100%; justify-content: center; }
+}
+@media (max-width: 360px) {
+  .bill-input-wrap { flex-direction: column !important; }
+  .bill-input-wrap input { min-width: 0 !important; width: 100% !important; }
+  .bill-input-wrap button { width: 100%; }
 }
 </style>
 {% endblock %}
@@ -20,6 +26,14 @@
     <h1 class="page-title" style="margin:0;">Return Medicines</h1>
   </div>
 
+  <!-- UX hint -->
+  <div style="background:#FFF7ED; border:1px solid #FED7AA; border-radius:10px; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#9A3412;">
+    To process a medicine return: enter the bill number from the patient's receipt.
+    The original bill will load and you can enter how many units to return.
+    Returned stock is <strong>automatically added back to inventory</strong> under the original batch.
+    A full return history is maintained for audit.
+  </div>
+
   <!-- Step 1: Bill number lookup -->
   {% if not bill %}
   <div class="card" style="margin-bottom:20px;">
@@ -29,7 +43,7 @@
     {% endif %}
     <form method="post">
       {% csrf_token %}
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <div class="bill-input-wrap" style="display:flex; gap:10px; flex-wrap:wrap;">
         <input type="text" name="bill_number" placeholder="e.g. BILL-20260320-0001"
           class="input-field" style="flex:1; min-width:200px; font-size:14px;"
           autofocus required>

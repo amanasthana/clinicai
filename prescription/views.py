@@ -103,11 +103,43 @@ def consult_view(request, visit_id):
     doctor = request.user.staff_profile
     favorites = DoctorFavorite.objects.filter(doctor=doctor).select_related('medicine')
 
+    # Serialize existing prescription as JSON for the edit-on-reload feature
+    existing_rx_json = None
+    if existing_rx:
+        from datetime import date
+        import json as _json
+        today = timezone.now().date()
+        follow_up_days = None
+        if existing_rx.follow_up_date and existing_rx.follow_up_date >= today:
+            follow_up_days = (existing_rx.follow_up_date - today).days
+        existing_rx_json = _json.dumps({
+            'soap_note': existing_rx.soap_note,
+            'diagnosis': existing_rx.diagnosis,
+            'advice': existing_rx.advice,
+            'patient_summary_en': existing_rx.patient_summary_en,
+            'patient_summary_hi': existing_rx.patient_summary_hi,
+            'follow_up_days': follow_up_days,
+            'investigations_text': existing_rx.investigations_text,
+            'validity_days': existing_rx.validity_days,
+            'medicines': [
+                {
+                    'drug_name': m.drug_name,
+                    'dosage': m.dosage,
+                    'frequency': m.frequency,
+                    'duration': m.duration,
+                    'route': m.route,
+                    'notes': m.notes,
+                }
+                for m in existing_rx.medicines.all()
+            ],
+        })
+
     return render(request, 'prescription/consult.html', {
         'visit': visit,
         'patient': patient,
         'clinic': clinic,
         'existing_rx': existing_rx,
+        'existing_rx_json': existing_rx_json,
         'past_visits': past_visits,
         'doctor': doctor,
         'favorites': favorites,
@@ -299,6 +331,7 @@ def save_prescription_api(request, visit_id):
             dosage=med.get('dosage', ''),
             frequency=med.get('frequency', ''),
             duration=med.get('duration', ''),
+            route=med.get('route', ''),
             notes=med.get('notes', ''),
             order=i,
         )

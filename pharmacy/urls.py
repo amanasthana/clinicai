@@ -26,4 +26,6 @@ urlpatterns = [
     path('return/', views.medicine_return_view, name='return'),
     path('return/<int:bill_id>/', views.medicine_return_view, name='return_bill'),
     path('return/<int:bill_id>/process/', views.process_return_view, name='process_return'),
+    path('bills/', views.bill_list_view, name='bill_list'),
+    path('analytics/', views.pharmacy_analytics_view, name='analytics'),
 ]

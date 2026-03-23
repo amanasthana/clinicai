@@ -127,14 +127,16 @@
     </button>
     {% endif %}
     <a href="/pharmacy/" class="tb-btn tb-back">← Pharmacy</a>
-    <a href="/pharmacy/return/{{ bill.pk }}/" class="tb-btn" style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;">
+    <a href="/pharmacy/return/{{ bill.pk }}/" class="tb-btn" style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;"
+       title="Patient returned some medicines? Use this to enter returned quantities and restore inventory.">
       ↩ Return Medicines
     </a>
     <form method="post" action="/pharmacy/bill/{{ bill.pk }}/edit/"
-          onsubmit="return confirm('This will reverse the bill and restore stock. You can re-dispense after. Continue?');"
+          onsubmit="return confirm('This will reverse the ENTIRE bill and restore all stock. Use this only if you need to re-do the bill from scratch.\n\nFor partial returns (1–2 medicines), use the Return Medicines button instead.\n\nContinue with full reversal?');"
           style="margin:0; display:inline;">
       {% csrf_token %}
-      <button type="submit" class="tb-btn" style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;">
+      <button type="submit" class="tb-btn" style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;"
+              title="Reverses the entire bill. Stock is restored. Use this to fix a billing mistake — you can re-dispense after.">
         Edit / Re-dispense
       </button>
     </form>

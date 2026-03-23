@@ -4,9 +4,6 @@ set -e
 echo "--- Ensuring persistent media directory ---"
 mkdir -p /home/media/letterheads
 
-echo "--- Installing packages ---"
-pip install -r /home/site/wwwroot/requirements.txt --quiet
-
 echo "--- Running migrations ---"
 python manage.py migrate --no-input
 

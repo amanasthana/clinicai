@@ -9,6 +9,10 @@
     <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Edit Batch</h1>
   </div>
 
+  {% if error %}
+  <div class="alert alert-error" style="margin-bottom:16px;">{{ error }}</div>
+  {% endif %}
+
   <div class="card">
     <div style="font-size:16px; font-weight:600; color:#374151; margin-bottom:4px;">{{ batch.item.display_name }}</div>
     {% if batch.item.medicine and batch.item.medicine.generic_name %}
@@ -54,9 +58,9 @@
             class="input-field" style="font-size:14px;">
         </div>
         <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Unit Price (₹)</label>
-          <input type="number" name="unit_price" min="0" step="0.01" value="{{ batch.unit_price }}"
-            class="input-field" style="font-size:14px;">
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Unit Price / MRP (₹) <span style="color:#EF4444;">*</span></label>
+          <input type="number" name="unit_price" min="0.01" step="0.01" value="{{ batch.unit_price }}"
+            required placeholder="e.g. 12.50" class="input-field" style="font-size:14px;">
         </div>
       </div>
 

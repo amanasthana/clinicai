@@ -8,6 +8,7 @@ urlpatterns = [
     path('patient/new/', views.new_patient_view, name='new_patient'),
     path('patient/<uuid:pk>/', views.patient_detail_view, name='patient_detail'),
     path('patient/<uuid:pk>/edit/', views.patient_edit_view, name='patient_edit'),
+    path('patient/<uuid:pk>/delete/', views.patient_delete_view, name='patient_delete'),
     path('visit/<uuid:pk>/', views.visit_detail_view, name='visit_detail'),
     path('analytics/', views.analytics_view, name='analytics'),
     # JSON APIs

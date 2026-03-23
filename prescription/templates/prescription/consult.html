@@ -270,10 +270,13 @@
   background:#fff; border:1px solid #E5E7EB; border-radius:10px;
   box-shadow:0 4px 20px rgba(0,0,0,0.12); max-height:220px; overflow-y:auto;
   display:none;
+  /* Allow clicks to pass through to elements below (e.g. Generate button) */
+  pointer-events:none;
 }
 .suggest-item {
   padding:9px 14px; cursor:pointer; border-bottom:1px solid #F9FAFB;
   display:flex; align-items:center; gap:10px; transition:background 0.1s;
+  pointer-events:auto;
 }
 .suggest-item:hover { background:#F9FAFB; }
 .suggest-cat {
@@ -309,11 +312,13 @@
   background:#fff; border:1px solid #E5E7EB; border-radius:10px;
   box-shadow:0 4px 20px rgba(0,0,0,0.12); max-height:200px; overflow-y:auto;
   display:none; margin-top:2px;
+  pointer-events:none;
 }
 .drug-suggest-item {
   padding:8px 12px; cursor:pointer; border-bottom:1px solid #F9FAFB;
   display:flex; align-items:center; gap:8px; transition:background 0.1s;
   font-size:13px; color:#111827;
+  pointer-events:auto;
 }
 .drug-suggest-item:last-child { border-bottom:none; }
 .drug-suggest-item:hover { background:#F9FAFB; }
@@ -623,6 +628,9 @@
         <!-- Prescription card — editable -->
         <div id="rx-card" class="card" style="display:none;">
 
+          <div id="rx-edit-banner" style="display:none; font-size:13px; color:#1D4ED8; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
+            ✏️ Editing saved prescription — make changes and click "Save &amp; Complete Visit" to update.
+          </div>
           <div style="font-size:13px; color:#6B7280; background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin-bottom:16px;">
             AI-generated — review and edit any field before saving.
           </div>
@@ -1199,10 +1207,12 @@ function renderPrescription(rx) {
   document.getElementById('edit-summary-hi').value = rx.patient_summary_hi || '';
   document.getElementById('edit-followup-days').value = rx.follow_up_days || '';
   document.getElementById('edit-investigations').value = rx.investigations_text || '';
-  // Reset validity to 30 days on fresh AI generation
+  // Restore validity days (default 30)
   document.querySelectorAll('#validity-pills .rx-pill').forEach(p => p.classList.remove('selected'));
-  const v30 = document.querySelector('#validity-pills [data-days="30"]');
-  if (v30) v30.classList.add('selected');
+  const vDays = rx.validity_days || 30;
+  const vPill = document.querySelector(`#validity-pills [data-days="${vDays}"]`) ||
+                document.querySelector('#validity-pills [data-days="30"]');
+  if (vPill) vPill.classList.add('selected');
 
   const container = document.getElementById('medicines-table');
   container.innerHTML = '';
@@ -1312,12 +1322,25 @@ function buildPillGroup(pills, fieldName, currentVal) {
 }
 
 // ── Medicine rows ────────────────────────────────────────────────
+const ROUTE_PILLS = [
+  { v: 'IV',  label: 'IV — Intravenous' },
+  { v: 'IM',  label: 'IM — Intramuscular' },
+  { v: 'SC',  label: 'SC — Subcutaneous' },
+  { v: 'ID',  label: 'ID — Intradermal' },
+];
+
+function isInjection(name) {
+  return /^\s*(inj|injection)/i.test(name || '');
+}
+
 function addMedicineRow(m) {
   m = m || {};
   const dosage    = m.dosage    || '';
   const frequency = matchFreq(m.frequency) || m.frequency || '';
   const duration  = matchDur(m.duration)   || m.duration  || '';
+  const route     = m.route || '';
   const notes     = m.notes || '';
+  const showInj   = isInjection(m.drug_name || '');
 
   const container = document.getElementById('medicines-table');
   const div = document.createElement('div');
@@ -1326,6 +1349,7 @@ function addMedicineRow(m) {
   div.dataset.dosage    = dosage;
   div.dataset.frequency = frequency;
   div.dataset.duration  = duration;
+  div.dataset.route     = route;
 
   const showRemarks = document.getElementById('remarks-toggle')?.checked !== false;
 
@@ -1337,11 +1361,16 @@ function addMedicineRow(m) {
                placeholder="e.g. Tab Metformin 500mg"
                style="font-size:13px; padding:7px 10px; width:100%;"
                autocomplete="off"
-               oninput="scheduleInteractionCheck()">
+               oninput="scheduleInteractionCheck(); updateRouteVisibility(this)">
         <div class="drug-suggest-dropdown"></div>
       </div>
       <button type="button" class="med-brand-btn" onclick="pickBrand(this)" title="Browse clinic inventory">📦</button>
       <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove">×</button>
+    </div>
+
+    <div class="pill-section inj-route-section" style="display:${showInj ? '' : 'none'}; background:#EFF6FF; border-radius:8px; padding:8px 12px;">
+      <div class="pill-label" style="color:#1D4ED8;">Route of Administration</div>
+      ${buildPillGroup(ROUTE_PILLS, 'route', route)}
     </div>
 
     <div class="pill-section">
@@ -1374,6 +1403,14 @@ function addMedicineRow(m) {
 
   container.appendChild(div);
   renumberMedicines();
+}
+
+function updateRouteVisibility(input) {
+  const row = input.closest('.med-row');
+  const routeSection = row?.querySelector('.inj-route-section');
+  if (routeSection) {
+    routeSection.style.display = isInjection(input.value) ? '' : 'none';
+  }
 }
 
 function removeMedicineRow(btn) {
@@ -1507,6 +1544,7 @@ function readPrescription() {
         dosage:    row.dataset.dosage    || '',
         frequency: row.dataset.frequency || '',
         duration:  row.dataset.duration  || '',
+        route:     row.dataset.route     || '',
         notes:     row.querySelector('.med-notes')?.value.trim() || '',
       });
     }
@@ -1784,6 +1822,20 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   // Set default active textarea
   activeTextarea = document.getElementById('note-chief');
+
+  // ── Auto-load existing saved prescription (edit mode) ─────────
+  {% if existing_rx_json %}
+  try {
+    const existingRx = {{ existing_rx_json|safe }};
+    if (existingRx && (existingRx.diagnosis || (existingRx.medicines && existingRx.medicines.length))) {
+      document.getElementById('rx-output').style.display = 'block';
+      renderPrescription(existingRx);
+      // Show a subtle "editing saved prescription" banner
+      const banner = document.getElementById('rx-edit-banner');
+      if (banner) banner.style.display = 'block';
+    }
+  } catch(e) { console.warn('Could not restore existing Rx:', e); }
+  {% endif %}
 });
 
 // ── Init remarks toggle state on page load ─────────────────────

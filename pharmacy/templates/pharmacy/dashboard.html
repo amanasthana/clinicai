@@ -7,6 +7,18 @@
 .ph-med-row { transition: background .1s; }
 .ph-med-row:hover { background: #FAFAFA; }
 
+/* Stat chips: wrap to 2×3 on mobile (5 chips) */
+@media (max-width: 560px) {
+  .stat-chip { flex: 1 1 calc(33% - 8px) !important; min-width: calc(33% - 8px) !important; }
+}
+@media (max-width: 380px) {
+  .stat-chip { flex: 1 1 calc(50% - 6px) !important; min-width: calc(50% - 6px) !important; }
+}
+/* Nav buttons: wrap cleanly */
+@media (max-width: 500px) {
+  .ph-nav-btns { flex-wrap: wrap !important; }
+  .ph-nav-btns .btn { flex: 1 1 calc(50% - 4px); text-align: center; }
+}
 /* Three-dot dropdown — fixed so overflow:hidden on card doesn't clip it */
 .ph-dropdown {
   display: none;
@@ -46,10 +58,65 @@
   <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
     <div>
       <h1 class="text-lg font-bold text-gray-900 m-0">Pharmacy</h1>
-      <p class="text-xs text-gray-500 mt-0.5">Inventory management</p>
+      <p class="text-xs text-gray-500 mt-0.5">Inventory management · <span id="inv-last-updated" style="color:#9CA3AF;">Updated just now</span></p>
     </div>
-    <a href="/pharmacy/add/" class="btn btn-primary" style="font-size:13px;">+ Add Stock</a>
+    <div class="ph-nav-btns" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <a href="/pharmacy/bills/" class="btn btn-secondary" style="font-size:13px;">📋 Bill History</a>
+      {% if request.user.staff_profile.can_view_analytics %}
+      <a href="/pharmacy/analytics/" class="btn btn-secondary" style="font-size:13px;">📊 Analytics</a>
+      {% endif %}
+      <a href="/pharmacy/return/" class="btn btn-secondary" style="font-size:13px;">↩ Returns</a>
+      <a href="/pharmacy/add/" class="btn btn-primary" style="font-size:13px;">+ Add Stock</a>
+    </div>
   </div>
+
+  <!-- ── Zero-price batch warning (Layer 1) ── -->
+  {% if zero_price_batches %}
+  <div style="background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:12px; padding:16px 18px; margin-bottom:20px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px;">
+      <div style="font-size:15px; font-weight:700; color:#92400E;">
+        ⚠ {{ zero_price_batches|length }} batch{{ zero_price_batches|length|pluralize:"es" }} with no price set
+      </div>
+      {% if zero_price_batches|length > 5 %}
+      <button onclick="toggleZpList()" id="zp-toggle-btn"
+        style="font-size:12px; color:#D97706; font-weight:600; background:none; border:none; cursor:pointer; font-family:inherit; white-space:nowrap; padding:0;">
+        Show all {{ zero_price_batches|length }} ▼
+      </button>
+      {% endif %}
+    </div>
+    <p style="font-size:13px; color:#78350F; margin:0 0 10px 0;">
+      These medicines will bill patients <strong>₹0</strong> until you set the correct MRP. Dispensing is blocked until prices are fixed.
+    </p>
+    {% for batch in zero_price_batches %}
+    <div class="zp-row{% if forloop.counter > 5 %} zp-row-hidden{% endif %}"
+         style="display:{% if forloop.counter > 5 %}none{% else %}flex{% endif %}; align-items:center; justify-content:space-between; gap:12px; padding:7px 0; border-top:1px solid #FDE68A; font-size:13px;">
+      <div style="min-width:0;">
+        <strong style="color:#111827;">{{ batch.item.display_name }}</strong>
+        {% if batch.batch_number %}<span style="color:#9CA3AF;"> · {{ batch.batch_number }}</span>{% endif %}
+        <span style="color:#6B7280;"> — {{ batch.quantity }} units</span>
+      </div>
+      <a href="/pharmacy/batch/{{ batch.pk }}/edit/"
+         style="font-size:12px; color:#D97706; font-weight:700; text-decoration:none; white-space:nowrap; border:1px solid #F59E0B; border-radius:6px; padding:4px 10px; flex-shrink:0;">
+        Set Price →
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+  {% if zero_price_batches|length > 5 %}
+  <script>
+  function toggleZpList() {
+    const hidden = document.querySelectorAll('.zp-row-hidden');
+    const btn = document.getElementById('zp-toggle-btn');
+    const isExpanded = btn.dataset.expanded === '1';
+    hidden.forEach(r => r.style.display = isExpanded ? 'none' : 'flex');
+    btn.dataset.expanded = isExpanded ? '0' : '1';
+    btn.textContent = isExpanded
+      ? 'Show all {{ zero_price_batches|length }} \u25bc'
+      : 'Show less \u25b2';
+  }
+  </script>
+  {% endif %}
+  {% endif %}
 
   <!-- ── Default discount setting ── -->
   {% if request.user.staff_profile.can_dispense_bill or request.user.staff_profile.can_manage_staff %}
@@ -458,5 +525,24 @@ function filterInv(q) {
     });
   }
 }
+
+// ── Inventory "last updated" timestamp ──────────────────────────
+(function() {
+  const el = document.getElementById('inv-last-updated');
+  if (!el) return;
+  const pageLoadTime = Date.now();
+  function updateLabel() {
+    const secs = Math.floor((Date.now() - pageLoadTime) / 1000);
+    let label;
+    if (secs < 60) label = 'Updated just now';
+    else if (secs < 3600) label = `Updated ${Math.floor(secs/60)}m ago — ` +
+      '<a href="" style="color:#2563EB;text-decoration:none;" onclick="window.location.reload();return false;">Refresh</a>';
+    else label = `Updated ${Math.floor(secs/3600)}h ago — ` +
+      '<a href="" style="color:#2563EB;text-decoration:none;" onclick="window.location.reload();return false;">Refresh</a>';
+    el.innerHTML = label;
+  }
+  updateLabel();
+  setInterval(updateLabel, 30000); // update every 30s
+})();
 </script>
 {% endblock %}

@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Pharmacy Analytics — {{ clinic.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+@media (max-width: 560px) {
+  .pharm-ret-col-patient { display: none; }
+}
+/* 4-col summary grid → 2-col on tablet → 1-col on mobile */
+.resp-grid-2 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 640px) {
+  .resp-grid-2 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 360px) {
+  .resp-grid-2 { grid-template-columns: 1fr 1fr; }
+}
+/* Top-meds row: allow medicine name to shrink and wrap on narrow screens */
+@media (max-width: 480px) {
+  .top-med-row { flex-wrap: wrap; gap: 4px !important; }
+  .top-med-name { white-space: normal !important; }
+  .top-med-rev { min-width: auto !important; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+    <a href="/pharmacy/" style="color:#6B7280; text-decoration:none; font-size:13px;">← Pharmacy</a>
+    <h1 class="page-title" style="margin:0;">Pharmacy Analytics</h1>
+  </div>
+
+  <!-- Date range chips -->
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;">
+    {% for val, label in range_choices %}
+    <a href="?range={{ val }}"
+       class="btn btn-sm {% if days == val %}btn-primary{% else %}btn-secondary{% endif %}">
+      {{ label }}
+    </a>
+    {% endfor %}
+    <span style="font-size:13px; color:#9CA3AF; align-self:center; margin-left:4px;">
+      {{ since|date:"d M" }} – {{ today|date:"d M Y" }}
+    </span>
+  </div>
+
+  <!-- Summary cards -->
+  <div style="display:grid; gap:12px; margin-bottom:20px;" class="resp-grid-2">
+    <div class="card" style="text-align:center; padding:16px;">
+      <div style="font-size:22px; font-weight:700; color:#059669;">Rs {{ total_revenue|floatformat:0 }}</div>
+      <div style="font-size:12px; color:#6B7280; margin-top:2px;">Total Revenue</div>
+    </div>
+    <div class="card" style="text-align:center; padding:16px;">
+      <div style="font-size:22px; font-weight:700; color:#2563EB;">{{ total_bills }}</div>
+      <div style="font-size:12px; color:#6B7280; margin-top:2px;">Bills Generated</div>
+    </div>
+    <div class="card" style="text-align:center; padding:16px;">
+      <div style="font-size:22px; font-weight:700; color:#7C3AED;">{{ total_items_dispensed|default:0 }}</div>
+      <div style="font-size:12px; color:#6B7280; margin-top:2px;">Units Dispensed</div>
+    </div>
+    <div class="card" style="text-align:center; padding:16px;">
+      <div style="font-size:22px; font-weight:700; color:#DC2626;">{{ total_returned|default:0 }}</div>
+      <div style="font-size:12px; color:#6B7280; margin-top:2px;">Units Returned</div>
+    </div>
+  </div>
+
+  <!-- Revenue chart -->
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:14px; font-weight:600; color:#111827; margin-bottom:16px;">Daily Revenue (Rs)</div>
+    <canvas id="revenueChart" style="max-height:200px;"></canvas>
+  </div>
+
+  <!-- Top medicines -->
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:14px; font-weight:600; color:#111827; margin-bottom:14px;">Top Dispensed Medicines</div>
+    {% if top_meds_list %}
+    {% for med in top_meds_list %}
+    <div class="top-med-row" style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #F3F4F6;">
+      <div style="width:24px; text-align:center; font-size:12px; font-weight:700; color:#9CA3AF; flex-shrink:0;">{{ forloop.counter }}</div>
+      <div class="top-med-name" style="flex:1; font-size:14px; font-weight:500; color:#111827; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ med.name }}</div>
+      <div style="font-size:13px; color:#374151; white-space:nowrap; flex-shrink:0;">{{ med.qty }} units</div>
+      <div class="top-med-rev" style="font-size:13px; font-weight:600; color:#059669; white-space:nowrap; min-width:70px; text-align:right; flex-shrink:0;">Rs {{ med.rev|floatformat:0 }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="color:#6B7280; font-size:14px; text-align:center; padding:24px;">No dispensing data for this period.</div>
+    {% endif %}
+  </div>
+
+  <!-- Returns history -->
+  {% if returns_qs %}
+  <div class="card">
+    <div style="font-size:14px; font-weight:600; color:#111827; margin-bottom:14px;">Recent Medicine Returns</div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="border-bottom:2px solid #E5E7EB;">
+            <th style="padding:8px 12px; text-align:left; font-weight:600; color:#374151;">Medicine</th>
+            <th class="pharm-ret-col-patient" style="padding:8px 12px; text-align:left; font-weight:600; color:#374151;">Patient</th>
+            <th style="padding:8px 12px; text-align:center; font-weight:600; color:#374151;">Qty Returned</th>
+            <th style="padding:8px 12px; text-align:left; font-weight:600; color:#374151;">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for di in returns_qs %}
+          <tr style="border-bottom:1px solid #F3F4F6;">
+            <td style="padding:8px 12px; color:#111827;">{{ di.pharmacy_item.display_name }}</td>
+            <td class="pharm-ret-col-patient" style="padding:8px 12px; color:#6B7280;">{{ di.visit.patient.full_name }}</td>
+            <td style="padding:8px 12px; text-align:center; color:#DC2626; font-weight:600;">-{{ di.quantity_returned }}</td>
+            <td style="padding:8px 12px; color:#6B7280;">{{ di.dispensed_at|date:"d M Y" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const labels   = {{ chart_labels|safe }};
+const revenue  = {{ chart_revenue|safe }};
+const billCounts = {{ chart_bills|safe }};
+
+const ctx = document.getElementById('revenueChart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Revenue (Rs)',
+      data: revenue,
+      backgroundColor: 'rgba(5, 150, 105, 0.15)',
+      borderColor: '#059669',
+      borderWidth: 1.5,
+      borderRadius: 4,
+    }],
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => `Rs ${ctx.parsed.y.toFixed(0)} · ${billCounts[ctx.dataIndex]} bill(s)`,
+        },
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { callback: v => 'Rs ' + v.toFixed(0) },
+        grid: { color: '#F3F4F6' },
+      },
+      x: { grid: { display: false } },
+    },
+  },
+});
+</script>
+{% endblock %}

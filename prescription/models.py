@@ -53,6 +53,7 @@ class PrescriptionMedicine(models.Model):
     dosage = models.CharField(max_length=100)        # "1-0-1"
     frequency = models.CharField(max_length=100)     # "Twice daily after meals"
     duration = models.CharField(max_length=50)       # "14 days"
+    route = models.CharField(max_length=30, blank=True, default='')  # IV / IM / SC for injections
     notes = models.CharField(max_length=200, blank=True)  # "Take with food"
     order = models.PositiveSmallIntegerField(default=0)
 

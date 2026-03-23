@@ -350,7 +350,7 @@ class PharmacyViewTest(TestCase):
             'batch_number': '',
             'expiry_date': '',
             'quantity': 5,
-            'unit_price': '0',
+            'unit_price': '8.00',
             'reorder_level': 5,
         })
         self.assertRedirects(resp, '/pharmacy/')
@@ -1936,3 +1936,938 @@ class MedicineReturnTest(TestCase):
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.quantity, initial_qty)  # unchanged
 
+
+# ---------------------------------------------------------------------------
+# Bill list view tests
+# ---------------------------------------------------------------------------
+
+class BillListViewTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('billlistdoc')
+        self.client.login(username='billlistdoc', password='testpass123')
+        from reception.models import Patient, Visit
+        from pharmacy.models import PharmacyBill, PharmacyItem, PharmacyBatch, DispensedItem
+        from django.utils import timezone as tz
+        self.catalog = make_catalog_medicine('Amoxicillin', 'Amoxicillin')
+        self.item = PharmacyItem.objects.create(clinic=self.clinic, medicine=self.catalog)
+        self.batch = PharmacyBatch.objects.create(
+            item=self.item, batch_number='BL001', quantity=100,
+            unit_price='12.00',
+            expiry_date=tz.now().date() + datetime.timedelta(days=365),
+        )
+        self.patient = Patient.objects.create(
+            clinic=self.clinic, full_name='Bill List Patient', phone='9111111111'
+        )
+        self.visit = Visit.objects.create(
+            clinic=self.clinic, patient=self.patient,
+            token_number=1, status='done',
+        )
+        di = DispensedItem.objects.create(
+            visit=self.visit, pharmacy_item=self.item, batch=self.batch,
+            quantity_dispensed=5, unit_price='12.00', dispensed_by=self.staff,
+        )
+        self.bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number='BILL-TEST-0001',
+            subtotal='60.00', final_amount='60.00',
+        )
+
+    def test_bill_list_loads(self):
+        resp = self.client.get('/pharmacy/bills/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_bill_list_shows_bill(self):
+        resp = self.client.get('/pharmacy/bills/')
+        self.assertContains(resp, 'BILL-TEST-0001')
+
+    def test_bill_list_shows_patient_name(self):
+        resp = self.client.get('/pharmacy/bills/')
+        self.assertContains(resp, 'Bill List Patient')
+
+    def test_bill_list_shows_amount(self):
+        resp = self.client.get('/pharmacy/bills/')
+        self.assertContains(resp, '60')
+
+    def test_bill_list_search_by_name(self):
+        resp = self.client.get('/pharmacy/bills/?q=Bill+List+Patient')
+        self.assertContains(resp, 'BILL-TEST-0001')
+
+    def test_bill_list_search_no_match(self):
+        resp = self.client.get('/pharmacy/bills/?q=ZZZNoMatch')
+        self.assertNotContains(resp, 'BILL-TEST-0001')
+
+    def test_bill_list_range_7days(self):
+        resp = self.client.get('/pharmacy/bills/?range=7')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_bill_list_requires_login(self):
+        self.client.logout()
+        resp = self.client.get('/pharmacy/bills/')
+        self.assertEqual(resp.status_code, 302)
+
+    def test_bill_list_clinic_isolation(self):
+        """Bills from a different clinic must not appear."""
+        other_clinic, other_user, other_staff = make_clinic_and_user('otherbilldoc', 'Other Clinic')
+        from reception.models import Patient, Visit
+        other_patient = Patient.objects.create(
+            clinic=other_clinic, full_name='Other Patient', phone='9888888888'
+        )
+        other_visit = Visit.objects.create(
+            clinic=other_clinic, patient=other_patient, token_number=1, status='done'
+        )
+        other_bill = PharmacyBill.objects.create(
+            visit=other_visit, clinic=other_clinic,
+            bill_number='BILL-OTHER-9999',
+            subtotal='200.00', final_amount='200.00',
+        )
+        resp = self.client.get('/pharmacy/bills/')
+        self.assertNotContains(resp, 'BILL-OTHER-9999')
+
+
+# ---------------------------------------------------------------------------
+# Pharmacy analytics view tests
+# ---------------------------------------------------------------------------
+
+class PharmacyAnalyticsViewTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('analyticsdoc')
+        self.client.login(username='analyticsdoc', password='testpass123')
+        from reception.models import Patient, Visit
+        from pharmacy.models import PharmacyItem, PharmacyBatch, DispensedItem, PharmacyBill
+        from django.utils import timezone as tz
+        self.catalog = make_catalog_medicine('Cetirizine', 'Cetirizine HCl')
+        self.item = PharmacyItem.objects.create(clinic=self.clinic, medicine=self.catalog)
+        self.batch = PharmacyBatch.objects.create(
+            item=self.item, batch_number='AN001', quantity=200,
+            unit_price='5.00',
+            expiry_date=tz.now().date() + datetime.timedelta(days=365),
+        )
+        self.patient = Patient.objects.create(
+            clinic=self.clinic, full_name='Analytics Patient', phone='9222222222'
+        )
+        self.visit = Visit.objects.create(
+            clinic=self.clinic, patient=self.patient,
+            token_number=1, status='done',
+        )
+        self.di = DispensedItem.objects.create(
+            visit=self.visit, pharmacy_item=self.item, batch=self.batch,
+            quantity_dispensed=10, unit_price='5.00', dispensed_by=self.staff,
+        )
+        self.bill = PharmacyBill.objects.create(
+            visit=self.visit, clinic=self.clinic,
+            bill_number='BILL-AN-0001',
+            subtotal='50.00', final_amount='50.00',
+        )
+
+    def test_analytics_loads(self):
+        resp = self.client.get('/pharmacy/analytics/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_analytics_shows_revenue(self):
+        resp = self.client.get('/pharmacy/analytics/')
+        self.assertContains(resp, '50')
+
+    def test_analytics_shows_top_medicine(self):
+        resp = self.client.get('/pharmacy/analytics/')
+        self.assertContains(resp, 'Cetirizine')
+
+    def test_analytics_shows_bills_count(self):
+        resp = self.client.get('/pharmacy/analytics/')
+        self.assertContains(resp, '1')  # 1 bill
+
+    def test_analytics_range_7days(self):
+        resp = self.client.get('/pharmacy/analytics/?range=7')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_analytics_range_90days(self):
+        resp = self.client.get('/pharmacy/analytics/?range=90')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_analytics_requires_login(self):
+        self.client.logout()
+        resp = self.client.get('/pharmacy/analytics/')
+        self.assertEqual(resp.status_code, 302)
+
+    def test_analytics_no_data_still_loads(self):
+        """Analytics should still load even if there are no bills."""
+        from pharmacy.models import PharmacyBill, DispensedItem
+        DispensedItem.objects.all().delete()
+        PharmacyBill.objects.all().delete()
+        resp = self.client.get('/pharmacy/analytics/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Analytics')
+
+    def test_analytics_shows_returns(self):
+        """If a medicine was returned, it should appear in the returns table."""
+        self.di.quantity_returned = 3
+        self.di.save()
+        resp = self.client.get('/pharmacy/analytics/')
+        self.assertContains(resp, 'Returns')
+
+
+# ---------------------------------------------------------------------------
+# Delete patient tests
+# ---------------------------------------------------------------------------
+
+class PatientDeleteViewTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('deldoc')
+        self.client.login(username='deldoc', password='testpass123')
+        from reception.models import Patient
+        self.patient = Patient.objects.create(
+            clinic=self.clinic, full_name='Delete Me', phone='9333333333'
+        )
+
+    def test_delete_page_loads(self):
+        resp = self.client.get(f'/patient/{self.patient.id}/delete/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Delete Me')
+
+    def test_delete_without_confirm_shows_error(self):
+        resp = self.client.post(f'/patient/{self.patient.id}/delete/', {'confirm': 'WRONG'})
+        self.assertEqual(resp.status_code, 200)
+        from reception.models import Patient
+        self.assertTrue(Patient.objects.filter(id=self.patient.id).exists())
+
+    def test_delete_with_confirm_removes_patient(self):
+        resp = self.client.post(f'/patient/{self.patient.id}/delete/', {'confirm': 'DELETE'})
+        self.assertEqual(resp.status_code, 302)
+        from reception.models import Patient
+        self.assertFalse(Patient.objects.filter(id=self.patient.id).exists())
+
+    def test_delete_wrong_clinic_returns_404(self):
+        """A doctor from another clinic cannot delete this patient."""
+        other_clinic, other_user, _ = make_clinic_and_user('otherdeldoc', 'Other Clinic')
+        self.client.logout()
+        self.client.login(username='otherdeldoc', password='testpass123')
+        resp = self.client.post(f'/patient/{self.patient.id}/delete/', {'confirm': 'DELETE'})
+        self.assertEqual(resp.status_code, 404)
+        from reception.models import Patient
+        self.assertTrue(Patient.objects.filter(id=self.patient.id).exists())
+
+    def test_delete_receptionist_denied(self):
+        """Receptionists do not have can_manage_staff and should be denied."""
+        recep_user = User.objects.create_user(username='recdeldoc', password='testpass123')
+        recep_staff = StaffMember.objects.create(
+            clinic=self.clinic, user=recep_user, role='receptionist', display_name='Receptionist'
+        )
+        set_permissions_from_role(recep_staff)
+        recep_staff.save()
+        self.client.logout()
+        self.client.login(username='recdeldoc', password='testpass123')
+        resp = self.client.post(f'/patient/{self.patient.id}/delete/', {'confirm': 'DELETE'})
+        self.assertEqual(resp.status_code, 403)
+        from reception.models import Patient
+        self.assertTrue(Patient.objects.filter(id=self.patient.id).exists())
+
+    def test_delete_requires_login(self):
+        self.client.logout()
+        resp = self.client.get(f'/patient/{self.patient.id}/delete/')
+        self.assertEqual(resp.status_code, 302)
+
+    def test_delete_cascades_visits_and_prescriptions(self):
+        """Deleting a patient should cascade-delete their visits and prescriptions."""
+        from reception.models import Visit, Patient
+        from prescription.models import Prescription
+        visit = Visit.objects.create(
+            clinic=self.clinic, patient=self.patient, token_number=99, status='done'
+        )
+        rx = Prescription.objects.create(
+            visit=visit, doctor=self.staff,
+            raw_clinical_note='test', diagnosis='Test diagnosis',
+        )
+        resp = self.client.post(f'/patient/{self.patient.id}/delete/', {'confirm': 'DELETE'})
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Patient.objects.filter(id=self.patient.id).exists())
+        self.assertFalse(Visit.objects.filter(id=visit.id).exists())
+        self.assertFalse(Prescription.objects.filter(id=rx.id).exists())
+
+
+# ---------------------------------------------------------------------------
+# Injection route (PrescriptionMedicine.route) tests
+# ---------------------------------------------------------------------------
+
+class InjectionRouteTest(TestCase):
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('injdoc')
+        self.client.login(username='injdoc', password='testpass123')
+        from reception.models import Patient, Visit
+        self.patient = Patient.objects.create(
+            clinic=self.clinic, full_name='Injection Patient', phone='9444444444'
+        )
+        self.visit = Visit.objects.create(
+            clinic=self.clinic, patient=self.patient,
+            token_number=1, status='in_consultation',
+        )
+
+    def test_save_prescription_with_route(self):
+        """Saving a prescription with route='IV' should persist route on PrescriptionMedicine."""
+        import json
+        from prescription.models import PrescriptionMedicine
+        payload = {
+            'raw_clinical_note': 'Test injection note',
+            'prescription': {
+                'soap_note': 'S: test O: test A: test P: test',
+                'diagnosis': 'Infection',
+                'medicines': [
+                    {
+                        'drug_name': 'Inj Ceftriaxone 1g',
+                        'dosage': '1-0-0',
+                        'frequency': 'After meals',
+                        'duration': '5 days',
+                        'route': 'IV',
+                        'notes': '',
+                    }
+                ],
+                'advice': 'Rest',
+                'patient_summary_en': '',
+                'patient_summary_hi': '',
+                'follow_up_days': 7,
+                'investigations_text': '',
+                'validity_days': 30,
+            }
+        }
+        resp = self.client.post(
+            f'/rx/save/{self.visit.id}/',
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        med = PrescriptionMedicine.objects.get(prescription__visit=self.visit)
+        self.assertEqual(med.route, 'IV')
+        self.assertEqual(med.drug_name, 'Inj Ceftriaxone 1g')
+
+    def test_save_prescription_without_route_defaults_empty(self):
+        """Non-injection medicines should save with empty route."""
+        import json
+        from prescription.models import PrescriptionMedicine
+        payload = {
+            'raw_clinical_note': 'Fever, cough',
+            'prescription': {
+                'soap_note': '',
+                'diagnosis': 'URI',
+                'medicines': [
+                    {
+                        'drug_name': 'Tab Paracetamol 500mg',
+                        'dosage': '1-1-1',
+                        'frequency': 'After meals',
+                        'duration': '3 days',
+                        'route': '',
+                        'notes': 'Take with water',
+                    }
+                ],
+                'advice': '',
+                'patient_summary_en': '',
+                'patient_summary_hi': '',
+                'validity_days': 30,
+            }
+        }
+        resp = self.client.post(
+            f'/rx/save/{self.visit.id}/',
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        med = PrescriptionMedicine.objects.get(prescription__visit=self.visit)
+        self.assertEqual(med.route, '')
+
+    def test_route_field_preserved_on_re_save(self):
+        """Re-saving a prescription should update route on the medicine."""
+        import json
+        from prescription.models import PrescriptionMedicine
+
+        def _save(route):
+            return self.client.post(
+                f'/rx/save/{self.visit.id}/',
+                data=json.dumps({
+                    'raw_clinical_note': 'note',
+                    'prescription': {
+                        'soap_note': '', 'diagnosis': 'Sepsis',
+                        'medicines': [{
+                            'drug_name': 'Inj Meropenem 1g',
+                            'dosage': '1-0-0', 'frequency': 'After meals',
+                            'duration': '7 days', 'route': route, 'notes': '',
+                        }],
+                        'advice': '', 'patient_summary_en': '',
+                        'patient_summary_hi': '', 'validity_days': 30,
+                    }
+                }),
+                content_type='application/json',
+            )
+
+        _save('IV')
+        med = PrescriptionMedicine.objects.get(prescription__visit=self.visit)
+        self.assertEqual(med.route, 'IV')
+
+        _save('IM')
+        # save API deletes and recreates medicines, so re-query
+        med = PrescriptionMedicine.objects.get(prescription__visit=self.visit)
+        self.assertEqual(med.route, 'IM')
+
+    def test_consult_page_loads_for_done_visit(self):
+        """Consult page should be accessible for done visits (for editing)."""
+        self.visit.status = 'done'
+        self.visit.save()
+        resp = self.client.get(f'/rx/consult/{self.visit.id}/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_existing_rx_json_in_context(self):
+        """When a prescription exists, existing_rx_json should be in the template context."""
+        import json
+        from prescription.models import Prescription, PrescriptionMedicine
+        rx = Prescription.objects.create(
+            visit=self.visit, doctor=self.staff,
+            raw_clinical_note='test',
+            diagnosis='Test Dx',
+        )
+        PrescriptionMedicine.objects.create(
+            prescription=rx, drug_name='Inj Amikacin 500mg',
+            dosage='1-0-0', frequency='After meals',
+            duration='5 days', route='IM', notes='', order=0,
+        )
+        resp = self.client.get(f'/rx/consult/{self.visit.id}/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('existing_rx_json', resp.context)
+        rx_data = json.loads(resp.context['existing_rx_json'])
+        self.assertEqual(rx_data['diagnosis'], 'Test Dx')
+        self.assertEqual(rx_data['medicines'][0]['route'], 'IM')
+        self.assertEqual(rx_data['medicines'][0]['drug_name'], 'Inj Amikacin 500mg')
+
+
+# ---------------------------------------------------------------------------
+# Multi-batch dispensing tests
+# ---------------------------------------------------------------------------
+
+class MultiBatchDispenseTest(TestCase):
+    """
+    Tests that dispensing works correctly when qty needed spans multiple batches (FEFO order).
+    """
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('multibatch')
+        self.patient, self.visit = make_patient_and_visit(self.clinic, 'mb')
+        self.client = Client()
+        self.client.login(username='multibatch', password='testpass123')
+
+        # Item with TWO batches: batch1 expires sooner (FEFO first), batch2 expires later
+        self.item = PharmacyItem.objects.create(
+            clinic=self.clinic, custom_name='Amoxicillin 500mg',
+            custom_generic_name='Amoxicillin', reorder_level=5,
+        )
+        self.batch1 = PharmacyBatch.objects.create(
+            item=self.item, batch_number='B001',
+            expiry_date=today() + datetime.timedelta(days=60),   # expires sooner
+            quantity=5, unit_price='10.00',
+        )
+        self.batch2 = PharmacyBatch.objects.create(
+            item=self.item, batch_number='B002',
+            expiry_date=today() + datetime.timedelta(days=180),  # expires later
+            quantity=20, unit_price='10.00',
+        )
+        self.confirm_url = f'/pharmacy/dispense/{self.visit.id}/confirm/'
+
+    def _payload(self, qty):
+        return json.dumps({
+            'items': [{
+                'batch_id': self.batch1.pk,  # always send first batch
+                'pharmacy_item_id': self.item.pk,
+                'prescription_med_id': None,
+                'qty': qty,
+                'is_substitute': False,
+                'notes': '',
+            }],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+
+    def test_dispense_within_single_batch(self):
+        """Qty ≤ batch1 stock: only batch1 used."""
+        resp = self.client.post(self.confirm_url, data=self._payload(5), content_type='application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()['ok'])
+        self.batch1.refresh_from_db()
+        self.batch2.refresh_from_db()
+        self.assertEqual(self.batch1.quantity, 0)   # exhausted
+        self.assertEqual(self.batch2.quantity, 20)  # untouched
+
+    def test_dispense_overflows_to_second_batch(self):
+        """Qty > batch1 stock: batch1 fully used, remainder from batch2 (FEFO)."""
+        # batch1 has 5, batch2 has 20; request 15 → needs both
+        resp = self.client.post(self.confirm_url, data=self._payload(15), content_type='application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()['ok'])
+        self.batch1.refresh_from_db()
+        self.batch2.refresh_from_db()
+        self.assertEqual(self.batch1.quantity, 0)   # fully used
+        self.assertEqual(self.batch2.quantity, 10)  # 20 - 10 = 10 remaining
+
+    def test_multi_batch_creates_two_dispensed_items(self):
+        """When two batches are used, two DispensedItem records are created."""
+        self.client.post(self.confirm_url, data=self._payload(15), content_type='application/json')
+        di_count = DispensedItem.objects.filter(visit=self.visit).count()
+        self.assertEqual(di_count, 2)
+        di_b1 = DispensedItem.objects.get(visit=self.visit, batch=self.batch1)
+        di_b2 = DispensedItem.objects.get(visit=self.visit, batch=self.batch2)
+        self.assertEqual(di_b1.quantity_dispensed, 5)
+        self.assertEqual(di_b2.quantity_dispensed, 10)
+
+    def test_dispense_fails_if_total_insufficient(self):
+        """Qty > total stock across all batches: 400 error."""
+        # batch1=5 + batch2=20 = 25 total; request 30
+        resp = self.client.post(self.confirm_url, data=self._payload(30), content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.json()['ok'])
+        self.assertIn('total stock', resp.json()['error'].lower())
+
+    def test_stock_qty_in_dispense_view_shows_total(self):
+        """The dispense page should show total stock (sum of batches), not just first batch qty."""
+        # batch1=5, batch2=20 → total=25
+        from prescription.models import Prescription, PrescriptionMedicine
+        rx = Prescription.objects.create(
+            visit=self.visit, doctor=self.staff,
+            raw_clinical_note='test', diagnosis='Infection',
+        )
+        PrescriptionMedicine.objects.create(
+            prescription=rx, drug_name='Amoxicillin 500mg',
+            dosage='1-0-1', frequency='After meals',
+            duration='7 days', route='', notes='', order=0,
+        )
+        resp = self.client.get(f'/pharmacy/dispense/{self.visit.id}/')
+        self.assertEqual(resp.status_code, 200)
+        rows = resp.context['medicine_rows']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['stock_qty'], 25)  # total, not just batch1's 5
+
+    def test_single_batch_item_still_works(self):
+        """Normal single-batch item dispenses as before."""
+        _, single_batch = make_item_with_batch(self.clinic, name='Paracetamol 500mg', qty=50)
+        payload = json.dumps({
+            'items': [{
+                'batch_id': single_batch.pk,
+                'pharmacy_item_id': single_batch.item.pk,
+                'prescription_med_id': None,
+                'qty': 20,
+                'is_substitute': False,
+                'notes': '',
+            }],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+        resp = self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()['ok'])
+        single_batch.refresh_from_db()
+        self.assertEqual(single_batch.quantity, 30)
+
+    def test_overflow_batch_with_zero_price_bills_at_first_batch_price(self):
+        """
+        Regression: if overflow batch has unit_price=0 (added without price),
+        the bill must still use the first batch's price — not Rs 0.
+        This was the real-world bug: 8 caps billed at Rs 15.90, 2 caps billed at Rs 0.
+        """
+        # batch1: 8 units at Rs 15.90 (expires sooner — FEFO first)
+        # batch2: 20 units at Rs 0.00 (added without price — this is the bug trigger)
+        item = PharmacyItem.objects.create(
+            clinic=self.clinic, custom_name='Cap Evelife 1gm',
+            custom_generic_name='Etoricoxib', reorder_level=5,
+        )
+        batch1 = PharmacyBatch.objects.create(
+            item=item, batch_number='CD-252101D',
+            expiry_date=today() + datetime.timedelta(days=60),
+            quantity=8, unit_price='15.90',
+        )
+        PharmacyBatch.objects.create(
+            item=item, batch_number='CD-252882B',
+            expiry_date=today() + datetime.timedelta(days=180),
+            quantity=20, unit_price='0.00',  # the bug: zero price on overflow batch
+        )
+        # Dispense 10 units (8 from batch1, 2 from batch2)
+        payload = json.dumps({
+            'items': [{
+                'batch_id': batch1.pk,
+                'pharmacy_item_id': item.pk,
+                'prescription_med_id': None,
+                'qty': 10,
+                'is_substitute': False,
+                'notes': '',
+            }],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+        resp = self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()['ok'])
+
+        # Bill should be 10 × 15.90 = 159.00 (NOT 8×15.90 + 2×0 = 127.20)
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        self.assertEqual(bill.subtotal, decimal.Decimal('159.00'))
+        self.assertEqual(bill.final_amount, decimal.Decimal('159.00'))
+
+        # Both DispensedItems should have unit_price = 15.90
+        dis = DispensedItem.objects.filter(visit=self.visit).order_by('batch__expiry_date')
+        self.assertEqual(dis[0].unit_price, decimal.Decimal('15.90'))
+        self.assertEqual(dis[1].unit_price, decimal.Decimal('15.90'))
+
+
+
+# ===========================================================================
+# Zero-price batch fix — 3-layer protection tests
+# ===========================================================================
+
+
+class ZeroPriceLayer3FormValidationTest(TestCase):
+    """Layer 3: add_stock, add_batch, edit_batch views must reject unit_price <= 0."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('zp_form')
+        self.client = Client()
+        self.client.login(username='zp_form', password='testpass123')
+        self.med = make_catalog_medicine(name='TestDrug ZP', generic='TestGeneric')
+        self.item = PharmacyItem.objects.create(
+            clinic=self.clinic, medicine=self.med, reorder_level=5,
+        )
+        self.batch = PharmacyBatch.objects.create(
+            item=self.item, batch_number='ZPBATCH',
+            expiry_date=today() + datetime.timedelta(days=90),
+            quantity=20, unit_price='5.00',
+        )
+
+    # --- add_stock with zero price ---
+
+    def test_add_stock_zero_price_returns_error_not_redirect(self):
+        resp = self.client.post('/pharmacy/add/', {
+            'catalog_id': '',
+            'custom_name': 'ZeroMed',
+            'batch_number': 'ZB001',
+            'quantity': 10,
+            'unit_price': '0',
+            'reorder_level': 5,
+        })
+        self.assertEqual(resp.status_code, 200)
+
+    def test_add_stock_zero_price_shows_error_message(self):
+        resp = self.client.post('/pharmacy/add/', {
+            'catalog_id': '',
+            'custom_name': 'ZeroMed',
+            'batch_number': 'ZB001',
+            'quantity': 10,
+            'unit_price': '0',
+            'reorder_level': 5,
+        })
+        self.assertContains(resp, 'Unit price')
+
+    def test_add_stock_zero_price_does_not_create_item(self):
+        pre_count = PharmacyItem.objects.filter(clinic=self.clinic, custom_name='ZeroMed').count()
+        self.client.post('/pharmacy/add/', {
+            'catalog_id': '',
+            'custom_name': 'ZeroMed',
+            'batch_number': 'ZB001',
+            'quantity': 10,
+            'unit_price': '0',
+            'reorder_level': 5,
+        })
+        self.assertEqual(
+            PharmacyItem.objects.filter(clinic=self.clinic, custom_name='ZeroMed').count(),
+            pre_count,
+        )
+
+    def test_add_stock_valid_price_still_creates_item(self):
+        resp = self.client.post('/pharmacy/add/', {
+            'catalog_id': '',
+            'custom_name': 'ValidMed',
+            'batch_number': 'VB001',
+            'quantity': 10,
+            'unit_price': '12.50',
+            'reorder_level': 5,
+        })
+        self.assertRedirects(resp, '/pharmacy/')
+        self.assertTrue(PharmacyItem.objects.filter(clinic=self.clinic, custom_name='ValidMed').exists())
+
+    # --- add_batch with zero price ---
+
+    def test_add_batch_zero_price_returns_error_not_redirect(self):
+        resp = self.client.post(f'/pharmacy/item/{self.item.pk}/add-batch/', {
+            'batch_number': 'ZBB001',
+            'quantity': 15,
+            'unit_price': '0',
+        })
+        self.assertEqual(resp.status_code, 200)
+
+    def test_add_batch_zero_price_shows_error_message(self):
+        resp = self.client.post(f'/pharmacy/item/{self.item.pk}/add-batch/', {
+            'batch_number': 'ZBB001',
+            'quantity': 15,
+            'unit_price': '0',
+        })
+        self.assertContains(resp, 'Unit price')
+
+    def test_add_batch_zero_price_does_not_create_batch(self):
+        pre_count = self.item.batches.count()
+        self.client.post(f'/pharmacy/item/{self.item.pk}/add-batch/', {
+            'batch_number': 'ZBB001',
+            'quantity': 15,
+            'unit_price': '0',
+        })
+        self.assertEqual(self.item.batches.count(), pre_count)
+
+    def test_add_batch_valid_price_creates_batch(self):
+        pre_count = self.item.batches.count()
+        resp = self.client.post(f'/pharmacy/item/{self.item.pk}/add-batch/', {
+            'batch_number': 'VBB001',
+            'quantity': 15,
+            'unit_price': '7.00',
+        })
+        self.assertRedirects(resp, '/pharmacy/')
+        self.assertEqual(self.item.batches.count(), pre_count + 1)
+
+    # --- edit_batch with zero price ---
+
+    def test_edit_batch_zero_price_returns_error_not_redirect(self):
+        resp = self.client.post(f'/pharmacy/batch/{self.batch.pk}/edit/', {
+            'batch_number': 'EDITED',
+            'quantity': 20,
+            'unit_price': '0',
+        })
+        self.assertEqual(resp.status_code, 200)
+
+    def test_edit_batch_zero_price_shows_error_message(self):
+        resp = self.client.post(f'/pharmacy/batch/{self.batch.pk}/edit/', {
+            'batch_number': 'EDITED',
+            'quantity': 20,
+            'unit_price': '0',
+        })
+        self.assertContains(resp, 'Unit price')
+
+    def test_edit_batch_zero_price_does_not_save(self):
+        self.client.post(f'/pharmacy/batch/{self.batch.pk}/edit/', {
+            'batch_number': 'EDITED',
+            'quantity': 20,
+            'unit_price': '0',
+        })
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.unit_price, decimal.Decimal('5.00'))  # unchanged
+
+    def test_edit_batch_valid_price_saves(self):
+        resp = self.client.post(f'/pharmacy/batch/{self.batch.pk}/edit/', {
+            'batch_number': 'EDITED',
+            'quantity': 20,
+            'unit_price': '9.99',
+        })
+        self.assertRedirects(resp, '/pharmacy/')
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.unit_price, decimal.Decimal('9.99'))
+
+
+class ZeroPriceLayer2DispenseBlockTest(TestCase):
+    """Layer 2: confirm_dispense_api must block if billing batch has unit_price=0."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('zp_disp')
+        self.patient, self.visit = make_patient_and_visit(self.clinic, 'zpd')
+        self.client = Client()
+        self.client.login(username='zp_disp', password='testpass123')
+        self.confirm_url = f'/pharmacy/dispense/{self.visit.id}/confirm/'
+
+    def _make_zero_price_item(self, name='ZeroPriceMed', qty=50):
+        item = PharmacyItem.objects.create(
+            clinic=self.clinic, custom_name=name, reorder_level=5,
+        )
+        batch = PharmacyBatch.objects.create(
+            item=item, batch_number='ZP001',
+            expiry_date=today() + datetime.timedelta(days=90),
+            quantity=qty, unit_price='0.00',
+        )
+        return item, batch
+
+    def test_confirm_blocked_when_first_fefo_batch_has_zero_price(self):
+        item, batch = self._make_zero_price_item()
+        payload = json.dumps({
+            'items': [{'batch_id': batch.pk, 'qty': 5, 'is_substitute': False, 'notes': ''}],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+        resp = self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.json()['ok'])
+
+    def test_confirm_blocked_error_message_mentions_price(self):
+        item, batch = self._make_zero_price_item()
+        payload = json.dumps({
+            'items': [{'batch_id': batch.pk, 'qty': 5, 'is_substitute': False, 'notes': ''}],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+        resp = self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        error = resp.json()['error'].lower()
+        self.assertIn('price', error)
+
+    def test_confirm_blocked_does_not_create_bill(self):
+        item, batch = self._make_zero_price_item()
+        payload = json.dumps({
+            'items': [{'batch_id': batch.pk, 'qty': 5, 'is_substitute': False, 'notes': ''}],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+        self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        self.assertFalse(PharmacyBill.objects.filter(visit=self.visit).exists())
+
+    def test_confirm_blocked_does_not_decrement_stock(self):
+        item, batch = self._make_zero_price_item(qty=50)
+        payload = json.dumps({
+            'items': [{'batch_id': batch.pk, 'qty': 5, 'is_substitute': False, 'notes': ''}],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+        self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        batch.refresh_from_db()
+        self.assertEqual(batch.quantity, 50)  # unchanged
+
+    def test_confirm_succeeds_when_first_fefo_has_valid_price(self):
+        item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='NormalPriceMed', reorder_level=5)
+        batch = PharmacyBatch.objects.create(
+            item=item, batch_number='NP001',
+            expiry_date=today() + datetime.timedelta(days=90),
+            quantity=50, unit_price='10.00',
+        )
+        payload = json.dumps({
+            'items': [{'batch_id': batch.pk, 'qty': 5, 'is_substitute': False, 'notes': ''}],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+        resp = self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()['ok'])
+
+    def test_overflow_zero_price_second_batch_not_blocked(self):
+        """First FEFO batch has valid price; second overflow batch has price=0 → must NOT block."""
+        item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='OverflowTest', reorder_level=5)
+        first_batch = PharmacyBatch.objects.create(
+            item=item, batch_number='OVF-B1',
+            expiry_date=today() + datetime.timedelta(days=30),
+            quantity=8, unit_price='15.90',
+        )
+        PharmacyBatch.objects.create(
+            item=item, batch_number='OVF-B2',
+            expiry_date=today() + datetime.timedelta(days=180),
+            quantity=20, unit_price='0.00',
+        )
+        payload = json.dumps({
+            'items': [{'batch_id': first_batch.pk, 'qty': 10, 'is_substitute': False, 'notes': ''}],
+            'discount': 0,
+            'payment_mode': 'cash',
+        })
+        resp = self.client.post(self.confirm_url, data=payload, content_type='application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()['ok'])
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        self.assertEqual(bill.subtotal, decimal.Decimal('159.00'))
+
+
+class ZeroPriceLayer1DashboardWarningTest(TestCase):
+    """Layer 1: pharmacy dashboard exposes zero_price_batches in context and HTML."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('zp_dash')
+        self.client = Client()
+        self.client.login(username='zp_dash', password='testpass123')
+
+    def _make_batch_with_price(self, price, qty=10, name=None):
+        item = PharmacyItem.objects.create(
+            clinic=self.clinic, custom_name=name or f'Drug_{price}', reorder_level=5,
+        )
+        batch = PharmacyBatch.objects.create(
+            item=item, batch_number='B1',
+            expiry_date=today() + datetime.timedelta(days=90),
+            quantity=qty, unit_price=price,
+        )
+        return item, batch
+
+    def test_zero_price_batches_in_context(self):
+        _, zp_batch = self._make_batch_with_price('0.00', name='ZeroDrug')
+        resp = self.client.get('/pharmacy/')
+        self.assertEqual(resp.status_code, 200)
+        zp_batches = resp.context['zero_price_batches']
+        self.assertIn(zp_batch.pk, [b.pk for b in zp_batches])
+
+    def test_nonzero_price_batch_not_in_warning_context(self):
+        _, good_batch = self._make_batch_with_price('5.00', name='GoodDrug')
+        resp = self.client.get('/pharmacy/')
+        zp_batches = resp.context['zero_price_batches']
+        self.assertNotIn(good_batch.pk, [b.pk for b in zp_batches])
+
+    def test_zero_qty_batch_not_in_warning_context(self):
+        _, empty_batch = self._make_batch_with_price('0.00', qty=0, name='EmptyZeroDrug')
+        resp = self.client.get('/pharmacy/')
+        zp_batches = resp.context['zero_price_batches']
+        self.assertNotIn(empty_batch.pk, [b.pk for b in zp_batches])
+
+    def test_warning_card_shown_in_html(self):
+        self._make_batch_with_price('0.00', name='HtmlWarnDrug')
+        resp = self.client.get('/pharmacy/')
+        self.assertContains(resp, 'Set Price')
+
+    def test_warning_card_absent_when_no_zero_price_batches(self):
+        self._make_batch_with_price('10.00', name='PricedDrug')
+        resp = self.client.get('/pharmacy/')
+        self.assertNotContains(resp, 'Set Price')
+
+    def test_warning_shows_medicine_name(self):
+        self._make_batch_with_price('0.00', name='AlertMe Drug')
+        resp = self.client.get('/pharmacy/')
+        self.assertContains(resp, 'AlertMe Drug')
+
+    def test_warning_card_isolates_to_own_clinic(self):
+        """Zero-price batches from another clinic must not appear."""
+        other_clinic, _, _ = make_clinic_and_user('zp_other', 'Other ZP Clinic')
+        other_item = PharmacyItem.objects.create(
+            clinic=other_clinic, custom_name='OtherZeroDrug', reorder_level=5,
+        )
+        other_batch = PharmacyBatch.objects.create(
+            item=other_item, batch_number='OZP',
+            expiry_date=today() + datetime.timedelta(days=60),
+            quantity=10, unit_price='0.00',
+        )
+        resp = self.client.get('/pharmacy/')
+        zp_batches = resp.context['zero_price_batches']
+        self.assertNotIn(other_batch.pk, [b.pk for b in zp_batches])
+
+    def test_warning_card_shows_only_5_rows_by_default(self):
+        """When > 5 zero-price batches exist, only 5 are visible by default (rest hidden)."""
+        for i in range(8):
+            item = PharmacyItem.objects.create(
+                clinic=self.clinic, custom_name=f'TruncDrug{i}', reorder_level=5,
+            )
+            PharmacyBatch.objects.create(
+                item=item, batch_number=f'T{i}',
+                expiry_date=today() + datetime.timedelta(days=90),
+                quantity=10, unit_price='0.00',
+            )
+        resp = self.client.get('/pharmacy/')
+        content = resp.content.decode()
+        # Toggle button should appear
+        self.assertIn('Show all 8', content)
+        # Hidden rows marker present
+        self.assertIn('zp-row-hidden', content)
+
+    def test_warning_card_no_toggle_when_5_or_fewer(self):
+        """5 or fewer zero-price batches — no toggle button rendered."""
+        for i in range(3):
+            item = PharmacyItem.objects.create(
+                clinic=self.clinic, custom_name=f'FewDrug{i}', reorder_level=5,
+            )
+            PharmacyBatch.objects.create(
+                item=item, batch_number=f'F{i}',
+                expiry_date=today() + datetime.timedelta(days=90),
+                quantity=10, unit_price='0.00',
+            )
+        resp = self.client.get('/pharmacy/')
+        # Context must have ≤5 batches
+        self.assertLessEqual(len(resp.context['zero_price_batches']), 5)
+        # Toggle button id must not be present in the HTML
+        self.assertNotContains(resp, 'id="zp-toggle-btn"')

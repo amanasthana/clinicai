@@ -162,6 +162,31 @@ def patient_edit_view(request, pk):
     })
 
 
+@require_permission('can_manage_staff')
+def patient_delete_view(request, pk):
+    """Delete a patient record. Only doctors/admins can do this."""
+    clinic = request.user.staff_profile.clinic
+    patient = get_object_or_404(Patient, id=pk, clinic=clinic)
+
+    visit_count = patient.visits.count()
+
+    if request.method == 'POST':
+        confirm = request.POST.get('confirm', '')
+        if confirm == 'DELETE':
+            patient_name = patient.full_name
+            patient.delete()
+            messages.success(request, f'Patient "{patient_name}" and all their records have been deleted.')
+            return redirect('reception:dashboard')
+        else:
+            messages.error(request, 'Type DELETE to confirm.')
+
+    return render(request, 'reception/patient_delete.html', {
+        'patient': patient,
+        'visit_count': visit_count,
+        'clinic': clinic,
+    })
+
+
 @require_permission('can_register_patients')
 def visit_detail_view(request, pk):
     """View/edit vitals for a specific visit."""

@@ -39,7 +39,13 @@
 
       <!-- Actions -->
       <div style="display:flex; flex-direction:column; gap:10px; align-items:flex-end;">
-        <a href="/patient/{{ patient.id }}/edit/" class="btn btn-secondary btn-sm">Edit Profile</a>
+        <div style="display:flex; gap:8px;">
+          <a href="/patient/{{ patient.id }}/edit/" class="btn btn-secondary btn-sm">Edit Profile</a>
+          {% if request.user.staff_profile.can_manage_staff %}
+          <a href="/patient/{{ patient.id }}/delete/" class="btn btn-sm"
+             style="background:#FEF2F2; color:#DC2626; border:1px solid #FCA5A5;">Delete</a>
+          {% endif %}
+        </div>
         <form method="post">
           {% csrf_token %}
           <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">

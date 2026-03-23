@@ -68,15 +68,41 @@
   background: #EFF6FF;
   color: #1D4ED8;
 }
+/* Mobile: qty control wraps below medicine name; payment buttons stack */
+@media (max-width: 480px) {
+  .qty-control { width: 100%; justify-content: center; }
+  .qty-btn { width: 48px; height: 48px; }
+  .qty-input { flex: 1; }
+  .pay-btn { flex: 1 1 100%; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="page-container" style="max-width:700px;">
 
-  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
     <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">Back to Pharmacy</a>
     <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Dispense Medicines</h1>
+  </div>
+
+  {% if zero_price_names %}
+  <div style="background:#FFF7ED; border:1.5px solid #F97316; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#7C2D12;">
+    <strong>Cannot confirm bill — price missing for:</strong>
+    <ul style="margin:6px 0 8px 18px; padding:0;">
+      {% for name in zero_price_names %}
+      <li>{{ name }}</li>
+      {% endfor %}
+    </ul>
+    Go to <a href="/pharmacy/" style="color:#EA580C; font-weight:600;">Pharmacy</a> and click <strong>Set Price →</strong> on the highlighted batches, then return here to dispense.
+  </div>
+  {% endif %}
+
+  <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#166534;">
+    Medicines from the prescription are auto-matched below. Adjust quantities if needed.
+    <strong>FEFO:</strong> Earliest expiry batch is selected automatically.
+    Stock updates <strong>instantly</strong> when you confirm the bill — no delay.
+    If a medicine shows "Out of stock", check if it needs to be added to inventory first.
   </div>
 
   <!-- Patient info -->
@@ -117,7 +143,7 @@
         <input type="hidden" class="f-unit-price" value="{{ row.unit_price }}">
         <input type="hidden" class="f-substitute" value="false">
 
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
           <div style="flex:1; min-width:0;">
             <div style="font-size:15px; font-weight:600; color:#111827;">{{ row.drug_name }}</div>
             <div style="font-size:12px; color:#6B7280; margin-top:2px;">{{ row.dosage }} &middot; {{ row.duration }}</div>
@@ -135,7 +161,7 @@
             {% endif %}
           </div>
 
-          <div>
+          <div style="flex-shrink:0; min-width:152px;">
             <div style="font-size:11px; color:#9CA3AF; margin-bottom:6px; text-align:center;">Quantity</div>
             <div class="qty-control">
               <button type="button" class="qty-btn" onclick="changeQty(this, -1)">-</button>

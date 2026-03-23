@@ -436,6 +436,8 @@
     Send PDF via WhatsApp
   </button>
   {% endif %}
+  <a href="/rx/consult/{{ rx.visit.id }}/" class="tb-btn tb-back"
+     title="Found a mistake? Click to reopen this prescription for editing. Your changes will update the saved prescription.">✏️ Edit Rx</a>
   <a href="javascript:history.back()" class="tb-btn tb-back">← Back</a>
   <a href="/rx/doctor/" class="tb-btn tb-back">Queue</a>
 </div>
@@ -536,6 +538,7 @@
           <div class="rx-med-card-name">{{ med.drug_name }}</div>
           <!-- English sig -->
           <div class="rx-med-card-sig en-only">
+            {% if med.route %}<span style="background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; margin-right:4px;">{{ med.route }}</span>{% endif %}
             <span class="rx-dosage-badge{% if dl|slice:':3' == 'sos' %} sos{% endif %}">{{ med.dosage }}</span>
             {% if med.frequency %}<span class="rx-med-card-sep">·</span><span class="rx-med-card-freq">{{ med.frequency }}</span>{% endif %}
             {% if med.duration %}<span class="rx-med-card-sep">·</span><span class="rx-med-card-dur">{{ med.duration }}</span>{% endif %}
@@ -580,7 +583,7 @@
           <tr>
             <td class="col-n">{{ forloop.counter }}</td>
             <td class="col-drug">
-              {{ med.drug_name }}
+              {{ med.drug_name }}{% if med.route %} <span style="font-size:7.5pt; font-weight:700; color:#1D4ED8;">({{ med.route }})</span>{% endif %}
               {% if med.notes and show_remarks %}
               <span class="drug-note en-only">{{ med.notes }}</span>
               <span class="drug-note hi-only" data-notes-en="{{ med.notes }}"></span>
