@@ -93,7 +93,7 @@ def queue_api(request):
       done              → only done
     """
     clinic = request.user.staff_profile.clinic
-    today = timezone.now().date()
+    today = timezone.localdate()
     status_filter = request.GET.get('status', '').strip()
 
     qs = Visit.objects.filter(clinic=clinic, visit_date=today).select_related('patient').order_by('token_number')

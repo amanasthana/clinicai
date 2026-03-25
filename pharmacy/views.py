@@ -24,7 +24,7 @@ def pharmacy_dashboard(request):
     # Pending dispense: all today's visits without a bill (any status except no_show/cancelled)
     from reception.models import Visit
     from django.utils import timezone as tz
-    today = tz.now().date()
+    today = tz.localdate()
     pending_dispense = (
         Visit.objects
         .filter(clinic=clinic, visit_date=today)
@@ -50,7 +50,7 @@ def pharmacy_dashboard(request):
 
     import datetime
     from django.utils import timezone as tz
-    today = tz.now().date()
+    today = tz.localdate()
     today_plus_90 = (today + datetime.timedelta(days=90)).strftime('%Y-%m-%d')
     expiring_3m_count = 0
     expiring_6m_count = 0
@@ -845,7 +845,7 @@ def walk_in_view(request):
             return redirect('pharmacy:walk_in')
 
         # Find today's visit or create one
-        today = tz.now().date()
+        today = tz.localdate()
         visit = Visit.objects.filter(patient=patient, clinic=clinic, visit_date=today).first()
         if not visit:
             last = Visit.objects.filter(clinic=clinic, visit_date=today).order_by('-token_number').first()

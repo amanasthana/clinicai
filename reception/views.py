@@ -27,7 +27,7 @@ def dashboard_view(request):
     This is the primary screen for receptionists.
     """
     clinic = request.user.staff_profile.clinic
-    today = timezone.now().date()
+    today = timezone.localdate()
 
     queue = (
         Visit.objects.filter(clinic=clinic, visit_date=today)
@@ -214,7 +214,7 @@ def analytics_view(request):
     """
     staff = request.user.staff_profile
     clinic = staff.clinic
-    today = timezone.now().date()
+    today = timezone.localdate()
 
     # ── Date range picker ──────────────────────────────────────────────────
     range_param = request.GET.get('range', '30')
@@ -351,7 +351,7 @@ def _get_clinic_data_context(clinic, question):
     if any(kw in q for kw in inv_keywords):
         import datetime as _dt
         from pharmacy.models import PharmacyItem, PharmacyBatch
-        today = timezone.now().date()
+        today = timezone.localdate()
         soon90  = today + _dt.timedelta(days=90)
         soon30  = today + _dt.timedelta(days=30)
 
@@ -401,7 +401,7 @@ def _get_clinic_data_context(clinic, question):
         import datetime as _dt
         from django.db.models import Count
         from django.db.models.functions import TruncDate
-        today = timezone.now().date()
+        today = timezone.localdate()
         base = Visit.objects.filter(clinic=clinic).exclude(status__in=['no_show', 'cancelled'])
 
         today_v    = base.filter(visit_date=today).count()
@@ -439,7 +439,7 @@ def _get_clinic_data_context(clinic, question):
         import datetime as _dt
         from django.db.models import Sum
         from pharmacy.models import PharmacyBill
-        today = timezone.now().date()
+        today = timezone.localdate()
 
         def rev(qs): return qs.aggregate(t=Sum('final_amount'))['t'] or 0
 
