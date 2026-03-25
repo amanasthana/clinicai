@@ -118,6 +118,14 @@
   {% endif %}
   {% endif %}
 
+  <!-- ── GST setup nudge (only if GSTIN not set) ── -->
+  {% if not clinic.gst_number %}
+  <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#6B7280; margin-bottom:16px; padding:10px 14px; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>Want GSTIN and tax breakdown on your bills? <a href="/accounts/clinic/edit/" style="color:#2563EB; text-decoration:none; font-weight:500;">Add your GST details in clinic settings →</a></span>
+  </div>
+  {% endif %}
+
   <!-- ── Default discount setting ── -->
   {% if request.user.staff_profile.can_dispense_bill or request.user.staff_profile.can_manage_staff %}
   <form method="post" action="/pharmacy/settings/" style="margin-bottom:20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px;">

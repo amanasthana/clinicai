@@ -11,6 +11,8 @@ class Clinic(models.Model):
     phone = models.CharField(max_length=15, blank=True)
     drug_license_number = models.CharField(max_length=100, blank=True)
     medical_license_number = models.CharField(max_length=100, blank=True)
+    gst_number = models.CharField(max_length=15, blank=True)
+    default_gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Custom letterhead for printing on pre-printed prescription pads

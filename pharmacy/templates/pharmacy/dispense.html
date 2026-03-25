@@ -86,6 +86,16 @@
     <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Dispense Medicines</h1>
   </div>
 
+  {% if not clinic.drug_license_number or not clinic.medical_license_number or not clinic.gst_number %}
+  <div style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:#6B7280; margin-bottom:14px; padding:10px 14px; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px; line-height:1.5;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>
+      Your bill is missing:{% if not clinic.drug_license_number %} <strong>Drug License</strong>{% endif %}{% if not clinic.medical_license_number %}{% if not clinic.drug_license_number %},{% endif %} <strong>Medical License</strong>{% endif %}{% if not clinic.gst_number %}{% if not clinic.drug_license_number or not clinic.medical_license_number %},{% endif %} <strong>GSTIN</strong>{% endif %}.
+      <a href="/accounts/clinic/edit/" style="color:#2563EB; text-decoration:none; font-weight:500;">Add them in clinic settings →</a>
+    </span>
+  </div>
+  {% endif %}
+
   {% if zero_price_names %}
   <div style="background:#FFF7ED; border:1.5px solid #F97316; border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#7C2D12;">
     <strong>Cannot confirm bill — price missing for:</strong>
@@ -234,6 +244,10 @@
         <span>Discount</span>
         <span id="discount-display">Rs 0.00</span>
       </div>
+      <div id="gst-row" style="display:{% if clinic.default_gst_percent %}flex{% else %}none{% endif %}; justify-content:space-between; font-size:14px; color:#374151; margin-bottom:6px;">
+        <span>GST ({{ clinic.default_gst_percent }}%)</span>
+        <span id="gst-display">Rs 0.00</span>
+      </div>
       <div style="display:flex; justify-content:space-between; font-size:17px; font-weight:700; color:#111827; border-top:1px solid #E5E7EB; padding-top:10px;">
         <span>Total</span>
         <span id="total-display">Rs 0.00</span>
@@ -276,6 +290,8 @@ function getRows() {
   return Array.from(document.querySelectorAll('#med-list .med-row'));
 }
 
+const CLINIC_GST_PERCENT = {{ clinic.default_gst_percent|default:0 }};
+
 function updateTotal() {
   let subtotal = 0;
   getRows().forEach(row => {
@@ -285,9 +301,16 @@ function updateTotal() {
   });
   const discountPct = parseInt(document.getElementById('discount-pct').value) || 0;
   const discountAmt = subtotal * discountPct / 100;
-  const total = subtotal - discountAmt;
+  const taxable = subtotal - discountAmt;
+  const gstAmt = taxable * CLINIC_GST_PERCENT / 100;
+  const total = taxable + gstAmt;
   document.getElementById('subtotal-display').textContent = 'Rs ' + subtotal.toFixed(2);
   document.getElementById('discount-display').textContent = 'Rs ' + discountAmt.toFixed(2);
+  const gstRow = document.getElementById('gst-row');
+  if (gstRow) {
+    gstRow.style.display = CLINIC_GST_PERCENT > 0 ? 'flex' : 'none';
+    document.getElementById('gst-display').textContent = 'Rs ' + gstAmt.toFixed(2);
+  }
   document.getElementById('total-display').textContent = 'Rs ' + total.toFixed(2);
 }
 

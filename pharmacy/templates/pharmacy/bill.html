@@ -164,6 +164,7 @@
           {% if clinic.phone %}<div style="font-size:12px; color:#6B7280;">Tel: {{ clinic.phone }}</div>{% endif %}
           {% if clinic.drug_license_number %}<div style="font-size:12px; color:#6B7280;">Drug Lic: {{ clinic.drug_license_number }}</div>{% endif %}
           {% if clinic.medical_license_number %}<div style="font-size:12px; color:#6B7280;">Med Lic: {{ clinic.medical_license_number }}</div>{% endif %}
+          {% if clinic.gst_number %}<div style="font-size:12px; color:#6B7280;">GSTIN: {{ clinic.gst_number }}</div>{% endif %}
         </div>
         <div style="text-align:right;">
           <div style="font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.6px;">Medicine Bill</div>
@@ -255,6 +256,16 @@
       <div class="total-row" style="color:#059669;">
         <span>Discount ({{ bill.discount_percent }}%)</span>
         <span>− Rs {{ discount_amount }}</span>
+      </div>
+      {% endif %}
+      {% if bill.gst_percent %}
+      <div class="total-row" style="color:#374151;">
+        <span>CGST ({{ half_gst_percent }}%)</span>
+        <span>Rs {{ half_gst_amount }}</span>
+      </div>
+      <div class="total-row" style="color:#374151;">
+        <span>SGST ({{ half_gst_percent }}%)</span>
+        <span>Rs {{ half_gst_amount }}</span>
       </div>
       {% endif %}
       <div class="total-row total-final">

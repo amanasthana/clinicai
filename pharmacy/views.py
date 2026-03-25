@@ -613,9 +613,12 @@ def confirm_dispense_api(request, visit_id):
                 subtotal += billing_price * use
                 remaining -= use
 
-        # Calculate final amount
-        discount_amount = subtotal * discount_percent / 100
-        final_amount = subtotal - discount_amount
+        # Calculate final amount with optional GST
+        discount_amount = subtotal * decimal.Decimal(discount_percent) / 100
+        taxable_amount = subtotal - discount_amount
+        gst_percent = clinic.default_gst_percent
+        gst_amount = (taxable_amount * gst_percent / 100).quantize(decimal.Decimal('0.01'))
+        final_amount = taxable_amount + gst_amount
 
         bill = PharmacyBill.objects.create(
             visit=visit,
@@ -623,6 +626,8 @@ def confirm_dispense_api(request, visit_id):
             bill_number=PharmacyBill.generate_bill_number(clinic.pk),
             subtotal=subtotal,
             discount_percent=discount_percent,
+            gst_percent=gst_percent,
+            gst_amount=gst_amount,
             final_amount=final_amount,
             payment_mode=payment_mode,
             created_by=request.user.staff_profile,
@@ -649,7 +654,10 @@ def bill_view(request, bill_id):
     for item in dispensed_items:
         item.line_amount = item.quantity_dispensed * item.unit_price
     prescription = getattr(bill.visit, 'prescription', None)
-    discount_amount = bill.subtotal - bill.final_amount
+    discount_amount = (bill.subtotal * bill.discount_percent / 100).quantize(decimal.Decimal('0.01'))
+    # CGST + SGST split (each = gst_percent / 2)
+    half_gst_percent = (bill.gst_percent / 2) if bill.gst_percent else decimal.Decimal('0')
+    half_gst_amount = (bill.gst_amount / 2).quantize(decimal.Decimal('0.01')) if bill.gst_percent else decimal.Decimal('0')
 
     # WhatsApp deeplink for patient (if phone available)
     wa_url = ''
@@ -670,6 +678,8 @@ def bill_view(request, bill_id):
         'dispensed_items': dispensed_items,
         'prescription': prescription,
         'discount_amount': discount_amount,
+        'half_gst_percent': half_gst_percent,
+        'half_gst_amount': half_gst_amount,
         'wa_url': wa_url,
     })
 

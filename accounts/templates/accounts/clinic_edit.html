@@ -34,16 +34,43 @@
         <label class="form-label">Phone</label>
         <input name="phone" value="{{ clinic.phone }}" class="input-field" inputmode="tel">
       </div>
+      <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
+      <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">License Numbers</div>
       <div style="margin-bottom:12px;">
         <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:4px;">Drug License Number</label>
         <input type="text" name="drug_license_number" value="{{ clinic.drug_license_number }}"
           class="input-field" placeholder="e.g. MH-MUM-123456" style="font-size:14px;">
+        <div style="font-size:11px; color:#6B7280; margin-top:3px;">Printed on every pharmacy bill.</div>
       </div>
       <div style="margin-bottom:12px;">
         <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:4px;">Medical License Number</label>
         <input type="text" name="medical_license_number" value="{{ clinic.medical_license_number }}"
           class="input-field" placeholder="e.g. MMC-2024-XXXXX" style="font-size:14px;">
       </div>
+
+      <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
+      <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">GST / Tax</div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:4px;">GSTIN</label>
+        <input type="text" name="gst_number" value="{{ clinic.gst_number }}"
+          class="input-field" placeholder="e.g. 27AABCU9603R1ZX" maxlength="15"
+          style="font-size:14px; text-transform:uppercase;"
+          oninput="this.value=this.value.toUpperCase()">
+        <div style="font-size:11px; color:#6B7280; margin-top:3px;">15-character GST Identification Number. Leave blank if not GST registered.</div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:4px;">GST Rate on Pharmacy Bills</label>
+        <select name="default_gst_percent" class="input-field" style="font-size:14px;">
+          <option value="0" {% if clinic.default_gst_percent == 0 %}selected{% endif %}>0% — Most generic / NLEM medicines (most clinics)</option>
+          <option value="5" {% if clinic.default_gst_percent == 5 %}selected{% endif %}>5% — Non-essential branded medicines</option>
+          <option value="12" {% if clinic.default_gst_percent == 12 %}selected{% endif %}>12% — Medical devices, surgical items, Ayurvedic</option>
+          <option value="18" {% if clinic.default_gst_percent == 18 %}selected{% endif %}>18% — Equipment / other</option>
+        </select>
+        <div style="font-size:11px; color:#6B7280; margin-top:4px; line-height:1.5;">
+          GST rates are fixed by law based on medicine category (HSN code). Most small clinic pharmacies dispensing generic medicines fall under <strong>0%</strong>. This rate applies to your entire bill as a single lump — CGST + SGST will be shown split equally on the bill.
+        </div>
+      </div>
+
       <div style="margin-top:20px; display:flex; gap:10px;">
         <button type="submit" class="btn btn-primary" style="flex:1;">Save Changes</button>
         <a href="/accounts/staff/" class="btn btn-secondary">Cancel</a>

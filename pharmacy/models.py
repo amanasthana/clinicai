@@ -135,6 +135,8 @@ class PharmacyBill(models.Model):
     bill_number = models.CharField(max_length=30, unique=True)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     discount_percent = models.PositiveSmallIntegerField(default=0)
+    gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    gst_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     final_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     payment_mode = models.CharField(max_length=10, choices=PAYMENT_CHOICES, default='cash')
     created_by = models.ForeignKey('accounts.StaffMember', on_delete=models.SET_NULL, null=True)
@@ -143,9 +145,16 @@ class PharmacyBill(models.Model):
     @staticmethod
     def generate_bill_number(clinic_id):
         from django.utils import timezone
-        today = timezone.now().strftime('%Y%m%d')
-        count = PharmacyBill.objects.filter(created_at__date=timezone.now().date()).count() + 1
-        return f"BILL-{today}-{count:04d}"
+        today = timezone.localdate().strftime('%Y%m%d')
+        prefix = f"BILL-{today}-"
+        existing = PharmacyBill.objects.filter(
+            bill_number__startswith=prefix
+        ).values_list('bill_number', flat=True)
+        if existing:
+            seq = max(int(n[len(prefix):]) for n in existing) + 1
+        else:
+            seq = 1
+        return f"{prefix}{seq:04d}"
 
     def __str__(self):
         return f"{self.bill_number} — {self.visit.patient.full_name}"

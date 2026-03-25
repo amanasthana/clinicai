@@ -790,7 +790,17 @@ def clinic_edit_view(request):
         clinic.phone = request.POST.get('phone', '').strip()
         clinic.drug_license_number = request.POST.get('drug_license_number', '').strip()
         clinic.medical_license_number = request.POST.get('medical_license_number', '').strip()
-        clinic.save(update_fields=['name', 'address', 'city', 'state', 'phone', 'drug_license_number', 'medical_license_number'])
+        clinic.gst_number = request.POST.get('gst_number', '').strip().upper()
+        import decimal as _decimal
+        try:
+            clinic.default_gst_percent = _decimal.Decimal(request.POST.get('default_gst_percent', '0') or '0')
+        except Exception:
+            clinic.default_gst_percent = _decimal.Decimal('0')
+        clinic.save(update_fields=[
+            'name', 'address', 'city', 'state', 'phone',
+            'drug_license_number', 'medical_license_number',
+            'gst_number', 'default_gst_percent',
+        ])
         messages.success(request, 'Clinic details updated.')
         return redirect('accounts:staff_list')
     return render(request, 'accounts/clinic_edit.html', {'clinic': clinic})

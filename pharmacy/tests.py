@@ -845,7 +845,7 @@ class DispensedItemModelTest(TestCase):
         self.assertFalse(di.is_substitute)
 
     def test_bill_number_format(self):
-        today_str = timezone.now().strftime('%Y%m%d')
+        today_str = timezone.localdate().strftime('%Y%m%d')
         num = PharmacyBill.generate_bill_number(self.clinic.pk)
         self.assertTrue(num.startswith(f'BILL-{today_str}-'))
 
@@ -2871,3 +2871,141 @@ class ZeroPriceLayer1DashboardWarningTest(TestCase):
         self.assertLessEqual(len(resp.context['zero_price_batches']), 5)
         # Toggle button id must not be present in the HTML
         self.assertNotContains(resp, 'id="zp-toggle-btn"')
+
+
+# ===========================================================================
+# GST Billing Tests
+# ===========================================================================
+
+class GSTBillingTest(TestCase):
+    """Tests for GST calculation in confirm_dispense_api and bill display."""
+
+    def setUp(self):
+        self.clinic, self.user, self.staff = make_clinic_and_user('gst_user')
+        self.patient, self.visit = make_patient_and_visit(self.clinic, 'gst')
+        self.client = Client()
+        self.client.login(username='gst_user', password='testpass123')
+        self.confirm_url = f'/pharmacy/dispense/{self.visit.id}/confirm/'
+
+        self.item = PharmacyItem.objects.create(
+            clinic=self.clinic, custom_name='GSTMed', reorder_level=5,
+        )
+        self.batch = PharmacyBatch.objects.create(
+            item=self.item, batch_number='G001',
+            expiry_date=today() + datetime.timedelta(days=90),
+            quantity=100, unit_price='100.00',
+        )
+
+    def _dispense(self, qty=2, discount=0, gst_percent=None):
+        if gst_percent is not None:
+            self.clinic.default_gst_percent = decimal.Decimal(str(gst_percent))
+            self.clinic.save(update_fields=['default_gst_percent'])
+        payload = json.dumps({
+            'items': [{'batch_id': self.batch.pk, 'qty': qty, 'is_substitute': False, 'notes': ''}],
+            'discount': discount,
+            'payment_mode': 'cash',
+        })
+        return self.client.post(self.confirm_url, data=payload, content_type='application/json')
+
+    def test_no_gst_bill_final_equals_subtotal_minus_discount(self):
+        """0% GST: final_amount = subtotal - discount."""
+        resp = self._dispense(qty=2, discount=0, gst_percent=0)
+        self.assertEqual(resp.status_code, 200)
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        self.assertEqual(bill.subtotal, decimal.Decimal('200.00'))
+        self.assertEqual(bill.gst_percent, decimal.Decimal('0'))
+        self.assertEqual(bill.gst_amount, decimal.Decimal('0.00'))
+        self.assertEqual(bill.final_amount, decimal.Decimal('200.00'))
+
+    def test_5_percent_gst_calculation(self):
+        """5% GST on 200 subtotal → gst_amount=10, final=210."""
+        resp = self._dispense(qty=2, discount=0, gst_percent=5)
+        self.assertEqual(resp.status_code, 200)
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        self.assertEqual(bill.gst_percent, decimal.Decimal('5'))
+        self.assertEqual(bill.gst_amount, decimal.Decimal('10.00'))
+        self.assertEqual(bill.final_amount, decimal.Decimal('210.00'))
+
+    def test_12_percent_gst_calculation(self):
+        """12% GST on 200 → gst_amount=24, final=224."""
+        resp = self._dispense(qty=2, discount=0, gst_percent=12)
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        self.assertEqual(bill.gst_amount, decimal.Decimal('24.00'))
+        self.assertEqual(bill.final_amount, decimal.Decimal('224.00'))
+
+    def test_gst_applied_after_discount(self):
+        """GST is applied on taxable amount (after discount), not on subtotal."""
+        # subtotal=200, discount=10%→180 taxable, GST 5%→9, final=189
+        resp = self._dispense(qty=2, discount=10, gst_percent=5)
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        self.assertEqual(bill.subtotal, decimal.Decimal('200.00'))
+        self.assertEqual(bill.gst_amount, decimal.Decimal('9.00'))
+        self.assertEqual(bill.final_amount, decimal.Decimal('189.00'))
+
+    def test_gst_snapshots_clinic_rate_at_bill_creation(self):
+        """Bill stores the GST % at time of creation regardless of later changes."""
+        self._dispense(qty=2, discount=0, gst_percent=5)
+        # Change clinic GST to 12% after bill created
+        self.clinic.default_gst_percent = decimal.Decimal('12')
+        self.clinic.save(update_fields=['default_gst_percent'])
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        # Bill should still reflect 5%
+        self.assertEqual(bill.gst_percent, decimal.Decimal('5'))
+
+    def test_gst_number_shown_on_bill_html(self):
+        """GSTIN appears in bill HTML when set on clinic."""
+        self.clinic.gst_number = '27AABCU9603R1ZX'
+        self.clinic.save(update_fields=['gst_number'])
+        self._dispense(qty=1, gst_percent=0)
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        resp = self.client.get(f'/pharmacy/bill/{bill.pk}/')
+        self.assertContains(resp, '27AABCU9603R1ZX')
+
+    def test_gst_not_shown_on_bill_when_zero(self):
+        """No CGST/SGST rows on bill when GST is 0%."""
+        self._dispense(qty=1, gst_percent=0)
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        resp = self.client.get(f'/pharmacy/bill/{bill.pk}/')
+        self.assertNotContains(resp, 'CGST')
+        self.assertNotContains(resp, 'SGST')
+
+    def test_cgst_sgst_shown_on_bill_when_gst_nonzero(self):
+        """CGST and SGST rows appear on bill when GST > 0%."""
+        self._dispense(qty=2, gst_percent=12)
+        bill = PharmacyBill.objects.get(visit=self.visit)
+        resp = self.client.get(f'/pharmacy/bill/{bill.pk}/')
+        self.assertContains(resp, 'CGST')
+        self.assertContains(resp, 'SGST')
+
+    def test_clinic_edit_saves_gst_number(self):
+        """Saving clinic edit form persists gst_number to DB."""
+        resp = self.client.post('/accounts/clinic/edit/', {
+            'name': self.clinic.name,
+            'address': self.clinic.address,
+            'city': self.clinic.city,
+            'state': self.clinic.state,
+            'phone': self.clinic.phone,
+            'drug_license_number': '',
+            'medical_license_number': '',
+            'gst_number': '29AABCU9603R1ZY',
+            'default_gst_percent': '5',
+        })
+        self.clinic.refresh_from_db()
+        self.assertEqual(self.clinic.gst_number, '29AABCU9603R1ZY')
+        self.assertEqual(self.clinic.default_gst_percent, decimal.Decimal('5'))
+
+    def test_clinic_edit_upcases_gst_number(self):
+        """gst_number is stored uppercased."""
+        self.client.post('/accounts/clinic/edit/', {
+            'name': self.clinic.name,
+            'address': self.clinic.address,
+            'city': self.clinic.city,
+            'state': self.clinic.state,
+            'phone': self.clinic.phone,
+            'drug_license_number': '',
+            'medical_license_number': '',
+            'gst_number': '29aabcu9603r1zy',
+            'default_gst_percent': '0',
+        })
+        self.clinic.refresh_from_db()
+        self.assertEqual(self.clinic.gst_number, '29AABCU9603R1ZY')
