@@ -36,4 +36,8 @@ urlpatterns = [
     path('clinic/request-deletion/', views.request_clinic_deletion_view, name='request_clinic_deletion'),
     path('admin-panel/clinic-deletion/<int:pk>/approve/', views.approve_clinic_deletion_view, name='approve_clinic_deletion'),
     path('admin-panel/clinic-deletion/<int:pk>/reject/', views.reject_clinic_deletion_view, name='reject_clinic_deletion'),
+    path('executives/', views.executive_list_view, name='executive_list'),
+    path('executives/register/', views.executive_register_view, name='executive_register'),
+    path('executives/register/success/', views.executive_register_success_view, name='executive_register_success'),
+    path('executives/<int:pk>/mobile/', views.executive_mobile_view, name='executive_mobile'),
 ]

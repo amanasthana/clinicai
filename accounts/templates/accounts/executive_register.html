@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}Join as a ClinicAI Executive{% endblock %}
+
+{% block extra_head %}
+<style>
+.exec-reg-wrap { max-width: 640px; margin: 0 auto; padding: 40px 20px 80px; }
+
+.exec-reg-header { text-align: center; margin-bottom: 32px; }
+.exec-reg-brand { font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #2563EB; margin-bottom: 12px; }
+.exec-reg-title { font-size: 30px; font-weight: 800; color: #111827; letter-spacing: -0.5px; margin-bottom: 8px; line-height: 1.2; }
+.exec-reg-sub { font-size: 15px; color: #6B7280; line-height: 1.6; max-width: 480px; margin: 0 auto; }
+
+.exec-earning-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: #F0FDF4; border: 1px solid #BBF7D0;
+  border-radius: 12px; padding: 14px 20px;
+  margin: 20px auto 0; text-align: left;
+  max-width: 420px;
+}
+.exec-earning-icon {
+  width: 40px; height: 40px; background: #DCFCE7;
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.exec-earning-text { font-size: 14px; color: #166534; line-height: 1.5; }
+.exec-earning-text strong { font-weight: 700; font-size: 16px; }
+
+.form-section { margin-bottom: 24px; }
+.form-section-head {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+.form-step-badge {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #2563EB; color: #fff;
+  font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.form-section-title { font-size: 16px; font-weight: 600; color: #111827; }
+
+.form-help { font-size: 12px; color: #6B7280; margin-top: 4px; }
+
+.gender-group { display: flex; gap: 12px; flex-wrap: wrap; }
+.gender-option {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  cursor: pointer; font-size: 14px; font-weight: 500; color: #374151;
+  transition: border-color 0.15s, background 0.15s;
+}
+.gender-option input[type="radio"] { accent-color: #2563EB; }
+.gender-option:hover { border-color: #93C5FD; background: #EFF6FF; }
+
+.privacy-note {
+  background: #F0F9FF; border: 1px solid #BAE6FD;
+  border-radius: 8px; padding: 12px 14px;
+  font-size: 12px; color: #0369A1; line-height: 1.6;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.privacy-note-icon { flex-shrink: 0; margin-top: 1px; }
+
+.review-note {
+  background: #FFFBEB; border: 1px solid #FDE68A;
+  border-radius: 8px; padding: 12px 14px;
+  font-size: 13px; color: #92400E; line-height: 1.6;
+  margin-top: 12px;
+}
+
+@media (max-width: 480px) {
+  .exec-reg-wrap { padding: 24px 16px 60px; }
+  .exec-reg-title { font-size: 24px; }
+  .gender-group { gap: 8px; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="exec-reg-wrap">
+
+  <!-- Header -->
+  <div class="exec-reg-header">
+    <div class="exec-reg-brand">ClinicAI Executive Network</div>
+    <h1 class="exec-reg-title">Join as a ClinicAI Executive</h1>
+    <p class="exec-reg-sub">
+      Help Indian clinics go digital. As a ClinicAI Executive, you onboard new clinics onto the platform and earn for every successful activation.
+    </p>
+    <div class="exec-earning-badge">
+      <div class="exec-earning-icon">
+        <svg width="22" height="22" fill="none" stroke="#15803D" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <div class="exec-earning-text">
+        Earn <strong>Rs. 500</strong> for every clinic you successfully onboard onto ClinicAI.
+      </div>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    <!-- Section 1: Personal details -->
+    <div class="card form-section">
+      <div class="form-section-head">
+        <div class="form-step-badge">1</div>
+        <div class="form-section-title">Personal details</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Full name *</label>
+        <input type="text" name="name" class="form-input{% if errors.name %} is-error{% endif %}"
+          value="{{ form_data.name|default:'' }}" placeholder="As on your Aadhaar card" maxlength="150">
+        {% if errors.name %}<div class="form-error">{{ errors.name }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Gender *</label>
+        <div class="gender-group">
+          <label class="gender-option">
+            <input type="radio" name="gender" value="M"
+              {% if form_data.gender == 'M' %}checked{% endif %}>
+            Male
+          </label>
+          <label class="gender-option">
+            <input type="radio" name="gender" value="F"
+              {% if form_data.gender == 'F' %}checked{% endif %}>
+            Female
+          </label>
+          <label class="gender-option">
+            <input type="radio" name="gender" value="O"
+              {% if form_data.gender == 'O' %}checked{% endif %}>
+            Other
+          </label>
+        </div>
+        {% if errors.gender %}<div class="form-error" style="margin-top:6px;">{{ errors.gender }}</div>{% endif %}
+      </div>
+
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Profile photo <span style="font-weight:400;color:#9CA3AF;">(optional)</span></label>
+        <input type="file" name="photo" class="form-input{% if errors.photo %} is-error{% endif %}"
+          accept="image/jpeg,image/png,image/webp">
+        {% if errors.photo %}<div class="form-error">{{ errors.photo }}</div>{% endif %}
+        <div class="form-help">JPEG or PNG. Max 5 MB. Will be resized to 400x400 px automatically.</div>
+      </div>
+    </div>
+
+    <!-- Section 2: Contact -->
+    <div class="card form-section">
+      <div class="form-section-head">
+        <div class="form-step-badge">2</div>
+        <div class="form-section-title">Contact details</div>
+      </div>
+
+      <div class="resp-grid-2">
+        <div class="form-group">
+          <label class="form-label">Mobile number * <span style="font-weight:400;color:#9CA3AF;">(cannot be changed later)</span></label>
+          <input type="tel" name="mobile" class="form-input{% if errors.mobile %} is-error{% endif %}"
+            value="{{ form_data.mobile|default:'' }}" placeholder="10-digit mobile" maxlength="10" inputmode="numeric">
+          {% if errors.mobile %}<div class="form-error">{{ errors.mobile }}</div>{% endif %}
+          <div class="form-help">This will be your permanent identifier on the network.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm mobile number *</label>
+          <input type="tel" name="mobile_confirm" class="form-input{% if errors.mobile_confirm %} is-error{% endif %}"
+            placeholder="Re-enter mobile number" maxlength="10" inputmode="numeric">
+          {% if errors.mobile_confirm %}<div class="form-error">{{ errors.mobile_confirm }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="resp-grid-2" style="margin-bottom:0;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">City</label>
+          <input type="text" name="city" class="form-input"
+            value="{{ form_data.city|default:'' }}" placeholder="e.g. Pune">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">State</label>
+          <select name="state" class="form-input">
+            {% for s in states %}
+            <option value="{{ s }}" {% if form_data.state == s or s == 'Maharashtra' and not form_data.state %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Identity -->
+    <div class="card form-section">
+      <div class="form-section-head">
+        <div class="form-step-badge">3</div>
+        <div class="form-section-title">Identity verification</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Aadhaar number * <span style="font-weight:400;color:#9CA3AF;">(12 digits)</span></label>
+        <input type="text" name="aadhaar" class="form-input{% if errors.aadhaar %} is-error{% endif %}"
+          placeholder="12-digit Aadhaar number" maxlength="12" inputmode="numeric" autocomplete="off">
+        {% if errors.aadhaar %}<div class="form-error">{{ errors.aadhaar }}</div>{% endif %}
+        <div class="privacy-note" style="margin-top:10px;">
+          <span class="privacy-note-icon">
+            <svg width="16" height="16" fill="none" stroke="#0369A1" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+          </span>
+          Only the last 4 digits are stored and shown on your public profile. Your full Aadhaar number is hashed and never stored in plain text. It is used solely for identity verification.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Submit -->
+    <div style="text-align:center; margin-top:8px;">
+      <button type="submit" class="btn btn-primary btn-lg" style="width:100%; max-width:320px; padding:15px; font-size:16px;">
+        Submit Application
+      </button>
+      <div class="review-note" style="max-width:420px; margin: 16px auto 0; text-align:left;">
+        Your application will be reviewed within 48 hours. Once approved, your profile will be listed publicly on the ClinicAI Executive Network.
+      </div>
+    </div>
+
+  </form>
+
+  <div style="text-align:center; margin-top:28px; font-size:13px; color:#9CA3AF;">
+    <a href="/accounts/executives/" style="color:#2563EB; font-weight:500; text-decoration:none;">
+      View the Executive Network
+    </a>
+    &nbsp;|&nbsp;
+    <a href="/accounts/login/" style="color:#9CA3AF; text-decoration:none;">
+      Clinic login
+    </a>
+  </div>
+
+</div>
+{% endblock %}

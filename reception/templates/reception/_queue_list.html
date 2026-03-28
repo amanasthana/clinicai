@@ -33,12 +33,32 @@
         </form>
       {% elif visit.status == 'in_consultation' %}
         <a href="/rx/consult/{{ visit.id }}/" class="btn btn-primary btn-sm">Prescribe</a>
+        <a href="/visit/{{ visit.id }}/collect-fee/" class="btn btn-sm" style="background:#EEF2FF; color:#4F46E5; border:1.5px solid #C7D2FE; font-weight:600;">₹ Fee</a>
+      {% elif visit.status == 'done' %}
+        {% if visit.fee_receipt_number %}
+          <a href="/visit/{{ visit.id }}/opd-receipt/" class="btn btn-sm" style="background:#ECFDF5; color:#065F46; border:1.5px solid #A7F3D0; font-weight:600;">
+            ✓ Receipt
+          </a>
+        {% else %}
+          <a href="/visit/{{ visit.id }}/collect-fee/" class="btn btn-sm" style="background:#EEF2FF; color:#4F46E5; border:1.5px solid #C7D2FE; font-weight:600;">
+            ₹ Collect Fee
+          </a>
+        {% endif %}
       {% endif %}
 
       {% if visit.status != 'done' and visit.status != 'no_show' %}
         <a href="/visit/{{ visit.id }}/" class="btn btn-secondary btn-sm">Vitals</a>
         <button onclick="updateStatus('{{ visit.id }}','no_show')" class="btn btn-secondary btn-sm" style="color:#EF4444;">No Show</button>
       {% endif %}
+      <button
+        onclick="openDeleteModal('{{ visit.id }}','{{ visit.patient.full_name|escapejs }}')"
+        class="btn btn-secondary btn-sm"
+        style="color:#EF4444; padding:5px 8px;"
+        title="Remove this entry from the queue">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+        </svg>
+      </button>
     </div>
   </div>
   {% endfor %}

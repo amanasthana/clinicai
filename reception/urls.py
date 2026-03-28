@@ -10,6 +10,8 @@ urlpatterns = [
     path('patient/<uuid:pk>/edit/', views.patient_edit_view, name='patient_edit'),
     path('patient/<uuid:pk>/delete/', views.patient_delete_view, name='patient_delete'),
     path('visit/<uuid:pk>/', views.visit_detail_view, name='visit_detail'),
+    path('visit/<uuid:pk>/collect-fee/', views.collect_fee_view, name='collect_fee'),
+    path('visit/<uuid:pk>/opd-receipt/', views.opd_receipt_view, name='opd_receipt'),
     path('analytics/', views.analytics_view, name='analytics'),
     # JSON APIs
     path('api/patient/search/', api.patient_search_api, name='patient_search'),
@@ -17,5 +19,6 @@ urlpatterns = [
     path('api/queue/', api.queue_api, name='queue'),
     path('api/visit/<uuid:pk>/status/', api.visit_status_api, name='visit_status'),
     path('api/visit/<uuid:pk>/cancel/', api.cancel_visit_api, name='cancel_visit'),
+    path('api/visit/<uuid:pk>/delete/', api.delete_visit_api, name='delete_visit'),
     path('api/help/', views.help_api, name='help'),
 ]

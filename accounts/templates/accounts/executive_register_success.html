@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Application Submitted - ClinicAI Executive Network{% endblock %}
+
+{% block content %}
+<div style="max-width:540px; margin:0 auto; padding:80px 20px; text-align:center;">
+
+  <div style="width:72px; height:72px; background:#D1FAE5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 24px;">
+    <svg width="36" height="36" fill="none" stroke="#059669" stroke-width="2.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+    </svg>
+  </div>
+
+  <h1 style="font-size:26px; font-weight:800; color:#111827; margin-bottom:10px; letter-spacing:-0.5px;">
+    Application Submitted
+  </h1>
+  <p style="font-size:15px; color:#6B7280; line-height:1.7; margin-bottom:32px;">
+    Thank you for applying to the ClinicAI Executive Network.<br>
+    We will review your application and notify you within 48 hours.
+  </p>
+
+  <div style="background:#F0F9FF; border:1px solid #BAE6FD; border-radius:12px; padding:20px 24px; text-align:left; margin-bottom:32px;">
+    <div style="font-size:13px; font-weight:700; color:#0369A1; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">
+      What happens next?
+    </div>
+    <div style="font-size:14px; color:#0C4A6E; line-height:1.8;">
+      1. Our team verifies your identity details.<br>
+      2. Once approved, your profile goes live on the Executive Network.<br>
+      3. You can start referring clinics and earning Rs. 500 per onboarding.
+    </div>
+  </div>
+
+  <a href="/accounts/executives/" class="btn btn-primary" style="display:inline-block; padding:12px 32px; font-size:15px;">
+    View Executive Network
+  </a>
+  <div style="margin-top:16px;">
+    <a href="/accounts/login/" style="font-size:13px; color:#9CA3AF; text-decoration:none;">
+      Back to clinic login
+    </a>
+  </div>
+
+</div>
+{% endblock %}

@@ -52,6 +52,30 @@
     </div>
   </div>
 
+  <!-- OPD Revenue summary -->
+  {% if opd_revenue.count %}
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:28px; padding:16px 20px; background:#ECFDF5; border-radius:12px; border:1px solid #A7F3D0;">
+    <div style="display:flex; align-items:center; gap:8px; margin-right:8px;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      <span style="font-size:13px; font-weight:600; color:#065F46;">OPD Fee Revenue — Last {{ days }} days</span>
+    </div>
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+      <div>
+        <div style="font-size:20px; font-weight:800; color:#059669;">₹{{ opd_revenue.total|floatformat:0 }}</div>
+        <div style="font-size:11px; color:#047857; margin-top:1px;">Total collected</div>
+      </div>
+      <div>
+        <div style="font-size:20px; font-weight:800; color:#059669;">{{ opd_revenue.count }}</div>
+        <div style="font-size:11px; color:#047857; margin-top:1px;">Receipts issued</div>
+      </div>
+      <div>
+        <div style="font-size:20px; font-weight:800; color:#059669;">₹{{ opd_revenue.avg_fee|floatformat:0 }}</div>
+        <div style="font-size:11px; color:#047857; margin-top:1px;">Avg per visit</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Patient volume chart -->
   <div class="card" style="margin-bottom:24px;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
@@ -62,6 +86,19 @@
       <canvas id="volumeChart"></canvas>
     </div>
   </div>
+
+  <!-- OPD Revenue chart (only if there is data) -->
+  {% if opd_revenue.count %}
+  <div class="card" style="margin-bottom:24px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+      <div style="font-size:14px; font-weight:600; color:#111827;">OPD Fee Revenue — Last {{ days }} Days</div>
+      <div style="font-size:12px; color:#6B7280;">₹{{ opd_revenue.total|floatformat:0 }} total</div>
+    </div>
+    <div style="position:relative; height:200px;">
+      <canvas id="opdRevenueChart"></canvas>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Two-column: complaints + medicines -->
   <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
@@ -256,6 +293,61 @@ new Chart(ctx, {
     }
   }
 });
+
+// OPD Revenue chart
+{% if opd_revenue.count %}
+const opdData   = {{ opd_revenue_data|safe }};
+const opdLabels = {{ volume_labels|safe }};
+const opdCtx = document.getElementById('opdRevenueChart').getContext('2d');
+function makeOpdGradient(chart) {
+  const { ctx: c, chartArea } = chart;
+  if (!chartArea) return 'rgba(5,150,105,0.2)';
+  const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+  g.addColorStop(0,   'rgba(5, 150, 105, 0.40)');
+  g.addColorStop(0.5, 'rgba(5, 150, 105, 0.10)');
+  g.addColorStop(1,   'rgba(5, 150, 105, 0)');
+  return g;
+}
+new Chart(opdCtx, {
+  type: 'bar',
+  data: {
+    labels: opdLabels,
+    datasets: [{
+      label: 'OPD Revenue',
+      data: opdData,
+      backgroundColor: (context) => makeOpdGradient(context.chart),
+      borderColor: 'rgba(5, 150, 105, 0.9)',
+      borderWidth: 1.5,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(17,24,39,0.85)',
+        padding: 10,
+        callbacks: { label: c => ` ₹${c.parsed.y.toFixed(0)}` }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { font: { size: 11 }, color: '#9CA3AF', callback: v => '₹' + v },
+        grid: { color: 'rgba(0,0,0,0.05)' },
+        border: { display: false },
+      },
+      x: {
+        ticks: { font: { size: 10 }, color: '#9CA3AF', maxTicksLimit: {% if days > 14 %}10{% else %}{{ days }}{% endif %}, maxRotation: 30 },
+        grid: { display: false },
+        border: { display: false },
+      }
+    }
+  }
+});
+{% endif %}
 
 function filterLog(q) {
   const rows = document.querySelectorAll('#log-tbody .log-row');

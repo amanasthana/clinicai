@@ -1,4 +1,5 @@
 import uuid
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -24,7 +25,7 @@ class Patient(models.Model):
     )
     full_name = models.CharField(max_length=200)
     phone = models.CharField(max_length=15, db_index=True)  # primary lookup key
-    age = models.PositiveSmallIntegerField(null=True, blank=True)
+    age = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(99)])
     gender = models.CharField(
         max_length=1,
         choices=[('M', 'Male'), ('F', 'Female'), ('O', 'Other')],
@@ -86,6 +87,30 @@ class Visit(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     called_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+    # OPD consultation fee
+    PAYMENT_MODE_CHOICES = [
+        ('cash',      'Cash'),
+        ('upi',       'UPI'),
+        ('card',      'Card'),
+        ('insurance', 'Insurance'),
+        ('waived',    'Waived'),
+    ]
+    consultation_fee   = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    fee_receipt_number = models.CharField(max_length=30, blank=True)
+    fee_paid_at        = models.DateTimeField(null=True, blank=True)
+    payment_mode       = models.CharField(max_length=12, choices=PAYMENT_MODE_CHOICES, blank=True)
+
+    @staticmethod
+    def generate_receipt_number():
+        from django.utils import timezone
+        today = timezone.localtime().strftime('%Y%m%d')
+        prefix = f'OPD-{today}-'
+        existing = Visit.objects.filter(
+            fee_receipt_number__startswith=prefix
+        ).values_list('fee_receipt_number', flat=True)
+        seq = (max(int(n[len(prefix):]) for n in existing) + 1) if existing else 1
+        return f'{prefix}{seq:04d}'
 
     class Meta:
         ordering = ['token_number']

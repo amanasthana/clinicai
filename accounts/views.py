@@ -1,4 +1,6 @@
 import logging
+import hashlib
+import io
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout
@@ -9,6 +11,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_POST
 from django.utils.http import urlencode
 from urllib.parse import quote
+from django.http import JsonResponse
 
 from django.conf import settings
 from django.utils import timezone
@@ -16,7 +19,7 @@ from django.utils import timezone
 logger = logging.getLogger('accounts')
 
 from .forms import StyledAuthForm, ClinicSetupForm, AdminUserForm, AddStaffForm, ClinicRegistrationForm, ContactForm
-from .models import Clinic, StaffMember, ClinicRegistrationRequest, ContactMessage, PasswordResetRequest
+from .models import Clinic, StaffMember, ClinicRegistrationRequest, ContactMessage, PasswordResetRequest, ClinicAIExecutive
 from .permissions import require_permission, set_permissions_from_role, ROLE_PERMISSIONS, ALL_PERMISSION_FLAGS
 
 
@@ -209,6 +212,7 @@ def edit_staff_view(request, pk):
         sm.display_name = request.POST.get('display_name', '').strip() or sm.display_name
         sm.qualification = request.POST.get('qualification', '').strip()
         sm.registration_number = request.POST.get('registration_number', '').strip()
+        sm.show_registration_on_rx = request.POST.get('show_registration_on_rx') == 'on'
         new_role = request.POST.get('role', sm.role)
         sm.role = new_role
 
@@ -267,6 +271,10 @@ def register_view(request):
     form = ClinicRegistrationForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         reg = form.save()
+        referred_by_mobile = request.POST.get('referred_by_mobile', '').strip()
+        if referred_by_mobile.isdigit() and len(referred_by_mobile) == 10:
+            reg.referred_by_mobile = referred_by_mobile
+            reg.save(update_fields=['referred_by_mobile'])
         return redirect('accounts:register_success')
 
     return render(request, 'accounts/register.html', {'form': form})
@@ -796,10 +804,16 @@ def clinic_edit_view(request):
             clinic.default_gst_percent = _decimal.Decimal(request.POST.get('default_gst_percent', '0') or '0')
         except Exception:
             clinic.default_gst_percent = _decimal.Decimal('0')
+        try:
+            clinic.default_opd_fee = _decimal.Decimal(request.POST.get('default_opd_fee', '0') or '0')
+            if clinic.default_opd_fee < 0:
+                clinic.default_opd_fee = _decimal.Decimal('0')
+        except Exception:
+            clinic.default_opd_fee = _decimal.Decimal('0')
         clinic.save(update_fields=[
             'name', 'address', 'city', 'state', 'phone',
             'drug_license_number', 'medical_license_number',
-            'gst_number', 'default_gst_percent',
+            'gst_number', 'default_gst_percent', 'default_opd_fee',
         ])
         messages.success(request, 'Clinic details updated.')
         return redirect('accounts:staff_list')
@@ -895,3 +909,143 @@ def check_user_view(request, phone):
         'clinic': first_membership.clinic.name if has_staff else None,
         'date_joined': str(u.date_joined),
     })
+
+
+# ---------------------------------------------------------------------------
+# ClinicAI Executive Network
+# ---------------------------------------------------------------------------
+
+INDIAN_STATES = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+    'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim',
+    'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand',
+    'West Bengal', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Chandigarh',
+    'Puducherry',
+]
+
+
+def executive_list_view(request):
+    """Public directory of approved ClinicAI Executives. Also serves JSON API for live lookup."""
+    q = request.GET.get('q', '').strip()
+    mobile_param = request.GET.get('mobile', '').strip()
+    fmt = request.GET.get('format', '')
+
+    # JSON API: used by clinic registration form for live executive lookup
+    if fmt == 'json' and mobile_param:
+        try:
+            ex = ClinicAIExecutive.objects.get(mobile=mobile_param, status='approved')
+            return JsonResponse({'found': True, 'name': ex.name, 'city': ex.city, 'state': ex.state})
+        except ClinicAIExecutive.DoesNotExist:
+            return JsonResponse({'found': False})
+
+    executives = ClinicAIExecutive.objects.filter(status='approved').order_by('name')
+    total_approved = executives.count()
+
+    return render(request, 'accounts/executives.html', {
+        'executives': executives,
+        'total_approved': total_approved,
+    })
+
+
+def executive_register_view(request):
+    """Public form to apply as a ClinicAI Executive."""
+    errors = {}
+    form_data = {}
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        gender = request.POST.get('gender', '').strip()
+        mobile = request.POST.get('mobile', '').strip().replace(' ', '').replace('-', '')
+        mobile_confirm = request.POST.get('mobile_confirm', '').strip().replace(' ', '').replace('-', '')
+        aadhaar = request.POST.get('aadhaar', '').strip().replace(' ', '').replace('-', '')
+        city = request.POST.get('city', '').strip()
+        state = request.POST.get('state', 'Maharashtra').strip()
+        photo = request.FILES.get('photo')
+
+        form_data = {'name': name, 'gender': gender, 'mobile': mobile, 'city': city, 'state': state}
+
+        if not name:
+            errors['name'] = 'Full name is required.'
+        elif len(name) > 150:
+            errors['name'] = 'Name must be under 150 characters.'
+
+        if gender not in ('M', 'F', 'O'):
+            errors['gender'] = 'Please select a gender.'
+
+        if not mobile.isdigit() or len(mobile) != 10:
+            errors['mobile'] = 'Enter a valid 10-digit mobile number.'
+        elif mobile_confirm != mobile:
+            errors['mobile_confirm'] = 'Mobile numbers do not match.'
+        elif ClinicAIExecutive.objects.filter(mobile=mobile).exists():
+            errors['mobile'] = 'This mobile number is already registered with us.'
+
+        if not aadhaar.isdigit() or len(aadhaar) != 12:
+            errors['aadhaar'] = 'Aadhaar must be exactly 12 digits.'
+        elif len(set(aadhaar)) == 1:
+            errors['aadhaar'] = 'Invalid Aadhaar number.'
+        elif aadhaar.startswith('0') or aadhaar.startswith('1'):
+            errors['aadhaar'] = 'Invalid Aadhaar number format.'
+
+        if photo:
+            if photo.size > 5 * 1024 * 1024:
+                errors['photo'] = 'Photo must be under 5 MB.'
+
+        if not errors:
+            aadhaar_last4 = aadhaar[-4:]
+            aadhaar_hash = hashlib.sha256(aadhaar.encode()).hexdigest()
+
+            exec_obj = ClinicAIExecutive(
+                name=name,
+                gender=gender,
+                mobile=mobile,
+                city=city,
+                state=state,
+                aadhaar_last4=aadhaar_last4,
+                aadhaar_hash=aadhaar_hash,
+                status='pending',
+            )
+
+            # Save first to get a PK, then attach photo using PK (not mobile) in filename
+            exec_obj.save()
+
+            if photo:
+                try:
+                    from PIL import Image as PilImage
+                    from django.core.files.base import ContentFile
+                    img = PilImage.open(photo)
+                    img = img.convert('RGB')
+                    img.thumbnail((400, 400), PilImage.LANCZOS)
+                    buf = io.BytesIO()
+                    img.save(buf, format='JPEG', quality=70)
+                    buf.seek(0)
+                    exec_obj.photo.save(
+                        f'exec_{exec_obj.pk}.jpg',
+                        ContentFile(buf.read()),
+                        save=True,
+                    )
+                except Exception:
+                    pass  # skip photo if it fails
+            return redirect('accounts:executive_register_success')
+
+    return render(request, 'accounts/executive_register.html', {
+        'errors': errors,
+        'form_data': form_data,
+        'states': INDIAN_STATES,
+    })
+
+
+def executive_register_success_view(request):
+    """Confirmation page after executive registration is submitted."""
+    return render(request, 'accounts/executive_register_success.html')
+
+
+def executive_mobile_view(request, pk):
+    """Returns full mobile number for an approved executive (AJAX reveal)."""
+    from django.http import JsonResponse
+    try:
+        ex = ClinicAIExecutive.objects.get(pk=pk, status='approved')
+        return JsonResponse({'mobile': ex.mobile})
+    except ClinicAIExecutive.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)

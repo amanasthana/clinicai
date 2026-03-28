@@ -166,6 +166,19 @@
   </div>
   {% endif %}
 
+  {% if not user.is_authenticated %}{% block public_nav %}
+  <!-- Public nav bar -->
+  <nav style="background:#fff; border-bottom:1px solid #E5E7EB; padding:0 20px; height:52px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:300;">
+    <a href="/accounts/login/" style="font-size:17px; font-weight:800; color:#111827; text-decoration:none; letter-spacing:-0.3px;">
+      ClinicAI<span style="color:#2563EB;">.</span>
+    </a>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <a href="/accounts/executives/" style="font-size:13px; color:#6B7280; text-decoration:none; font-weight:500;">Executive Network</a>
+      <a href="/accounts/login/" style="font-size:13px; font-weight:600; color:#2563EB; text-decoration:none; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:7px; padding:6px 14px;">Clinic Login</a>
+    </div>
+  </nav>
+  {% endblock %}{% endif %}
+
   <!-- Flash messages -->
   {% if messages %}
   <div style="padding: 0 20px; margin-top: 12px; max-width: 1000px; margin-left: auto; margin-right: auto;">

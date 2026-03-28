@@ -29,6 +29,10 @@ class Clinic(models.Model):
         default=0,
         help_text='Default discount % pre-filled on every pharmacy bill at this clinic (0 = no discount).'
     )
+    default_opd_fee = models.DecimalField(
+        max_digits=8, decimal_places=2, default=0,
+        help_text='Default OPD consultation fee pre-filled when collecting fees (0 = no default).'
+    )
 
     def __str__(self):
         return self.name
@@ -54,6 +58,10 @@ class StaffMember(models.Model):
     registration_number = models.CharField(max_length=50, blank=True)  # Medical council reg
     created_at = models.DateTimeField(auto_now_add=True)
     show_rx_remarks = models.BooleanField(default=True)
+    show_registration_on_rx = models.BooleanField(
+        default=True,
+        help_text='Print registration/licence number on prescriptions.'
+    )
 
     # Permission flags — set automatically from role preset, can be overridden per staff member
     can_register_patients = models.BooleanField(default=False)
@@ -95,6 +103,8 @@ class ClinicRegistrationRequest(models.Model):
     city = models.CharField(max_length=100)
     state = models.CharField(max_length=100, default='Maharashtra')
     clinic_phone = models.CharField(max_length=15)
+    referred_by_mobile = models.CharField(max_length=10, blank=True,
+        help_text='Mobile number of the ClinicAI Executive who referred this clinic.')
 
     # Doctor/admin info
     doctor_name = models.CharField(max_length=200)
@@ -117,6 +127,29 @@ class ClinicRegistrationRequest(models.Model):
 
     def __str__(self):
         return f"{self.clinic_name} ({self.get_status_display()})"
+
+
+class ClinicAIExecutive(models.Model):
+    GENDER_CHOICES = [('M', 'Male'), ('F', 'Female'), ('O', 'Other')]
+    STATUS_CHOICES = [('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected')]
+
+    name = models.CharField(max_length=150)
+    gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
+    mobile = models.CharField(max_length=10, unique=True)   # immutable, used as lookup key
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, default='Maharashtra')
+    aadhaar_last4 = models.CharField(max_length=4)          # only last 4 digits stored visibly
+    aadhaar_hash = models.CharField(max_length=64)          # SHA-256 of full 12-digit number
+    photo = models.ImageField(upload_to='executives/', null=True, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.mobile})"
 
 
 class PasswordResetRequest(models.Model):

@@ -25,7 +25,7 @@ class PatientForm(forms.ModelForm):
                 'maxlength': '15',
                 'inputmode': 'tel',
             }),
-            'age': forms.NumberInput(attrs={'class': 'input-field', 'placeholder': 'Age', 'min': 0, 'max': 120}),
+            'age': forms.NumberInput(attrs={'class': 'input-field', 'placeholder': 'Age (0–99)', 'min': 0, 'max': 99, 'oninput': 'if(parseInt(this.value)>99)this.value=99;if(this.value<0)this.value=0;'}),
             'gender': forms.RadioSelect(),
             'address': forms.Textarea(attrs={'class': 'input-field', 'rows': 2, 'placeholder': 'Address (optional)'}),
             'blood_group': forms.TextInput(attrs={'class': 'input-field', 'placeholder': 'e.g. B+'}),
@@ -67,7 +67,7 @@ class PatientEditForm(forms.ModelForm):
         fields = ['full_name', 'age', 'gender', 'address', 'blood_group', 'allergies', 'notes']
         widgets = {
             'full_name': forms.TextInput(attrs={'class': 'input-field', 'placeholder': 'Patient full name'}),
-            'age': forms.NumberInput(attrs={'class': 'input-field', 'placeholder': 'Age', 'min': 0, 'max': 120}),
+            'age': forms.NumberInput(attrs={'class': 'input-field', 'placeholder': 'Age (0–99)', 'min': 0, 'max': 99, 'oninput': 'if(parseInt(this.value)>99)this.value=99;if(this.value<0)this.value=0;'}),
             'gender': forms.RadioSelect(),
             'address': forms.Textarea(attrs={'class': 'input-field', 'rows': 2, 'placeholder': 'Address (optional)'}),
             'blood_group': forms.TextInput(attrs={'class': 'input-field', 'placeholder': 'e.g. B+'}),

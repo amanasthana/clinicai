@@ -1,18 +1,20 @@
 {% extends "base.html" %}
-{% block title %}ClinicAI — Smart Clinic OS for Indian Doctors{% endblock %}
+{% block title %}ClinicAI - The Clinic OS Built for Indian Doctors{% endblock %}
+{% block public_nav %}{% endblock %}
 
 {% block content %}
 <style>
+/* ── Layout ── */
 .login-wrap {
   display: grid;
   grid-template-columns: 1fr 420px;
   min-height: 100vh;
 }
 
-/* ── Left: marketing panel ── */
+/* ── Left: marketing hero ── */
 .login-hero {
-  background: linear-gradient(145deg, #1E3A8A 0%, #2563EB 60%, #3B82F6 100%);
-  padding: 60px 56px;
+  background: linear-gradient(155deg, #0F172A 0%, #1E3A8A 55%, #1D4ED8 100%);
+  padding: 56px 60px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -23,89 +25,147 @@
 .login-hero::before {
   content: '';
   position: absolute;
-  top: -120px; right: -120px;
-  width: 420px; height: 420px;
-  background: rgba(255,255,255,0.05);
+  top: -140px; right: -100px;
+  width: 480px; height: 480px;
+  background: rgba(255,255,255,0.04);
   border-radius: 50%;
+  pointer-events: none;
 }
 .login-hero::after {
   content: '';
   position: absolute;
-  bottom: -80px; left: -80px;
-  width: 300px; height: 300px;
-  background: rgba(255,255,255,0.04);
+  bottom: -100px; left: -60px;
+  width: 340px; height: 340px;
+  background: rgba(255,255,255,0.03);
   border-radius: 50%;
+  pointer-events: none;
 }
 
+/* ── Brand ── */
 .hero-brand {
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 800;
-  letter-spacing: -1px;
-  margin-bottom: 36px;
+  letter-spacing: -0.5px;
+  margin-bottom: 40px;
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
-.hero-brand-dot { color: #93C5FD; }
+.hero-brand-dot { color: #60A5FA; }
 
+/* ── Headline ── */
 .hero-headline {
-  font-size: 36px;
+  font-size: 38px;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.5px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 1;
 }
-.hero-headline span { color: #93C5FD; }
+.hero-headline strong { color: #93C5FD; font-weight: 800; }
 
 .hero-sub {
-  font-size: 16px;
-  line-height: 1.7;
-  color: rgba(255,255,255,0.75);
-  max-width: 440px;
-  margin-bottom: 44px;
+  font-size: 15px;
+  line-height: 1.75;
+  color: rgba(255,255,255,0.7);
+  max-width: 460px;
+  margin-bottom: 40px;
+  position: relative;
+  z-index: 1;
 }
 
-/* Feature list */
-.hero-features { display: flex; flex-direction: column; gap: 14px; margin-bottom: 52px; }
+/* ── Feature list ── */
+.hero-features {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 36px;
+  position: relative;
+  z-index: 1;
+}
 .hero-feature {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  font-size: 15px;
-  color: rgba(255,255,255,0.9);
-  line-height: 1.4;
+  gap: 13px;
+  font-size: 14px;
+  color: rgba(255,255,255,0.88);
+  line-height: 1.5;
 }
 .hero-feature-icon {
-  width: 28px; height: 28px;
-  background: rgba(255,255,255,0.15);
-  border-radius: 8px;
+  width: 32px; height: 32px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px;
   flex-shrink: 0;
   margin-top: 1px;
 }
+.hero-feature-icon svg { opacity: 0.9; }
+.hero-feature strong { color: #fff; }
 
-/* Network stats */
+/* ── Ethics badge ── */
+.ethics-block {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 32px;
+  position: relative;
+  z-index: 1;
+}
+.ethics-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #86EFAC;
+  margin-bottom: 8px;
+}
+.ethics-label-dot {
+  width: 6px; height: 6px;
+  background: #86EFAC;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ethics-heading {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 6px;
+}
+.ethics-body {
+  font-size: 13px;
+  line-height: 1.65;
+  color: rgba(255,255,255,0.68);
+}
+.ethics-body strong { color: rgba(255,255,255,0.88); }
+
+/* ── Stats ── */
 .hero-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  padding-top: 32px;
-  border-top: 1px solid rgba(255,255,255,0.15);
+  padding-top: 28px;
+  border-top: 1px solid rgba(255,255,255,0.12);
   position: relative;
   z-index: 1;
 }
 .hero-stat-num {
-  font-size: 30px;
-  font-weight: 700;
+  font-size: 28px;
+  font-weight: 800;
   color: #fff;
   letter-spacing: -0.5px;
   line-height: 1;
   margin-bottom: 4px;
 }
 .hero-stat-label {
-  font-size: 12px;
-  color: rgba(255,255,255,0.6);
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 500;
@@ -133,73 +193,112 @@
   margin-bottom: 28px;
 }
 
-/* Mobile: stack vertically */
-@media (max-width: 768px) {
+/* ── Mobile ── */
+@media (max-width: 800px) {
   .login-wrap { grid-template-columns: 1fr; }
   .login-hero {
-    padding: 40px 24px 36px;
+    padding: 36px 24px 32px;
     min-height: auto;
   }
   .login-hero::before, .login-hero::after { display: none; }
-  .hero-headline { font-size: 26px; }
-  .hero-sub { font-size: 14px; margin-bottom: 28px; }
-  .hero-features { gap: 10px; margin-bottom: 28px; }
-  .hero-stats { grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .hero-stat-num { font-size: 24px; }
-  .login-form-panel { padding: 36px 24px; }
+  .hero-headline { font-size: 27px; }
+  .hero-sub { font-size: 14px; margin-bottom: 24px; }
+  .hero-features { gap: 10px; margin-bottom: 24px; }
+  .ethics-block { margin-bottom: 24px; }
+  .hero-stats { gap: 10px; }
+  .hero-stat-num { font-size: 22px; }
+  .login-form-panel { padding: 32px 24px; }
   .login-form-inner { max-width: 100%; }
 }
 </style>
 
 <div class="login-wrap">
 
-  <!-- ── Left: marketing hero ── -->
+  <!-- ── Left: hero ── -->
   <div class="login-hero">
+
     <div class="hero-brand">
       ClinicAI<span class="hero-brand-dot">.</span>
     </div>
 
     <div class="hero-headline">
-      The smart OS for<br><span>Indian clinics</span>
+      The all-in-one OS<br>built for <strong>busy Indian doctors</strong>
     </div>
     <div class="hero-sub">
-      Built for busy doctors seeing 40–80 patients a day. Paperless queue, AI prescriptions, and WhatsApp summaries — all in one place.
+      From paperless queue to AI prescription to pharmacy bill. Every tool your clinic needs, built for the pace of 60 patients a day.
     </div>
 
     <div class="hero-features">
+
       <div class="hero-feature">
-        <div class="hero-feature-icon">🏥</div>
-        <div><strong>Smart Reception</strong> — digital queue, patient records, and vitals. No more paper registers.</div>
+        <div class="hero-feature-icon">
+          <svg width="17" height="17" fill="none" stroke="white" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m4 6v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2M15 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+        </div>
+        <div><strong>Paperless Reception.</strong> Digital queue, live tokens, patient records and vitals. No more paper registers.</div>
       </div>
+
       <div class="hero-feature">
-        <div class="hero-feature-icon">🤖</div>
-        <div><strong>AI Prescriptions</strong> — type a brief note; get a structured SOAP note, medicines, and patient summary in seconds.</div>
+        <div class="hero-feature-icon">
+          <svg width="17" height="17" fill="none" stroke="white" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-3-3v6M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V9l-6-6z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v6h6"/>
+          </svg>
+        </div>
+        <div><strong>AI-assisted Prescriptions.</strong> Type a brief note, get a structured prescription in seconds. Or write your own, without any AI.</div>
       </div>
+
       <div class="hero-feature">
-        <div class="hero-feature-icon">📲</div>
-        <div><strong>WhatsApp-ready</strong> — patient gets their prescription summary in English &amp; Hindi, directly on WhatsApp.</div>
+        <div class="hero-feature-icon">
+          <svg width="17" height="17" fill="none" stroke="white" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+          </svg>
+        </div>
+        <div><strong>WhatsApp Summaries.</strong> Patient gets their prescription in English and Hindi, sent directly by you from the print screen.</div>
       </div>
+
       <div class="hero-feature">
-        <div class="hero-feature-icon">🔒</div>
-        <div><strong>Private by design</strong> — patient PII is never sent to any AI. De-identified before every API call.</div>
+        <div class="hero-feature-icon">
+          <svg width="17" height="17" fill="none" stroke="white" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+          </svg>
+        </div>
+        <div><strong>Pharmacy and Billing.</strong> Real-time inventory, FEFO dispensing, GST-ready bills, and a full 30-day ledger.</div>
+      </div>
+
+    </div>
+
+    <!-- Ethics / trust block -->
+    <div class="ethics-block">
+      <div class="ethics-label">
+        <span class="ethics-label-dot"></span>
+        Private by design. Strict clinic ethics.
+      </div>
+      <div class="ethics-heading">Your patients stay yours. We never contact them.</div>
+      <div class="ethics-body">
+        ClinicAI <strong>never calls, messages, or markets to your patients</strong> for any reason. The only communication they ever receive is what you send yourself. No exceptions, no hidden outreach, no agenda.
+        <br><br>
+        Unlike some EMR platforms, we do not use your patient data to build our own relationship with them. <strong>Patient trust is clinic trust</strong> and we treat it that way.
       </div>
     </div>
 
-    <!-- Network stats -->
+    <!-- Stats -->
     <div class="hero-stats">
       <div>
-        <div class="hero-stat-num">164</div>
+        <div class="hero-stat-num">278</div>
         <div class="hero-stat-label">Clinics on network</div>
       </div>
       <div>
-        <div class="hero-stat-num">5,000+</div>
+        <div class="hero-stat-num">10,000+</div>
         <div class="hero-stat-label">Patients managed</div>
       </div>
       <div>
-        <div class="hero-stat-num">₹0</div>
+        <div class="hero-stat-num">Free</div>
         <div class="hero-stat-label">To get started</div>
       </div>
     </div>
+
   </div>
 
   <!-- ── Right: login form ── -->
@@ -223,28 +322,29 @@
           {{ form.username }}
         </div>
 
-        <div class="form-group" style="margin-bottom: 8px;">
+        <div class="form-group" style="margin-bottom:8px;">
           <label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
           {{ form.password }}
         </div>
-        <div style="text-align:right; margin-bottom: 20px;">
+        <div style="text-align:right; margin-bottom:20px;">
           <a href="/accounts/forgot-password/" style="font-size:13px; color:#2563EB; text-decoration:none;">Forgot password?</a>
         </div>
 
-        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; font-size: 15px;">
-          Sign In →
+        <button type="submit" class="btn btn-primary" style="width:100%; padding:13px; font-size:15px;">
+          Sign In
         </button>
       </form>
 
-      <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--color-border); text-align: center;">
-        <div style="font-size: 12px; color: #9CA3AF; line-height: 1.6; margin-bottom: 8px;">
-          New clinic?
-        </div>
-        <a href="/accounts/register/" class="btn btn-secondary" style="width: 100%; display: block; font-size: 13px; margin-bottom: 8px;">
-          Register your clinic →
+      <div style="margin-top:28px; padding-top:20px; border-top:1px solid var(--color-border); text-align:center;">
+        <div style="font-size:12px; color:#9CA3AF; margin-bottom:10px;">New clinic?</div>
+        <a href="/accounts/register/" class="btn btn-secondary" style="width:100%; display:block; font-size:13px; margin-bottom:8px;">
+          Register your clinic
         </a>
-        <a href="/accounts/contact/" style="display: block; text-align: center; font-size: 12px; color: #9CA3AF; text-decoration: none; margin-top: 4px;">
-          Have a question? Get in touch →
+        <a href="/accounts/contact/" style="display:block; text-align:center; font-size:12px; color:#9CA3AF; text-decoration:none; margin-top:4px;">
+          Have a question? Get in touch
+        </a>
+        <a href="/accounts/executives/" style="display:block; text-align:center; font-size:12px; color:#9CA3AF; text-decoration:none; margin-top:6px;">
+          View ClinicAI Executive Network
         </a>
       </div>
 

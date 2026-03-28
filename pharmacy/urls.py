@@ -28,4 +28,5 @@ urlpatterns = [
     path('return/<int:bill_id>/process/', views.process_return_view, name='process_return'),
     path('bills/', views.bill_list_view, name='bill_list'),
     path('analytics/', views.pharmacy_analytics_view, name='analytics'),
+    path('ledger/', views.ledger_view, name='ledger'),
 ]

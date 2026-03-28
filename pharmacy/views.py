@@ -374,12 +374,13 @@ _UNIT_DISPENSE_KEYWORDS = re.compile(
 )
 
 
-def _calc_qty(dosage, duration, drug_name=''):
+def _calc_qty(dosage, duration, drug_name='', frequency=''):
     """
     Calculate suggested quantity to dispense based on dosage schedule and duration.
     dosage:    e.g. "1-0-1" or "1-1-1"
     duration:  e.g. "5 days", "2 weeks", "1 month", "10 din"
     drug_name: e.g. "Tab Metformin 500mg" or "Betnovate Cream" or "Cough Syrup"
+    frequency: e.g. "Twice daily after meals", "Once weekly"
 
     For unit-dispensed forms (syrup, ointment, cream, lotion, gel, drops, etc.)
     the quantity is always 1 — these come as a single bottle/tube/vial.
@@ -388,7 +389,7 @@ def _calc_qty(dosage, duration, drug_name=''):
         return 1
 
     parts = [p.strip() for p in dosage.split('-')]
-    per_day = sum(int(p) for p in parts if p.isdigit())
+    per_dose = sum(int(p) for p in parts if p.isdigit())
     days = 0
     dur_lower = (duration or '').lower()
     m = re.search(r'(\d+)\s*(?:day|din)', dur_lower)
@@ -402,8 +403,20 @@ def _calc_qty(dosage, duration, drug_name=''):
             m = re.search(r'(\d+)\s*month', dur_lower)
             if m:
                 days = int(m.group(1)) * 30
-    if per_day > 0 and days > 0:
-        return per_day * days
+
+    if days == 0:
+        return 1
+
+    # Weekly frequency: quantity = doses_per_week × total_weeks
+    # per_dose may be 0 if AI returned "0-0-0" for a weekly med — default to 1
+    freq_lower = (frequency or '').lower()
+    if 'week' in freq_lower:
+        per_occurrence = per_dose if per_dose > 0 else 1
+        weeks = days // 7
+        return max(1, per_occurrence * weeks)
+
+    if per_dose > 0:
+        return per_dose * days
     return 1
 
 
@@ -425,7 +438,7 @@ def dispense_view(request, visit_id):
     medicine_rows = []
     if existing_rx:
         for pm in existing_rx.medicines.all():
-            suggested_qty = _calc_qty(pm.dosage, pm.duration, pm.drug_name)
+            suggested_qty = _calc_qty(pm.dosage, pm.duration, pm.drug_name, pm.frequency)
             # Try to match pharmacy item by name (case-insensitive)
             # Stage 1: inventory name contains prescription name (or exact match)
             drug_name_clean = pm.drug_name.strip()
@@ -1129,4 +1142,126 @@ def pharmacy_analytics_view(request):
         'total_bills': total_bills,
         'total_items_dispensed': total_items_dispensed,
         'total_returned': total_returned,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Pharmacy Ledger — 30-day combined timeline of purchases, sales, returns
+# ---------------------------------------------------------------------------
+
+@require_permission('can_view_pharmacy')
+def ledger_view(request):
+    """30-day combined ledger: purchases (stock in), sales (bills), returns."""
+    import json as _json
+    import datetime as dt
+    from django.utils import timezone as tz
+    from django.db.models import Sum
+
+    clinic = _get_clinic(request)
+    today = tz.localdate()
+    since = today - dt.timedelta(days=29)  # 30 days incl. today
+
+    # ── Purchases (stock received) ──────────────────────────────────────────
+    batches = (
+        PharmacyBatch.objects
+        .filter(item__clinic=clinic, received_date__gte=since)
+        .select_related('item')
+        .order_by('-received_date', '-pk')
+    )
+    purchase_total = sum(b.unit_price * b.quantity for b in batches)
+
+    # ── Sales (pharmacy bills) ──────────────────────────────────────────────
+    bills = (
+        PharmacyBill.objects
+        .filter(clinic=clinic, created_at__date__gte=since)
+        .select_related('visit__patient')
+        .order_by('-created_at')
+    )
+    sales_total = bills.aggregate(t=Sum('final_amount'))['t'] or 0
+
+    # ── Returns ────────────────────────────────────────────────────────────
+    returns = (
+        DispensedItem.objects
+        .filter(visit__clinic=clinic, quantity_returned__gt=0, dispensed_at__date__gte=since)
+        .select_related('pharmacy_item', 'visit__patient')
+        .order_by('-dispensed_at')
+    )
+    returns_total = sum(r.quantity_returned * r.unit_price for r in returns)
+
+    # ── Build combined timeline entries ────────────────────────────────────
+    entries = []
+    for b in batches:
+        entries.append({
+            'date': b.received_date,
+            'type': 'purchase',
+            'label': b.item.display_name,
+            'detail': f'Batch {b.batch_number}' if b.batch_number else 'No batch no.',
+            'qty': b.quantity,
+            'unit_price': b.unit_price,
+            'amount': b.unit_price * b.quantity,
+            'in': b.unit_price * b.quantity,
+            'out': None,
+        })
+    for bill in bills:
+        entries.append({
+            'date': bill.created_at.date(),
+            'type': 'sale',
+            'label': bill.visit.patient.full_name,
+            'detail': bill.bill_number,
+            'qty': None,
+            'unit_price': None,
+            'amount': bill.final_amount,
+            'in': None,
+            'out': bill.final_amount,
+        })
+    for ret in returns:
+        val = ret.quantity_returned * ret.unit_price
+        entries.append({
+            'date': ret.dispensed_at.date(),
+            'type': 'return',
+            'label': ret.pharmacy_item.display_name,
+            'detail': f'Return — {ret.visit.patient.full_name}',
+            'qty': ret.quantity_returned,
+            'unit_price': ret.unit_price,
+            'amount': val,
+            'in': None,
+            'out': None,
+            'return_amount': val,
+        })
+
+    # Sort descending by date
+    entries.sort(key=lambda e: e['date'], reverse=True)
+
+    # ── Daily summary for sparkline chart ──────────────────────────────────
+    from collections import defaultdict
+    daily_sales = defaultdict(float)
+    daily_purchases = defaultdict(float)
+    for bill in bills:
+        daily_sales[str(bill.created_at.date())] += float(bill.final_amount)
+    for b in batches:
+        daily_purchases[str(b.received_date)] += float(b.unit_price * b.quantity)
+
+    chart_labels = []
+    chart_sales_data = []
+    chart_purchase_data = []
+    for i in range(29, -1, -1):
+        d = str(today - dt.timedelta(days=i))
+        chart_labels.append(d[5:])  # MM-DD
+        chart_sales_data.append(round(daily_sales.get(d, 0), 2))
+        chart_purchase_data.append(round(daily_purchases.get(d, 0), 2))
+
+    profit = float(sales_total) - float(purchase_total) - float(returns_total)
+
+    return render(request, 'pharmacy/ledger.html', {
+        'clinic': clinic,
+        'today': today,
+        'since': since,
+        'entries': entries,
+        'purchase_total': purchase_total,
+        'sales_total': sales_total,
+        'returns_total': returns_total,
+        'profit': profit,
+        'chart_labels': _json.dumps(chart_labels),
+        'chart_sales': _json.dumps(chart_sales_data),
+        'chart_purchases': _json.dumps(chart_purchase_data),
     })

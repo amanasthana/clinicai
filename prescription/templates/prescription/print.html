@@ -441,9 +441,20 @@
   {% endif %}
   <a href="/rx/consult/{{ rx.visit.id }}/" class="tb-btn tb-back"
      title="Found a mistake? Click to reopen this prescription for editing. Your changes will update the saved prescription.">✏️ Edit Rx</a>
+  {% if rx.visit.fee_receipt_number %}
+  <a href="/visit/{{ rx.visit.id }}/opd-receipt/" class="tb-btn" style="background:#ECFDF5; color:#065F46; border:1.5px solid #A7F3D0;">✓ OPD Receipt</a>
+  {% else %}
+  <a href="/visit/{{ rx.visit.id }}/collect-fee/" class="tb-btn" style="background:#EEF2FF; color:#4F46E5; border:1.5px solid #C7D2FE;">₹ Collect Fee</a>
+  {% endif %}
   <a href="javascript:history.back()" class="tb-btn tb-back">← Back</a>
   <a href="/rx/doctor/" class="tb-btn tb-back">Queue</a>
 </div>
+{% if doctor and doctor.show_registration_on_rx and not doctor.registration_number %}
+<div style="background:#FFFBEB; border:1.5px solid #FCD34D; border-radius:8px; padding:10px 16px; margin:10px auto; max-width:680px; font-size:13px; color:#92400E; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+  <span>⚠️ Your registration number is not set — it won't appear on the prescription.</span>
+  <a href="/accounts/staff/{{ doctor.pk }}/edit/" style="font-weight:600; color:#B45309; white-space:nowrap;">Add Registration Number →</a>
+</div>
+{% endif %}
 {% endif %}
 
 <!-- ── Prescription card ─────────────────────────────────────── -->
@@ -462,7 +473,7 @@
     {% if doctor %}
     <div class="rx-doctor-block">
       <div class="rx-doctor-name">{{ doctor.display_name }}</div>
-      <div class="rx-doctor-qual">{% if doctor.qualification %}{{ doctor.qualification }}{% endif %}{% if doctor.registration_number %}<br>Reg. {{ doctor.registration_number }}{% endif %}</div>
+      <div class="rx-doctor-qual">{% if doctor.qualification %}{{ doctor.qualification }}{% endif %}{% if doctor.show_registration_on_rx %}{% if doctor.registration_number %}<br>Reg. {{ doctor.registration_number }}{% endif %}{% endif %}</div>
     </div>
     {% endif %}
   </div>
@@ -666,40 +677,125 @@
 
 <script>
 const HI_FREQ = {
-  'After meals':'खाने के बाद','Before meals':'खाने से पहले',
-  'Empty stomach':'खाली पेट','At bedtime':'सोते समय',
-  'SOS/As needed':'जरूरत पड़ने पर','SOS':'जरूरत पड़ने पर',
-  'As needed':'जरूरत पड़ने पर','With food':'खाने के साथ',
-  '30 min before food':'खाने से 30 मिनट पहले','With milk':'दूध के साथ',
-  'Thrice daily after meals':'खाने के बाद, तीन बार',
+  // Once daily variants
+  'Once daily':'एक बार रोज़',
+  'Once daily in morning':'सुबह एक बार',
+  'Once daily morning':'सुबह एक बार',
+  'Once daily at night':'रात में एक बार',
+  'Once daily at bedtime':'सोते वक्त एक बार',
+  'Once daily before bed':'सोते वक्त एक बार',
+  // Twice daily variants
+  'Twice daily':'दो बार रोज़',
   'Twice daily after meals':'खाने के बाद, दो बार',
-  'Once daily':'एक बार रोज़','Twice daily':'दो बार रोज़',
-  'Thrice daily':'तीन बार रोज़','As needed for fever':'बुखार होने पर',
+  'Twice daily with food':'खाने के साथ, दो बार',
+  'Twice a day':'दो बार रोज़',
+  // Thrice daily variants
+  'Thrice daily':'तीन बार रोज़',
+  'Thrice daily after meals':'खाने के बाद, तीन बार',
+  'Three times daily':'तीन बार रोज़',
+  'Three times a day':'तीन बार रोज़',
+  '3 times daily':'तीन बार रोज़',
+  // Four times
+  'Four times daily':'दिन में 4 बार',
+  '4 times daily':'दिन में 4 बार',
+  // Interval dosing
+  'Every 4 hours':'हर 4 घंटे',
+  'Every 6 hours':'हर 6 घंटे',
+  'Every 8 hours':'हर 8 घंटे',
+  'Every 12 hours':'हर 12 घंटे',
+  // Meal-based
+  'After meals':'खाने के बाद',
+  'Before meals':'खाने से पहले',
+  'With food':'खाने के साथ',
+  'With meals':'खाने के साथ',
+  '30 min before food':'खाने से 30 मिनट पहले',
+  '30 minutes before food':'खाने से 30 मिनट पहले',
+  'Empty stomach':'खाली पेट',
+  'With milk':'दूध के साथ',
+  'At bedtime':'सोते समय',
+  // SOS / as needed
+  'SOS':'जरूरत पड़ने पर',
+  'SOS/As needed':'जरूरत पड़ने पर',
+  'As needed':'जरूरत पड़ने पर',
+  'As needed for fever':'बुखार होने पर',
   'As needed for pain':'दर्द होने पर',
+  // Special
+  'Sip throughout the day':'दिन भर घूंट-घूंट पिएं',
+  'Sip slowly throughout the day':'दिन भर धीरे-धीरे पिएं',
+  'Apply locally':'स्थानीय रूप से लगाएं',
+  'Apply twice daily':'दिन में दो बार लगाएं',
+  'Apply once daily':'दिन में एक बार लगाएं',
 };
 const HI_DUR = {
+  // Single days
   '1 day':'1 दिन','2 days':'2 दिन','3 days':'3 दिन',
-  '5 days':'5 दिन','7 days':'7 दिन','10 days':'10 दिन',
-  '14 days':'14 दिन','21 days':'21 दिन','1 month':'1 महीना',
-  '2 months':'2 महीने','3 months':'3 महीने','Lifelong':'आजीवन',
+  '4 days':'4 दिन','5 days':'5 दिन','6 days':'6 दिन',
+  '7 days':'7 दिन','8 days':'8 दिन','9 days':'9 दिन',
+  '10 days':'10 दिन','12 days':'12 दिन','14 days':'14 दिन',
+  '15 days':'15 दिन','21 days':'21 दिन','28 days':'28 दिन',
+  '30 days':'30 दिन',
+  // Day ranges
+  '2-3 days':'2-3 दिन','3-5 days':'3-5 दिन','5-7 days':'5-7 दिन',
+  '7-10 days':'7-10 दिन','10-14 days':'10-14 दिन',
+  // Weeks
+  '1 week':'1 हफ्ता','2 weeks':'2 हफ्ते','3 weeks':'3 हफ्ते',
+  '4 weeks':'4 हफ्ते','6 weeks':'6 हफ्ते','8 weeks':'8 हफ्ते',
+  // Months
+  '1 month':'1 महीना','2 months':'2 महीने','3 months':'3 महीने',
+  '4 months':'4 महीने','6 months':'6 महीने','12 months':'12 महीने',
+  // Open-ended
+  'Lifelong':'आजीवन','Ongoing':'जारी रखें','Till better':'सुधार होने तक',
+  'Till symptoms resolve':'लक्षण ठीक होने तक',
+  'As needed':'जरूरत के अनुसार',
 };
 const HI_NOTES = {
-  'Take with food':'खाने के साथ लें','After food':'खाने के बाद लें',
-  'Before food':'खाने से पहले लें','Empty stomach':'खाली पेट लें',
+  'Take with food':'खाने के साथ लें',
+  'With food':'खाने के साथ लें',
+  'After food':'खाने के बाद लें',
+  'After meals':'खाने के बाद लें',
+  'Before food':'खाने से पहले लें',
+  'Before meals':'खाने से पहले लें',
+  'Empty stomach':'खाली पेट लें',
+  'Empty stomach, 30 min before breakfast':'नाश्ते से 30 मिनट पहले खाली पेट',
   'Take with warm water':'गर्म पानी के साथ लें',
   'Complete the full course':'पूरा कोर्स पूरा करें',
+  'Complete the course':'पूरा कोर्स पूरा करें',
   'Shake well before use':'उपयोग से पहले हिलाएं',
   'For fever and headache relief':'बुखार और सिरदर्द के लिए',
+  'For fever':'बुखार के लिए',
+  'For pain':'दर्द के लिए',
+  'For back pain':'पीठ दर्द के लिए',
   'For nasal congestion and blocked nose':'बंद नाक के लिए',
   'For cough relief':'खांसी के लिए',
+  'For cough':'खांसी के लिए',
+  'For acidity':'एसिडिटी के लिए',
+  'For hydration':'हाइड्रेशन के लिए',
+  'For hydration and electrolyte balance':'हाइड्रेशन और इलेक्ट्रोलाइट संतुलन के लिए',
+  'Apply on affected area':'प्रभावित जगह पर लगाएं',
+  'Apply locally':'प्रभावित जगह पर लगाएं',
+  'Do not crush':'कुचलकर न लें',
+  'Swallow whole':'पूरा निगल लें',
 };
 
 function translate(text, map) {
   if (!text) return text;
-  const t = map[text.trim()];
-  if (t) return t;
-  const low = text.trim().toLowerCase();
-  for (const [k,v] of Object.entries(map)) if (k.toLowerCase()===low) return v;
+  const trimmed = text.trim();
+  // 1. Exact match
+  if (map[trimmed]) return map[trimmed];
+  // 2. Case-insensitive exact match
+  const low = trimmed.toLowerCase();
+  for (const [k, v] of Object.entries(map)) {
+    if (k.toLowerCase() === low) return v;
+  }
+  // 3. Prefix match — handles compound notes like "With food, for back pain"
+  //    Find the longest key that the text starts with
+  let bestMatch = '', bestVal = '';
+  for (const [k, v] of Object.entries(map)) {
+    if (k.length >= 4 && low.startsWith(k.toLowerCase()) && k.length > bestMatch.length) {
+      bestMatch = k; bestVal = v;
+    }
+  }
+  if (bestVal) return bestVal;
   return text;
 }
 

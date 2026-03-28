@@ -47,6 +47,8 @@ RECEPTION DASHBOARD (/)
 - Queue actions per patient: "Call In" (moves waiting → in consultation), "Prescribe" (opens consult screen, shown when in consultation), "No Show" (marks patient absent), "Cancel" (opens a cancellation modal asking for reason).
 - Cancellation reasons available: Patient called to cancel, Rescheduled, Doctor unavailable, Patient unwell / hospitalised, Other.
 - No-show button: marks patient as no-show and removes them from the active queue.
+- Delete from queue: every queue card has a trash icon (🗑) button. Clicking it opens a confirmation modal and permanently removes the visit entry. Use this only for mistaken registrations. Visits with a saved prescription cannot be deleted — use Cancel instead.
+- Fee button: when a patient is "In Consultation", a "₹ Fee" button appears. When status is "Done" with no receipt yet, a "₹ Collect Fee" button appears. When a receipt has been generated, a "✓ Receipt" button (green) links directly to the OPD receipt. These buttons appear automatically without refreshing.
 - Weekly summary bar: shows total visits in last 7 days, total registered patients, and new patients this week.
 - Queue auto-refreshes every 30 seconds.
 - Reset / Refresh button: clears the active filter and refreshes the queue.
@@ -99,8 +101,11 @@ Step 4 — Prescription (editable before saving):
 PRINT VIEW (/rx/print/<visit-id>/)
 - A5 layout by default; A4 also supported — toggle with the button at the top.
 - Shows clinic letterhead (if uploaded), patient details, date, medicines table, investigations, advice, follow-up.
+- Doctor block: shows the doctor's name, qualification, and registration number (if entered and the "Print registration number" toggle is ON in Staff Settings).
+- Registration number nudge: if "Print registration number" is ON but no number has been entered for the doctor, a yellow warning banner appears below the toolbar with a direct link to Staff Settings to add it. The banner does not print.
 - WhatsApp button: on mobile and devices that support Web Share, tapping "Send on WhatsApp" generates a PDF of the prescription and opens the share sheet directly — no file is saved to the device. On desktop browsers, it opens a WhatsApp chat with a message pre-filled.
 - Print: click "Print" to use the browser print dialog; use "Save as PDF" for digital copies.
+- OPD Fee button: the prescription print toolbar also shows a "₹ Collect Fee" button (or "✓ OPD Receipt" if already collected) so doctors can generate a consultation fee receipt directly from the prescription screen.
 
 MY MEDICINES / FAVORITES (/rx/favorites/)
 - Doctors can save frequently prescribed medicines as favorites for faster prescribing.
@@ -177,6 +182,22 @@ PHARMACY ANALYTICS (/pharmacy/analytics/)
 - Summary cards: Total Revenue, Total Bills, Total Items Dispensed, Total Returned.
 - Date range filter: 7 days, 30 days, 3 months, 1 year.
 
+PHARMACY LEDGER (/pharmacy/ledger/)
+- Accessible from the Pharmacy dashboard via the "📒 Ledger" button (requires View Analytics permission).
+- Shows a combined 30-day timeline of all financial transactions: purchases (stock received), sales (pharmacy bills), and returns.
+- Summary cards at the top:
+  - Purchases (Stock In): total cost of all stock received in the last 30 days.
+  - Sales (Revenue): total amount billed to patients in the last 30 days.
+  - Returns: total value of medicines returned in the last 30 days.
+  - Gross Margin: Sales minus Purchases minus Returns. Shown in green if positive, red if negative.
+- Bar chart: daily Sales vs Purchases over the 30-day period. Hover to see exact values per day.
+- Filter pills: click "All", "Purchases", "Sales", or "Returns" to filter the timeline table.
+- Timeline table columns: Date, Type (colour-coded badge), Description (medicine name or patient name), Qty/Detail, Amount.
+  - Purchase rows show: medicine name, batch number, quantity, unit price — amount in blue.
+  - Sale rows show: patient name, bill number — amount in green.
+  - Return rows show: medicine name, patient name — amount in amber.
+- The ledger is read-only — use Pharmacy Analytics, Bill History, or Returns screens to modify data.
+
 PHARMACY SETTINGS (/pharmacy/settings/)
 - Set the default discount percentage for all new bills (0–100%).
 - This pre-fills the discount field on the dispense screen; it can be overridden per bill.
@@ -185,6 +206,8 @@ ANALYTICS (/analytics/)
 - Visible to users with "View analytics" permission (doctors and admin by default).
 - Date range: 7 days, 30 days, 3 months (90 days), 1 year — click the chips at the top right.
 - Patient volume chart: a mountain/area chart showing daily visits for the selected range. No-show and cancelled visits are excluded.
+- OPD Revenue summary: shows Total collected, Receipts issued, and Average fee per visit for the selected date range. Only appears once at least one OPD fee receipt has been generated.
+- OPD Revenue chart: a bar chart showing daily consultation fee revenue. Appears alongside the patient volume chart once receipts exist.
 - Top chief complaints: most common reasons patients visited in the selected period.
 - Top prescribed medicines: most frequently prescribed drugs in the selected period.
 - Summary cards: Total Visits, Avg/Day, New Patients, Registered Patients.
@@ -192,7 +215,10 @@ ANALYTICS (/analytics/)
 
 STAFF MANAGEMENT (/accounts/staff/)
 - Add staff: click "+ Add Staff"; enter name, mobile number (becomes username), password, and role.
-- Edit staff: click the edit icon to change name, username, role, or permissions.
+- Edit staff: click the edit icon to change name, qualification, registration number, role, or permissions.
+- Registration Number field: enter the doctor's Medical Council registration number (e.g. MH-12345). This prints on prescriptions.
+- Print Registration Number toggle: shown for doctors and staff with prescribing permission. When checked (default), the registration number appears in the doctor block on every printed prescription. Uncheck it if the doctor prefers not to show it.
+  - If the toggle is ON but no registration number has been entered, a yellow nudge banner appears on the prescription print screen with a direct link to add the number.
 - Reset password: click "Reset Password" next to a staff member to generate a secure temporary password; the page then shows a WhatsApp button to send the new password to the staff member directly.
 - Delete staff: click the delete icon; you cannot delete your own account.
 - Roles available: Admin, Doctor, Receptionist, Pharmacist (presets that set permissions automatically).
@@ -212,11 +238,32 @@ CLINIC SETTINGS — EDIT CLINIC DETAILS (/accounts/clinic/edit/)
 - LICENSE NUMBERS section:
   - Drug License Number: your pharmacy's drug license number. Printed on every pharmacy bill. Enter it here so it appears on all bills automatically.
   - Medical License Number: the doctor's medical registration number. Also printed on pharmacy bills.
+- CONSULTATION FEE section:
+  - Default OPD Consultation Fee (₹): set the standard consultation fee for your clinic. This amount is pre-filled automatically whenever a receptionist or doctor opens the fee collection screen. It can still be edited per patient. Set to 0 to leave the field blank.
 - GST / TAX section:
-  - GSTIN: your clinic's GST Identification Number (15-character alphanumeric code). Printed in the header of every pharmacy bill. Leave blank if your clinic is not GST-registered.
+  - GSTIN: your clinic's GST Identification Number (15-character alphanumeric code). Printed in the header of every pharmacy bill and OPD receipts. Leave blank if your clinic is not GST-registered.
   - Default GST %: the GST rate applied to medicine bills. Options: 0% (most generic / NLEM medicines — default for most clinics), 5% (non-essential branded medicines), 12% (medical devices, surgical items, Ayurvedic), 18% (equipment / other). GST rates are fixed by law based on HSN code. Choose the slab that applies to most of your dispensed medicines. This can be overridden per bill.
   - When GST % > 0, pharmacy bills automatically show CGST and SGST as separate line items (each = half the total GST).
   - A nudge appears on the pharmacy dashboard if GSTIN is missing, with a link to add it.
+
+OPD CONSULTATION FEE — COLLECT FEE (/visit/<id>/collect-fee/)
+- Accessible from the queue card (₹ Fee or ₹ Collect Fee button) or from the prescription print toolbar.
+- Shows the patient name, token number, and visit date prominently.
+- Fee amount: pre-filled with the clinic's default OPD fee (set in Clinic Settings). Edit the amount for this patient if needed.
+- Quick-amount pills: tap ₹100, ₹200, ₹300, ₹500, or ₹1000 to fill the amount instantly.
+- Payment mode: select how the patient is paying — Cash, UPI, Card, Insurance, or Waive fee.
+- Waive fee: selecting "Waive fee" sets the amount to ₹0 and generates a receipt marked as waived. Use for relatives, staff, or underprivileged patients.
+- Submit: clicking "Collect & Generate Receipt" saves the fee and opens the OPD receipt.
+- If a fee was already collected, the form shows a banner with the existing amount and a link to view the receipt. You can update the fee by submitting again.
+
+OPD RECEIPT (/visit/<id>/opd-receipt/)
+- A clean, printable receipt for the consultation fee. Suitable for insurance and employer reimbursement claims.
+- Shows: clinic name, address, GSTIN (if set), patient name, age, gender, phone, token number, date, doctor name, consultation type, fee amount, payment mode, and a "Payment received" confirmation strip.
+- Receipt number format: OPD-YYYYMMDD-XXXX (e.g. OPD-20260328-0001). Unique per clinic per day.
+- Toolbar buttons: Print Receipt (browser print dialog, A5 format), Edit Fee (go back to fee form to correct amount).
+- The receipt includes a signature area for the doctor and a note that it is valid for insurance/employer reimbursement.
+- Waived receipts clearly state "Fee waived — no payment collected".
+- Insurance receipts state "Billable to insurance — receipt issued for reimbursement".
 
 CLINIC DELETION (request-based)
 - Doctors or admins can request clinic deletion from the staff management page.
@@ -264,7 +311,7 @@ The following features do not exist in ClinicAI yet. If asked about them, explai
 - Appointment scheduling / calendar booking
 - SMS notifications to patients
 - Lab report management or upload
-- Consultation billing (doctor fee billing separate from pharmacy)
+- Bulk OPD fee exports or monthly billing reports (individual receipts are available)
 - Insurance claim management
 - Patient self-service portal
 - Telemedicine / video consultation

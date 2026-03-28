@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+{% block title %}Pharmacy Ledger — {{ clinic.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Summary cards */
+.ledger-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+@media (max-width: 800px) { .ledger-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .ledger-cards { grid-template-columns: 1fr 1fr; gap: 10px; } }
+
+.ledger-card {
+  background: #fff; border: 1.5px solid #E5E7EB; border-radius: 12px;
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 4px;
+}
+.ledger-card-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #6B7280; }
+.ledger-card-value { font-size: 22px; font-weight: 800; color: #111827; line-height: 1.2; }
+.ledger-card-sub { font-size: 11px; color: #9CA3AF; }
+.ledger-card.green { border-color: #A7F3D0; background: #F0FDF4; }
+.ledger-card.green .ledger-card-value { color: #065F46; }
+.ledger-card.red { border-color: #FECACA; background: #FFF5F5; }
+.ledger-card.red .ledger-card-value { color: #991B1B; }
+.ledger-card.blue { border-color: #BFDBFE; background: #EFF6FF; }
+.ledger-card.blue .ledger-card-value { color: #1E40AF; }
+.ledger-card.profit-pos { border-color: #A7F3D0; background: #F0FDF4; }
+.ledger-card.profit-pos .ledger-card-value { color: #065F46; }
+.ledger-card.profit-neg { border-color: #FECACA; background: #FFF5F5; }
+.ledger-card.profit-neg .ledger-card-value { color: #991B1B; }
+
+/* Chart area */
+.ledger-chart-wrap {
+  background: #fff; border: 1.5px solid #E5E7EB; border-radius: 12px;
+  padding: 18px 20px; margin-bottom: 24px;
+}
+.ledger-chart-title { font-size: 14px; font-weight: 700; color: #374151; margin-bottom: 14px; }
+
+/* Filter bar */
+.ledger-filter-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.filter-pill {
+  padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1.5px solid #E5E7EB; background: #F9FAFB; color: #374151; transition: all .15s;
+}
+.filter-pill.active { background: #111827; color: #fff; border-color: #111827; }
+.filter-pill.purchase.active { background: #2563EB; border-color: #2563EB; color: #fff; }
+.filter-pill.sale.active { background: #059669; border-color: #059669; color: #fff; }
+.filter-pill.return.active { background: #D97706; border-color: #D97706; color: #fff; }
+
+/* Table */
+.ledger-table-wrap {
+  background: #fff; border: 1.5px solid #E5E7EB; border-radius: 12px; overflow: hidden;
+}
+.ledger-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ledger-table th {
+  background: #F9FAFB; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: #6B7280; padding: 10px 14px; text-align: left;
+  border-bottom: 1.5px solid #E5E7EB;
+}
+.ledger-table td { padding: 11px 14px; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+.ledger-table tr:last-child td { border-bottom: none; }
+.ledger-table tr:hover td { background: #F9FAFB; }
+
+/* Type badges */
+.type-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.badge-purchase { background: #DBEAFE; color: #1E40AF; }
+.badge-sale { background: #D1FAE5; color: #065F46; }
+.badge-return { background: #FEF3C7; color: #92400E; }
+
+/* Amount columns */
+.col-in { color: #1E40AF; font-weight: 700; }
+.col-out { color: #059669; font-weight: 700; }
+.col-return { color: #D97706; font-weight: 700; }
+.col-amount { font-weight: 600; color: #111827; }
+
+/* Mobile: hide some columns */
+@media (max-width: 640px) {
+  .hide-mobile { display: none; }
+  .ledger-table td, .ledger-table th { padding: 9px 10px; }
+}
+
+/* Empty state */
+.ledger-empty { text-align: center; padding: 48px 20px; color: #9CA3AF; font-size: 14px; }
+
+/* Date badge */
+.date-group-row td {
+  background: #F3F4F6 !important; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; color: #6B7280; letter-spacing: .05em; padding: 6px 14px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width: 960px;">
+
+  <!-- Header -->
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+    <div>
+      <h1 class="page-title" style="margin:0;">Pharmacy Ledger</h1>
+      <p class="page-subtitle" style="margin:4px 0 0 0;">Last 30 days — {{ since|date:"d M" }} to {{ today|date:"d M Y" }}</p>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a href="{% url 'pharmacy:analytics' %}" class="btn btn-secondary btn-sm">Analytics</a>
+      <a href="{% url 'pharmacy:dashboard' %}" class="btn btn-secondary btn-sm">← Pharmacy</a>
+    </div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="ledger-cards">
+    <div class="ledger-card blue">
+      <div class="ledger-card-label">Purchases (Stock In)</div>
+      <div class="ledger-card-value">₹{{ purchase_total|floatformat:0 }}</div>
+      <div class="ledger-card-sub">Cost of stock received</div>
+    </div>
+    <div class="ledger-card green">
+      <div class="ledger-card-label">Sales (Revenue)</div>
+      <div class="ledger-card-value">₹{{ sales_total|floatformat:0 }}</div>
+      <div class="ledger-card-sub">Billed to patients</div>
+    </div>
+    <div class="ledger-card red">
+      <div class="ledger-card-label">Returns</div>
+      <div class="ledger-card-value">₹{{ returns_total|floatformat:0 }}</div>
+      <div class="ledger-card-sub">Medicine returned</div>
+    </div>
+    <div class="ledger-card {% if profit >= 0 %}profit-pos{% else %}profit-neg{% endif %}">
+      <div class="ledger-card-label">Gross Margin</div>
+      <div class="ledger-card-value">{% if profit >= 0 %}+{% endif %}₹{{ profit|floatformat:0 }}</div>
+      <div class="ledger-card-sub">Sales − Purchases − Returns</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="ledger-chart-wrap">
+    <div class="ledger-chart-title">Daily Sales vs Purchases (last 30 days)</div>
+    <canvas id="ledgerChart" height="90"></canvas>
+  </div>
+
+  <!-- Filter pills -->
+  <div class="ledger-filter-bar">
+    <span style="font-size:12px; font-weight:600; color:#6B7280; margin-right:4px;">Filter:</span>
+    <button class="filter-pill active" id="pill-all" onclick="filterEntries('all')">All</button>
+    <button class="filter-pill purchase" id="pill-purchase" onclick="filterEntries('purchase')">Purchases</button>
+    <button class="filter-pill sale" id="pill-sale" onclick="filterEntries('sale')">Sales</button>
+    <button class="filter-pill return" id="pill-return" onclick="filterEntries('return')">Returns</button>
+  </div>
+
+  <!-- Ledger table -->
+  <div class="ledger-table-wrap">
+    {% if entries %}
+    <table class="ledger-table" id="ledgerTable">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th class="hide-mobile">Qty / Detail</th>
+          <th style="text-align:right;">Amount (₹)</th>
+        </tr>
+      </thead>
+      <tbody id="ledgerBody">
+        {% for entry in entries %}
+        <tr class="ledger-row" data-type="{{ entry.type }}">
+          <td style="white-space:nowrap; color:#374151; font-size:12px;">
+            {{ entry.date|date:"d M" }}<br>
+            <span style="color:#9CA3AF; font-size:11px;">{{ entry.date|date:"D" }}</span>
+          </td>
+          <td>
+            {% if entry.type == 'purchase' %}
+              <span class="type-badge badge-purchase">
+                <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+                Purchase
+              </span>
+            {% elif entry.type == 'sale' %}
+              <span class="type-badge badge-sale">
+                <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7 7 7-7"/></svg>
+                Sale
+              </span>
+            {% else %}
+              <span class="type-badge badge-return">
+                <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
+                Return
+              </span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="font-weight:600; color:#111827;">{{ entry.label }}</div>
+            <div style="font-size:11px; color:#9CA3AF; margin-top:1px;">{{ entry.detail }}</div>
+          </td>
+          <td class="hide-mobile" style="color:#6B7280; font-size:12px;">
+            {% if entry.qty %}
+              {{ entry.qty }} units
+              {% if entry.unit_price %}
+                <span style="color:#9CA3AF;">@ ₹{{ entry.unit_price }}</span>
+              {% endif %}
+            {% elif entry.type == 'sale' %}
+              <span style="color:#9CA3AF;">Bill</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td style="text-align:right; white-space:nowrap;">
+            {% if entry.type == 'purchase' %}
+              <span class="col-in">₹{{ entry.amount|floatformat:0 }}</span>
+            {% elif entry.type == 'sale' %}
+              <span class="col-out">₹{{ entry.amount|floatformat:0 }}</span>
+            {% else %}
+              <span class="col-return">₹{{ entry.return_amount|floatformat:0 }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="ledger-empty">
+      <div style="font-size:32px; margin-bottom:12px;">📋</div>
+      <div style="font-weight:600; color:#374151; margin-bottom:6px;">No transactions in the last 30 days</div>
+      <div>Purchases, sales, and returns will appear here as they happen.</div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Chart ──────────────────────────────────────────────────────────────────
+const chartLabels = {{ chart_labels|safe }};
+const chartSales = {{ chart_sales|safe }};
+const chartPurchases = {{ chart_purchases|safe }};
+
+const ctx = document.getElementById('ledgerChart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: 'Sales ₹',
+        data: chartSales,
+        backgroundColor: 'rgba(5, 150, 105, 0.75)',
+        borderRadius: 4,
+        borderSkipped: false,
+        order: 2,
+      },
+      {
+        label: 'Purchases ₹',
+        data: chartPurchases,
+        backgroundColor: 'rgba(37, 99, 235, 0.55)',
+        borderRadius: 4,
+        borderSkipped: false,
+        order: 1,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { font: { size: 12 }, boxWidth: 12, padding: 14 } },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            return ' ' + ctx.dataset.label + ': ₹' + ctx.raw.toLocaleString('en-IN');
+          }
+        }
+      }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45 } },
+      y: {
+        beginAtZero: true,
+        grid: { color: '#F3F4F6' },
+        ticks: {
+          font: { size: 11 },
+          callback: v => '₹' + (v >= 1000 ? (v/1000).toFixed(1)+'k' : v),
+        }
+      }
+    },
+  }
+});
+
+// ── Filter pills ────────────────────────────────────────────────────────────
+function filterEntries(type) {
+  // Update pill styles
+  ['all','purchase','sale','return'].forEach(function(t) {
+    const pill = document.getElementById('pill-' + t);
+    if (!pill) return;
+    pill.classList.remove('active');
+    if (t !== 'all') pill.classList.remove(t);
+  });
+  const activePill = document.getElementById('pill-' + type);
+  if (activePill) {
+    activePill.classList.add('active');
+    if (type !== 'all') activePill.classList.add(type);
+  }
+
+  // Show/hide rows
+  document.querySelectorAll('.ledger-row').forEach(function(row) {
+    if (type === 'all' || row.dataset.type === type) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+</script>
+{% endblock %}

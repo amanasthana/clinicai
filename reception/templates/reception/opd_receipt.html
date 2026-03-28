@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OPD Receipt — {{ patient.full_name }} — {{ clinic.name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── Reset ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: #F3F4F6;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── Toolbar (screen only) ───────────────────────────────── */
+.receipt-toolbar {
+  background: #111827;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.tb-btn:hover { opacity: 0.88; }
+.tb-print  { background: #fff;      color: #111827; }
+.tb-wa     { background: #25D366;   color: #fff; }
+.tb-fee    { background: #4F46E5;   color: #fff; }
+.tb-back   { background: transparent; color: #9CA3AF; border: 1px solid #374151; }
+.tb-back:hover { color: #fff; border-color: #9CA3AF; }
+.tb-spacer { flex: 1; }
+.tb-receipt-no {
+  font-size: 12px;
+  color: #6B7280;
+  font-family: monospace;
+}
+
+/* ── Page wrapper ────────────────────────────────────────── */
+.receipt-page {
+  padding: 20px 16px 40px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Receipt card ────────────────────────────────────────── */
+.receipt-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 4px 20px rgba(0,0,0,.06);
+  width: 100%;
+  max-width: 560px;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.receipt-header {
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid #F3F4F6;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.receipt-clinic-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 2px;
+}
+.receipt-clinic-address {
+  font-size: 12px;
+  color: #6B7280;
+  max-width: 260px;
+}
+.receipt-badge {
+  background: #EEF2FF;
+  color: #4338CA;
+  border: 1.5px solid #C7D2FE;
+  border-radius: 8px;
+  padding: 6px 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.receipt-badge-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #6366F1;
+  margin-bottom: 2px;
+}
+.receipt-badge-no {
+  font-size: 13px;
+  font-weight: 800;
+  color: #3730A3;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+/* ── Patient row ─────────────────────────────────────────── */
+.receipt-patient {
+  background: #F9FAFB;
+  padding: 14px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #F3F4F6;
+  flex-wrap: wrap;
+}
+.receipt-patient-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 2px;
+}
+.receipt-patient-sub {
+  font-size: 12px;
+  color: #6B7280;
+}
+.receipt-token {
+  background: #4F46E5;
+  color: #fff;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ── Details table ───────────────────────────────────────── */
+.receipt-details {
+  padding: 20px 28px;
+  border-bottom: 1px solid #F3F4F6;
+}
+.receipt-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px dashed #F3F4F6;
+  font-size: 14px;
+}
+.receipt-row:last-child { border-bottom: none; }
+.receipt-row-label { color: #6B7280; }
+.receipt-row-value { font-weight: 600; color: #111827; text-align: right; }
+
+/* ── Amount box ──────────────────────────────────────────── */
+.receipt-amount-box {
+  background: #F9FAFB;
+  margin: 0 28px 0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1.5px solid #E5E7EB;
+}
+.receipt-amount-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+.receipt-amount-label-sub {
+  font-size: 11px;
+  color: #9CA3AF;
+  margin-top: 1px;
+}
+.receipt-amount-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.5px;
+}
+.receipt-amount-value.waived {
+  color: #6B7280;
+  font-size: 20px;
+}
+
+/* Payment mode pill */
+.receipt-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #D1FAE5;
+  color: #065F46;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+.receipt-mode-pill.waived { background: #F3F4F6; color: #6B7280; }
+.receipt-mode-pill.insurance { background: #DBEAFE; color: #1E40AF; }
+.receipt-mode-pill.card { background: #EDE9FE; color: #5B21B6; }
+.receipt-mode-pill.upi { background: #FEF3C7; color: #92400E; }
+
+/* ── Doctor sign row ─────────────────────────────────────── */
+.receipt-footer {
+  padding: 20px 28px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+.receipt-footer-left {
+  font-size: 11px;
+  color: #9CA3AF;
+  line-height: 1.6;
+}
+.receipt-footer-left strong { color: #374151; }
+.receipt-sign-area {
+  text-align: right;
+}
+.receipt-sign-line {
+  display: block;
+  width: 120px;
+  border-top: 1.5px solid #D1D5DB;
+  margin-bottom: 4px;
+}
+.receipt-sign-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+.receipt-sign-role {
+  font-size: 11px;
+  color: #9CA3AF;
+}
+
+/* ── Stamp / Valid note ──────────────────────────────────── */
+.receipt-stamp-row {
+  background: #F0FDF4;
+  border-top: 1px dashed #BBF7D0;
+  padding: 10px 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #166534;
+}
+
+/* ── Print styles ────────────────────────────────────────── */
+@media print {
+  @page { size: A5 portrait; margin: 8mm 10mm; }
+  body { background: #fff; }
+  .receipt-toolbar { display: none !important; }
+  .receipt-page { padding: 0; }
+  .receipt-card {
+    box-shadow: none;
+    border-radius: 0;
+    max-width: 100%;
+  }
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (min-width: 600px) {
+  .receipt-page { padding: 32px 24px 60px; }
+}
+@media (max-width: 440px) {
+  .receipt-header { flex-direction: column; }
+  .receipt-badge { align-self: flex-start; }
+  .receipt-amount-value { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Toolbar (screen only) -->
+<div class="receipt-toolbar">
+  <button onclick="window.print()" class="tb-btn tb-print">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+    </svg>
+    Print Receipt
+  </button>
+  <a href="{% url 'reception:collect_fee' visit.id %}" class="tb-btn tb-fee">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Edit Fee
+  </a>
+  <span class="tb-spacer"></span>
+  <span class="tb-receipt-no">{{ visit.fee_receipt_number }}</span>
+  <a href="/" class="tb-btn tb-back">← Dashboard</a>
+</div>
+
+<!-- Receipt page -->
+<div class="receipt-page">
+<div class="receipt-card">
+
+  <!-- Header: clinic info + receipt number badge -->
+  <div class="receipt-header">
+    <div>
+      <div class="receipt-clinic-name">{{ clinic.name }}</div>
+      <div class="receipt-clinic-address">
+        {% if clinic.address %}{{ clinic.address }}{% if clinic.city %}, {{ clinic.city }}{% endif %}{% elif clinic.city %}{{ clinic.city }}{% endif %}
+        {% if clinic.phone %}<br>{{ clinic.phone }}{% endif %}
+        {% if clinic.medical_license_number %}<br>Reg. No.: {{ clinic.medical_license_number }}{% endif %}
+      </div>
+    </div>
+    <div class="receipt-badge">
+      <div class="receipt-badge-label">OPD Receipt</div>
+      <div class="receipt-badge-no">{{ visit.fee_receipt_number }}</div>
+    </div>
+  </div>
+
+  <!-- Patient info -->
+  <div class="receipt-patient">
+    <div>
+      <div class="receipt-patient-name">{{ patient.full_name }}</div>
+      <div class="receipt-patient-sub">
+        {% if patient.age %}{{ patient.age }} yrs{% endif %}
+        {% if patient.gender %} · {{ patient.get_gender_display }}{% endif %}
+        {% if patient.phone %} · {{ patient.phone }}{% endif %}
+      </div>
+    </div>
+    <div class="receipt-token">Token {{ visit.token_number }}</div>
+  </div>
+
+  <!-- Visit details rows -->
+  <div class="receipt-details">
+    <div class="receipt-row">
+      <span class="receipt-row-label">Date of visit</span>
+      <span class="receipt-row-value">{{ visit.visit_date|date:"j F Y" }}</span>
+    </div>
+    <div class="receipt-row">
+      <span class="receipt-row-label">Receipt generated</span>
+      <span class="receipt-row-value">{{ visit.fee_paid_at|date:"j F Y, g:i A" }}</span>
+    </div>
+    {% if doctor %}
+    <div class="receipt-row">
+      <span class="receipt-row-label">Consulting doctor</span>
+      <span class="receipt-row-value">{{ doctor.display_name }}{% if doctor.qualification %}, {{ doctor.qualification }}{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if visit.chief_complaint %}
+    <div class="receipt-row">
+      <span class="receipt-row-label">Chief complaint</span>
+      <span class="receipt-row-value" style="max-width:220px; text-align:right;">{{ visit.chief_complaint }}</span>
+    </div>
+    {% endif %}
+    <div class="receipt-row">
+      <span class="receipt-row-label">Type</span>
+      <span class="receipt-row-value">OPD Consultation</span>
+    </div>
+  </div>
+
+  <!-- Amount box -->
+  <div class="receipt-amount-box" style="margin-bottom: 0; border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom: none;">
+    <div>
+      <div class="receipt-amount-label">Consultation fee charged</div>
+      <div class="receipt-amount-label-sub">Inclusive of all taxes</div>
+      {% if visit.payment_mode %}
+      <div class="receipt-mode-pill {% if visit.payment_mode == 'waived' %}waived{% elif visit.payment_mode == 'insurance' %}insurance{% elif visit.payment_mode == 'card' %}card{% elif visit.payment_mode == 'upi' %}upi{% endif %}">
+        {% if visit.payment_mode == 'cash' %}💵{% elif visit.payment_mode == 'upi' %}📱{% elif visit.payment_mode == 'card' %}💳{% elif visit.payment_mode == 'insurance' %}🛡️{% elif visit.payment_mode == 'waived' %}🤝{% endif %}
+        {{ visit.get_payment_mode_display }}
+      </div>
+      {% endif %}
+    </div>
+    <div>
+      {% if visit.payment_mode == 'waived' %}
+      <div class="receipt-amount-value waived">Waived</div>
+      {% else %}
+      <div class="receipt-amount-value">₹{{ visit.consultation_fee|floatformat:0 }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Paid confirmation strip -->
+  <div class="receipt-stamp-row">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+    {% if visit.payment_mode == 'waived' %}
+      Fee waived — no payment collected
+    {% elif visit.payment_mode == 'insurance' %}
+      Billable to insurance — receipt issued for reimbursement
+    {% else %}
+      Payment received — receipt issued for reimbursement purposes
+    {% endif %}
+  </div>
+
+  <!-- Footer: note + signature -->
+  <div class="receipt-footer">
+    <div class="receipt-footer-left">
+      <strong>{{ clinic.name }}</strong><br>
+      {% if clinic.gst_number %}GSTIN: {{ clinic.gst_number }}<br>{% endif %}
+      This is a computer-generated receipt.<br>
+      Valid for insurance / employer reimbursement.
+    </div>
+    <div class="receipt-sign-area">
+      <span class="receipt-sign-line"></span>
+      <div class="receipt-sign-name">
+        {% if doctor %}{{ doctor.display_name }}{% else %}Authorised Signatory{% endif %}
+      </div>
+      <div class="receipt-sign-role">{% if doctor %}{{ doctor.qualification }}{% endif %}</div>
+    </div>
+  </div>
+
+</div><!-- /receipt-card -->
+</div><!-- /receipt-page -->
+
+</body>
+</html>

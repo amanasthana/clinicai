@@ -155,6 +155,26 @@
       </div>
     </div>
 
+    <!-- Section 4: Executive Referral -->
+    <div class="card reg-section">
+      <div class="reg-section-head">
+        <div class="reg-step-badge">4</div>
+        <div>
+          <div class="reg-section-title">Were you introduced by a ClinicAI Executive?</div>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Executive's mobile number <span style="font-weight:400;color:#9CA3AF;">(optional)</span></label>
+        <input type="tel" name="referred_by_mobile" id="id_referred_by_mobile"
+          class="form-input" maxlength="10" inputmode="numeric"
+          placeholder="10-digit mobile of the executive who referred you"
+          autocomplete="off">
+        <div id="exec-lookup-result" style="margin-top:8px; font-size:13px; display:none;"></div>
+        <div class="form-help">If a ClinicAI Executive introduced you, enter their mobile number so they get credit.</div>
+      </div>
+    </div>
+
     <!-- Submit -->
     <div style="text-align:center; margin-top:8px;">
       <button type="submit" class="btn btn-primary btn-lg" style="width:100%; max-width:320px; padding:15px; font-size:16px;">
@@ -173,4 +193,54 @@
   </div>
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var input = document.getElementById('id_referred_by_mobile');
+  var resultEl = document.getElementById('exec-lookup-result');
+  if (!input || !resultEl) return;
+
+  var timer = null;
+
+  input.addEventListener('input', function() {
+    clearTimeout(timer);
+    var val = input.value.replace(/\D/g, '');
+    input.value = val;
+
+    if (val.length < 10) {
+      resultEl.style.display = 'none';
+      resultEl.innerHTML = '';
+      return;
+    }
+
+    if (val.length === 10) {
+      timer = setTimeout(function() {
+        fetch('/accounts/executives/?format=json&mobile=' + encodeURIComponent(val))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            resultEl.style.display = 'block';
+            if (data.found) {
+              resultEl.innerHTML =
+                '<span style="color:#15803D; font-weight:600;">' +
+                '<svg style="vertical-align:middle;margin-right:4px;" width="14" height="14" fill="none" stroke="#15803D" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>' +
+                'Executive found: ' + data.name +
+                (data.city ? ' (' + data.city + ')' : '') +
+                '</span>';
+            } else {
+              resultEl.innerHTML =
+                '<span style="color:#9CA3AF;">' +
+                'Executive not found in our network &mdash; we will follow up.' +
+                '</span>';
+            }
+          })
+          .catch(function() {
+            resultEl.style.display = 'none';
+          });
+      }, 400);
+    }
+  });
+})();
+</script>
 {% endblock %}

@@ -5,7 +5,7 @@ from datetime import timedelta
 import anthropic
 
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
 from django.http import StreamingHttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -188,6 +188,78 @@ def patient_delete_view(request, pk):
 
 
 @require_permission('can_register_patients')
+@login_required
+def collect_fee_view(request, pk):
+    """
+    GET : Show fee collection form (pre-filled with clinic default).
+    POST: Save fee + generate receipt number → redirect to OPD receipt.
+    Accessible by both receptionists and doctors.
+    """
+    visit = get_object_or_404(Visit, id=pk, clinic=request.user.staff_profile.clinic)
+    clinic = visit.clinic
+
+    if request.method == 'POST':
+        fee_str   = request.POST.get('consultation_fee', '').strip()
+        mode      = request.POST.get('payment_mode', 'cash')
+        try:
+            fee = float(fee_str)
+            if fee < 0:
+                raise ValueError
+        except ValueError:
+            from django.http import HttpResponseBadRequest
+            return HttpResponseBadRequest('Invalid fee amount')
+
+        # Generate receipt only if not already generated
+        if not visit.fee_receipt_number:
+            visit.fee_receipt_number = Visit.generate_receipt_number()
+
+        visit.consultation_fee = fee
+        visit.payment_mode     = mode
+        visit.fee_paid_at      = timezone.now()
+        visit.save(update_fields=['consultation_fee', 'payment_mode', 'fee_paid_at', 'fee_receipt_number'])
+        return redirect('reception:opd_receipt', pk=visit.id)
+
+    default_fee = clinic.default_opd_fee or ''
+    # If fee already collected, pre-fill with existing values
+    if visit.consultation_fee is not None:
+        default_fee = visit.consultation_fee
+
+    return render(request, 'reception/collect_fee.html', {
+        'visit':       visit,
+        'patient':     visit.patient,
+        'clinic':      clinic,
+        'default_fee': default_fee,
+        'already_paid': visit.fee_paid_at is not None,
+    })
+
+
+@login_required
+def opd_receipt_view(request, pk):
+    """Printable OPD consultation fee receipt."""
+    visit = get_object_or_404(Visit, id=pk, clinic=request.user.staff_profile.clinic)
+    if not visit.fee_receipt_number:
+        return redirect('reception:collect_fee', pk=pk)
+
+    doctor = None
+    try:
+        rx = visit.prescription
+        doctor = rx.doctor
+    except Exception:
+        pass
+    # Fallback: find any doctor staff at this clinic
+    if not doctor:
+        from accounts.models import StaffMember
+        doctor = StaffMember.objects.filter(clinic=visit.clinic, role='doctor').first()
+
+    return render(request, 'reception/opd_receipt.html', {
+        'visit':   visit,
+        'patient': visit.patient,
+        'clinic':  visit.clinic,
+        'doctor':  doctor,
+    })
+
+
+@require_permission('can_register_patients')
 def visit_detail_view(request, pk):
     """View/edit vitals for a specific visit."""
     clinic = request.user.staff_profile.clinic
@@ -308,6 +380,22 @@ def analytics_view(request):
     elapsed_days = (today - since).days + 1
     avg_daily = round(total_visits / elapsed_days, 1) if elapsed_days > 0 else 0
 
+    # ── OPD fee revenue ────────────────────────────────────────────────────
+    fee_qs = visits_qs.filter(fee_paid_at__isnull=False, consultation_fee__isnull=False)
+    opd_revenue_total = fee_qs.aggregate(total=Sum('consultation_fee'))['total'] or 0
+    opd_receipts_count = fee_qs.count()
+    avg_fee = round(float(opd_revenue_total) / opd_receipts_count, 0) if opd_receipts_count else 0
+    # Daily OPD revenue for chart (same date range as volume)
+    daily_fee_qs = (
+        fee_qs
+        .annotate(day=TruncDate('visit_date'))
+        .values('day')
+        .annotate(total=Sum('consultation_fee'))
+        .order_by('day')
+    )
+    daily_fee_map = {row['day']: float(row['total']) for row in daily_fee_qs}
+    opd_revenue_data = [daily_fee_map.get(since + timedelta(days=i), 0) for i in range(days)]
+
     # ── Patient visit log ─────────────────────────────────────────────────
     visit_log = (
         visits_qs
@@ -327,8 +415,14 @@ def analytics_view(request):
             'new_patients': new_patients,
             'avg_daily': avg_daily,
         },
+        'opd_revenue': {
+            'total': opd_revenue_total,
+            'count': opd_receipts_count,
+            'avg_fee': avg_fee,
+        },
         'volume_labels': json.dumps(volume_labels),
         'volume_data': json.dumps(volume_data),
+        'opd_revenue_data': json.dumps(opd_revenue_data),
         'top_complaints': top_complaints,
         'top_medicines': top_medicines,
         'visit_log': visit_log,
@@ -399,7 +493,7 @@ def _get_clinic_data_context(clinic, question):
                           'busy', 'footfall', 'count', 'saw', 'see', 'seen'}
     if any(kw in q for kw in analytics_keywords):
         import datetime as _dt
-        from django.db.models import Count
+        from django.db.models import Count, Sum
         from django.db.models.functions import TruncDate
         today = timezone.localdate()
         base = Visit.objects.filter(clinic=clinic).exclude(status__in=['no_show', 'cancelled'])

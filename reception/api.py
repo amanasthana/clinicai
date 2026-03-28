@@ -118,6 +118,7 @@ def queue_api(request):
             'chief_complaint': v.chief_complaint,
             'status': v.status,
             'vitals_bp': v.vitals_bp,
+            'fee_receipt_number': v.fee_receipt_number or '',
         })
     return JsonResponse({'queue': data, 'status_filter': status_filter})
 
@@ -172,3 +173,28 @@ def cancel_visit_api(request, pk):
     visit.save(update_fields=['status', 'cancellation_reason'])
 
     return JsonResponse({'ok': True, 'status': 'cancelled', 'reason': reason})
+
+
+@require_permission('can_register_patients')
+@require_POST
+def delete_visit_api(request, pk):
+    """
+    Hard-delete a visit from the queue.
+    Only allowed if the visit has no saved prescription — prevents accidental
+    deletion of completed consultations.
+    """
+    try:
+        clinic = request.user.staff_profile.clinic
+        visit = Visit.objects.get(id=pk, clinic=clinic)
+    except Visit.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Visit not found'}, status=404)
+
+    # Block deletion if a prescription has been saved for this visit
+    if hasattr(visit, 'prescription'):
+        return JsonResponse(
+            {'ok': False, 'error': 'Cannot delete — a prescription has been saved for this visit. Use Cancel instead.'},
+            status=400
+        )
+
+    visit.delete()
+    return JsonResponse({'ok': True})

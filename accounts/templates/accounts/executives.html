@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+{% block title %}ClinicAI Executive Network{% endblock %}
+
+{% block extra_head %}
+<style>
+.exec-page { max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
+
+/* ── Header ── */
+.exec-header {
+  text-align: center;
+  padding: 44px 24px 36px;
+  background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
+  border-radius: 16px;
+  margin-bottom: 28px;
+  color: #fff;
+}
+.exec-header-brand {
+  font-size: 12px; font-weight: 700; letter-spacing: 1.2px;
+  text-transform: uppercase; color: #93C5FD; margin-bottom: 10px;
+}
+.exec-header-title {
+  font-size: 28px; font-weight: 800; margin-bottom: 8px;
+  letter-spacing: -0.5px; line-height: 1.2;
+}
+.exec-header-sub {
+  font-size: 14px; color: rgba(255,255,255,0.72); line-height: 1.6;
+  max-width: 440px; margin: 0 auto 0;
+}
+
+/* ── Search ── */
+.exec-search-section { margin-bottom: 24px; }
+.exec-search-wrap { position: relative; }
+.exec-search-icon {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: #9CA3AF; pointer-events: none; z-index: 1;
+}
+.exec-search-input {
+  width: 100%; padding: 14px 16px 14px 44px;
+  border: 2px solid var(--color-border); border-radius: 12px;
+  font-size: 15px; box-sizing: border-box;
+  background: #fff; color: #111827;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.exec-search-input:focus {
+  outline: none; border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+}
+.exec-search-hint {
+  font-size: 12px; color: #9CA3AF; margin-top: 6px; text-align: center;
+}
+
+/* ── Dropdown ── */
+.exec-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: #fff; border: 1px solid #E5E7EB;
+  border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,0.13);
+  z-index: 200; overflow: hidden; display: none;
+}
+.exec-dropdown.open { display: block; }
+.exec-dropdown-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px; cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid #F3F4F6;
+}
+.exec-dropdown-item:last-child { border-bottom: none; }
+.exec-dropdown-item:hover, .exec-dropdown-item.kbd-active { background: #EFF6FF; }
+.exec-dd-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: linear-gradient(135deg, #1D4ED8, #6366F1);
+  color: #fff; font-size: 15px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; overflow: hidden;
+}
+.exec-dd-avatar img { width: 38px; height: 38px; object-fit: cover; }
+.exec-dd-name { font-size: 14px; font-weight: 600; color: #111827; line-height: 1.3; }
+.exec-dd-meta { font-size: 12px; color: #6B7280; margin-top: 1px; }
+.exec-dd-match { color: #2563EB; font-weight: 700; }
+.exec-dropdown-empty {
+  padding: 18px 14px; font-size: 14px; color: #9CA3AF; text-align: center;
+}
+.exec-dropdown-footer {
+  padding: 9px 14px; font-size: 12px; color: #6B7280;
+  background: #F9FAFB; border-top: 1px solid #F3F4F6;
+  text-align: center;
+}
+
+/* ── Teaser strip (default state) ── */
+.exec-teaser {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.exec-teaser-label {
+  font-size: 12px; font-weight: 600; color: #9CA3AF;
+  text-transform: uppercase; letter-spacing: 0.7px;
+  margin-bottom: 2px;
+}
+
+/* ── Row card ── */
+.exec-row {
+  background: #fff; border: 1px solid var(--color-border);
+  border-radius: 11px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 14px;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.exec-row:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  border-color: #C7D2FE;
+}
+.exec-row.highlight {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+.exec-row-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, #1D4ED8, #6366F1);
+  color: #fff; font-size: 16px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; overflow: hidden;
+  border: 2px solid #E5E7EB;
+}
+.exec-row-avatar img { width: 44px; height: 44px; object-fit: cover; }
+.exec-row-info { flex: 1; min-width: 0; }
+.exec-row-name { font-size: 14px; font-weight: 700; color: #111827; }
+.exec-row-loc {
+  font-size: 12px; color: #6B7280; margin-top: 1px;
+  display: flex; align-items: center; gap: 3px;
+}
+.exec-row-mob {
+  font-size: 12px; font-weight: 600; color: #9CA3AF;
+  font-family: 'Courier New', monospace; letter-spacing: 0.5px;
+  white-space: nowrap;
+  background: #F3F4F6; border-radius: 5px; padding: 3px 8px;
+}
+
+/* ── Network CTA (shown when not searching) ── */
+.exec-network-cta {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: #EFF6FF; border: 1px solid #BFDBFE;
+  border-radius: 11px; padding: 14px 18px;
+  margin-top: 4px;
+}
+.exec-network-cta-text { font-size: 14px; color: #1E40AF; line-height: 1.5; }
+.exec-network-cta-text strong { font-weight: 700; }
+.exec-network-cta-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #2563EB; color: #fff;
+  border: none; border-radius: 8px;
+  padding: 9px 16px; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.exec-network-cta-btn:hover { background: #1D4ED8; }
+
+/* ── Results state ── */
+.exec-results { display: none; flex-direction: column; gap: 10px; }
+.exec-results.visible { display: flex; }
+.exec-results-header {
+  font-size: 13px; color: #6B7280; margin-bottom: 2px;
+}
+.exec-results-header strong { color: #111827; }
+.exec-no-results-state {
+  text-align: center; padding: 36px 24px;
+  background: #fff; border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+.exec-no-results-state p { font-size: 14px; color: #9CA3AF; margin-top: 6px; }
+
+/* ── Footer CTA ── */
+.exec-footer-cta {
+  text-align: center; margin-top: 32px; padding: 28px 24px;
+  background: #F8FAFC; border: 1px solid var(--color-border);
+  border-radius: 14px;
+}
+.exec-footer-cta-title { font-size: 17px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+.exec-footer-cta-sub { font-size: 13px; color: #6B7280; margin-bottom: 16px; }
+
+@media (max-width: 480px) {
+  .exec-page { padding: 20px 14px 60px; }
+  .exec-header { padding: 32px 18px 28px; }
+  .exec-header-title { font-size: 22px; }
+  .exec-network-cta { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .exec-network-cta-btn { width: 100%; justify-content: center; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="exec-page">
+
+  <div class="exec-header">
+    <div class="exec-header-brand">Field Representative Network</div>
+    <h1 class="exec-header-title">ClinicAI Executive Network</h1>
+    <p class="exec-header-sub">
+      Verified field representatives helping clinics across North India go digital.
+    </p>
+  </div>
+
+  <!-- Search -->
+  <div class="exec-search-section">
+    <div class="exec-search-wrap" id="search-wrap">
+      <span class="exec-search-icon">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+        </svg>
+      </span>
+      <input
+        type="text"
+        id="exec-search"
+        placeholder="Search {{ total_approved }}+ executives by name, city or mobile..."
+        class="exec-search-input"
+        autocomplete="off"
+        inputmode="text"
+      >
+      <div class="exec-dropdown" id="exec-dropdown"></div>
+    </div>
+    <div class="exec-search-hint">Try "Lucknow", "Rajesh" or last 4 digits of a mobile number</div>
+  </div>
+
+  <!-- Default state: 3 teaser rows -->
+  <div id="teaser-state">
+    <div class="exec-teaser-label">Featured executives</div>
+    <div class="exec-teaser" id="teaser-rows"></div>
+    <div class="exec-network-cta">
+      <div class="exec-network-cta-text">
+        <strong>{{ total_approved }}+ verified executives</strong> across UP, Delhi NCR, MP, Rajasthan and more.
+        Search above to find the one nearest to you.
+      </div>
+      <button class="exec-network-cta-btn" onclick="focusSearch()">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+        </svg>
+        Search network
+      </button>
+    </div>
+  </div>
+
+  <!-- Results state: shown while searching -->
+  <div class="exec-results" id="results-state">
+    <div class="exec-results-header" id="results-header"></div>
+    <div id="results-rows"></div>
+    <div class="exec-no-results-state" id="no-results-state" style="display:none;">
+      <svg width="40" height="40" fill="none" stroke="#D1D5DB" stroke-width="1.5" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
+      </svg>
+      <p>No executives found. Try a different name or city.</p>
+    </div>
+  </div>
+
+  <!-- Footer CTA -->
+  <div class="exec-footer-cta">
+    <div class="exec-footer-cta-title">Want to join the ClinicAI Executive Network?</div>
+    <div class="exec-footer-cta-sub">Earn Rs. 500 for every clinic you onboard. Apply in 2 minutes.</div>
+    <a href="/accounts/executives/register/" class="btn btn-primary">Apply as a ClinicAI Executive</a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  /* ── Data: all executives from server ── */
+  var ALL = [
+    {% for ex in executives %}
+    {
+      id: {{ ex.pk }},
+      name: "{{ ex.name|escapejs }}",
+      city: "{{ ex.city|escapejs }}",
+      state: "{{ ex.state|escapejs }}",
+      mob4: "{{ ex.mobile|slice:'-4:' }}",
+      init: "{{ ex.name|slice:':1'|upper|escapejs }}",
+      {% if ex.photo %}photo: "{{ ex.photo.url }}"{% else %}photo: null{% endif %}
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  var input     = document.getElementById('exec-search');
+  var dropdown  = document.getElementById('exec-dropdown');
+  var teaser    = document.getElementById('teaser-state');
+  var results   = document.getElementById('results-state');
+  var resRows   = document.getElementById('results-rows');
+  var resHeader = document.getElementById('results-header');
+  var noResults = document.getElementById('no-results-state');
+  var kbdIdx    = -1;
+
+  function avatarHtml(ex, size) {
+    size = size || 44;
+    if (ex.photo) {
+      return '<div class="exec-row-avatar"><img src="' + ex.photo + '" alt=""></div>';
+    }
+    return '<div class="exec-row-avatar" style="width:' + size + 'px;height:' + size + 'px;">' + ex.init + '</div>';
+  }
+
+  function rowHtml(ex) {
+    return '<div class="exec-row" id="res-row-' + ex.id + '">' +
+      avatarHtml(ex) +
+      '<div class="exec-row-info">' +
+        '<div class="exec-row-name">' + esc(ex.name) + '</div>' +
+        '<div class="exec-row-loc">' +
+          '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>' +
+          esc(ex.city) + (ex.city && ex.state ? ', ' : '') + esc(ex.state) +
+        '</div>' +
+      '</div>' +
+      '<span class="exec-row-mob">+91 XXXXXX' + ex.mob4 + '</span>' +
+    '</div>';
+  }
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function highlight(s, term) {
+    if (!term) return esc(s);
+    var re = new RegExp('(' + term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+    return esc(s).replace(re, '<span class="exec-dd-match">$1</span>');
+  }
+
+  function search(q) {
+    var term = q.trim().toLowerCase();
+    if (!term) return [];
+    var isDigits = /^\d+$/.test(term);
+    return ALL.filter(function(ex) {
+      if (isDigits) {
+        return ex.mob4.endsWith(term) || ex.mob4.startsWith(term);
+      }
+      return ex.name.toLowerCase().indexOf(term) !== -1 ||
+             ex.city.toLowerCase().indexOf(term) !== -1 ||
+             ex.state.toLowerCase().indexOf(term) !== -1;
+    });
+  }
+
+  function showTeaser() {
+    teaser.style.display = '';
+    results.classList.remove('visible');
+    input.placeholder = 'Search {{ total_approved }}+ executives by name, city or mobile...';
+  }
+
+  function showResults(matches, term) {
+    teaser.style.display = 'none';
+    results.classList.add('visible');
+    if (matches.length === 0) {
+      resHeader.innerHTML = '';
+      resRows.innerHTML = '';
+      noResults.style.display = '';
+    } else {
+      noResults.style.display = 'none';
+      resHeader.innerHTML = 'Showing <strong>' + matches.length + '</strong> result' + (matches.length !== 1 ? 's' : '') + ' for "' + esc(term) + '"';
+      resRows.innerHTML = matches.slice(0, 20).map(rowHtml).join('');
+      if (matches.length > 20) {
+        resRows.innerHTML += '<div style="text-align:center;padding:12px;font-size:13px;color:#9CA3AF;">' + (matches.length - 20) + ' more results — refine your search</div>';
+      }
+    }
+  }
+
+  function buildDropdown(matches, term) {
+    dropdown.innerHTML = '';
+    kbdIdx = -1;
+    if (!term || !matches.length) {
+      dropdown.classList.remove('open');
+      return;
+    }
+    var top = matches.slice(0, 5);
+    top.forEach(function(ex) {
+      var item = document.createElement('div');
+      item.className = 'exec-dropdown-item';
+      var av = ex.photo
+        ? '<div class="exec-dd-avatar"><img src="' + ex.photo + '" alt=""></div>'
+        : '<div class="exec-dd-avatar">' + ex.init + '</div>';
+      var isDigits = /^\d+$/.test(term);
+      item.innerHTML = av +
+        '<div>' +
+          '<div class="exec-dd-name">' + highlight(ex.name, isDigits ? '' : term) + '</div>' +
+          '<div class="exec-dd-meta">' + highlight(ex.city, isDigits ? '' : term) +
+            (ex.city && ex.state ? ', ' : '') + ex.state +
+            (isDigits ? ' &nbsp;<span style="font-family:monospace;color:#2563EB;font-weight:700;">XXXXXX' + ex.mob4 + '</span>' : '') +
+          '</div>' +
+        '</div>';
+      item.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        input.value = isDigits ? ex.mob4 : ex.name;
+        dropdown.classList.remove('open');
+        var allMatches = search(input.value);
+        showResults(allMatches, input.value);
+        // Scroll to that row
+        setTimeout(function() {
+          var row = document.getElementById('res-row-' + ex.id);
+          if (row) {
+            row.classList.add('highlight');
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(function() { row.classList.remove('highlight'); }, 1800);
+          }
+        }, 60);
+      });
+      dropdown.appendChild(item);
+    });
+    if (matches.length > 5) {
+      var footer = document.createElement('div');
+      footer.className = 'exec-dropdown-footer';
+      footer.textContent = matches.length - 5 + ' more results — press Enter or keep typing';
+      dropdown.appendChild(footer);
+    }
+    dropdown.classList.add('open');
+  }
+
+  input.addEventListener('input', function() {
+    var q = this.value;
+    if (!q.trim()) { showTeaser(); dropdown.classList.remove('open'); return; }
+    var matches = search(q);
+    showResults(matches, q.trim());
+    buildDropdown(matches, q.trim().toLowerCase());
+  });
+
+  input.addEventListener('keydown', function(e) {
+    var items = dropdown.querySelectorAll('.exec-dropdown-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      kbdIdx = Math.min(kbdIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      kbdIdx = Math.max(kbdIdx - 1, 0);
+    } else if (e.key === 'Enter' && kbdIdx >= 0 && items[kbdIdx]) {
+      e.preventDefault();
+      items[kbdIdx].dispatchEvent(new Event('mousedown'));
+      return;
+    } else if (e.key === 'Escape') {
+      dropdown.classList.remove('open');
+      if (!this.value.trim()) showTeaser();
+      return;
+    }
+    items.forEach(function(it, i) { it.classList.toggle('kbd-active', i === kbdIdx); });
+  });
+
+  input.addEventListener('blur', function() {
+    setTimeout(function() { dropdown.classList.remove('open'); }, 160);
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!document.getElementById('search-wrap').contains(e.target)) {
+      dropdown.classList.remove('open');
+    }
+  });
+
+  window.focusSearch = function() {
+    input.focus();
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  // Render 3 teaser rows on load
+  var teaserRows = document.getElementById('teaser-rows');
+  if (teaserRows && ALL.length) {
+    teaserRows.innerHTML = ALL.slice(0, 3).map(rowHtml).join('');
+  }
+})();
+</script>
+{% endblock %}

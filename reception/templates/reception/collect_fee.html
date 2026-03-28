@@ -1,0 +1,492 @@
+{% extends "base.html" %}
+{% block title %}Collect Consultation Fee — {{ patient.full_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Layout ──────────────────────────────────────────────── */
+.fee-page {
+  min-height: 100vh;
+  background: #F9FAFB;
+  padding: 24px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fee-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 4px 20px rgba(0,0,0,.06);
+  width: 100%;
+  max-width: 520px;
+  overflow: hidden;
+}
+
+/* ── Header strip ────────────────────────────────────────── */
+.fee-header {
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  padding: 20px 24px 18px;
+  color: #fff;
+}
+.fee-header-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+.fee-header-clinic {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.fee-header-sub {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+/* ── Patient strip ───────────────────────────────────────── */
+.fee-patient {
+  background: #F0F9FF;
+  border-bottom: 1px solid #BAE6FD;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.fee-token {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #0EA5E9;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.fee-patient-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0C4A6E;
+}
+.fee-patient-sub {
+  font-size: 12px;
+  color: #0369A1;
+  margin-top: 1px;
+}
+
+/* ── Already paid banner ─────────────────────────────────── */
+.fee-paid-banner {
+  background: #F0FDF4;
+  border-bottom: 1px solid #BBF7D0;
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #166534;
+  font-weight: 500;
+}
+
+/* ── Form body ───────────────────────────────────────────── */
+.fee-body {
+  padding: 24px;
+}
+
+.fee-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #9CA3AF;
+  margin-bottom: 16px;
+}
+
+/* ── Amount input ────────────────────────────────────────── */
+.fee-amount-wrap {
+  position: relative;
+  margin-bottom: 20px;
+}
+.fee-amount-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+.fee-amount-hint {
+  font-size: 12px;
+  color: #6B7280;
+  font-weight: 400;
+  margin-left: 6px;
+}
+.fee-amount-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.fee-currency {
+  position: absolute;
+  left: 14px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #374151;
+  pointer-events: none;
+  z-index: 1;
+}
+#fee-input {
+  width: 100%;
+  padding: 14px 14px 14px 36px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+  border: 2px solid #E5E7EB;
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+  background: #FAFAFA;
+  -moz-appearance: textfield;
+}
+#fee-input::-webkit-inner-spin-button,
+#fee-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+#fee-input:focus {
+  border-color: #4F46E5;
+  background: #fff;
+}
+
+/* Quick-amount pills */
+.fee-quick-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.fee-quick-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1.5px solid #E5E7EB;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.fee-quick-pill:hover,
+.fee-quick-pill.active {
+  border-color: #4F46E5;
+  background: #EEF2FF;
+  color: #4F46E5;
+}
+
+/* ── Payment mode ────────────────────────────────────────── */
+.fee-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.fee-mode-option {
+  display: none;
+}
+.fee-mode-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+  text-align: center;
+  background: #fff;
+}
+.fee-mode-label:hover {
+  border-color: #A5B4FC;
+  background: #F5F3FF;
+}
+.fee-mode-option:checked + .fee-mode-label {
+  border-color: #4F46E5;
+  background: #EEF2FF;
+  color: #3730A3;
+}
+.fee-mode-icon { font-size: 22px; line-height: 1; }
+.fee-mode-text { font-size: 12px; font-weight: 600; color: #374151; }
+.fee-mode-option:checked + .fee-mode-label .fee-mode-text { color: #3730A3; }
+
+/* Waived option — full width */
+.fee-mode-waived-wrap {
+  grid-column: 1 / -1;
+  display: flex;
+}
+.fee-mode-waived-wrap .fee-mode-label {
+  flex-direction: row;
+  justify-content: center;
+  width: 100%;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+/* ── Submit button ───────────────────────────────────────── */
+.fee-submit {
+  width: 100%;
+  padding: 14px;
+  background: #4F46E5;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.fee-submit:hover { background: #4338CA; }
+.fee-submit:active { transform: scale(0.98); }
+.fee-submit.waived-mode { background: #6B7280; }
+.fee-submit.waived-mode:hover { background: #4B5563; }
+
+.fee-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #6B7280;
+  text-decoration: none;
+}
+.fee-back:hover { color: #374151; }
+
+/* ── Divider ─────────────────────────────────────────────── */
+.fee-divider {
+  border: none;
+  border-top: 1px solid #F3F4F6;
+  margin: 20px 0;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (min-width: 640px) {
+  .fee-page { padding: 40px 24px 60px; }
+  .fee-card { max-width: 560px; }
+  .fee-mode-grid { grid-template-columns: repeat(4, 1fr); }
+  .fee-mode-waived-wrap { grid-column: auto; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fee-page">
+
+  <div class="fee-card">
+
+    <!-- Header -->
+    <div class="fee-header">
+      <div class="fee-header-label">Consultation Fee</div>
+      <div class="fee-header-clinic">{{ clinic.name }}</div>
+      <div class="fee-header-sub">{{ visit.visit_date|date:"l, j F Y" }}</div>
+    </div>
+
+    <!-- Patient strip -->
+    <div class="fee-patient">
+      <div class="fee-token">{{ visit.token_number }}</div>
+      <div>
+        <div class="fee-patient-name">{{ patient.full_name }}</div>
+        <div class="fee-patient-sub">
+          {% if patient.age %}{{ patient.age }}y{% endif %}
+          {% if patient.gender %} · {{ patient.get_gender_display }}{% endif %}
+          {% if visit.chief_complaint %} · {{ visit.chief_complaint }}{% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if already_paid %}
+    <!-- Already collected banner -->
+    <div class="fee-paid-banner">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+      Fee of ₹{{ visit.consultation_fee|floatformat:0 }} already collected · {{ visit.get_payment_mode_display }}
+      &nbsp;—&nbsp;
+      <a href="{% url 'reception:opd_receipt' visit.id %}" style="color:#166534; font-weight:600; text-decoration:underline;">View Receipt</a>
+    </div>
+    {% endif %}
+
+    <!-- Form -->
+    <div class="fee-body">
+      <form method="post" id="fee-form">
+        {% csrf_token %}
+
+        <!-- Amount -->
+        <div class="fee-amount-wrap">
+          <div class="fee-amount-label">
+            Consultation fee
+            <span class="fee-amount-hint">— edit if different today</span>
+            {% if not clinic.default_opd_fee %}
+            <a href="{% url 'accounts:clinic_edit' %}" style="font-size:11px; font-weight:500; color:#6366F1; margin-left:8px; text-decoration:none; white-space:nowrap;">
+              ⚙ Set a default fee for your clinic →
+            </a>
+            {% else %}
+            <a href="{% url 'accounts:clinic_edit' %}" style="font-size:11px; font-weight:400; color:#9CA3AF; margin-left:8px; text-decoration:none; white-space:nowrap;">
+              Default: ₹{{ clinic.default_opd_fee|floatformat:0 }} · <span style="color:#6366F1;">change</span>
+            </a>
+            {% endif %}
+          </div>
+          <div class="fee-amount-input-wrap">
+            <span class="fee-currency">₹</span>
+            <input
+              type="number"
+              id="fee-input"
+              name="consultation_fee"
+              min="0"
+              step="0.01"
+              value="{{ default_fee }}"
+              placeholder="0"
+              autocomplete="off"
+              inputmode="decimal"
+            >
+          </div>
+
+          <!-- Quick-amount pills -->
+          <div class="fee-quick-pills" id="quick-pills">
+            <button type="button" class="fee-quick-pill" onclick="setFee(100)">₹100</button>
+            <button type="button" class="fee-quick-pill" onclick="setFee(200)">₹200</button>
+            <button type="button" class="fee-quick-pill" onclick="setFee(300)">₹300</button>
+            <button type="button" class="fee-quick-pill" onclick="setFee(500)">₹500</button>
+            <button type="button" class="fee-quick-pill" onclick="setFee(1000)">₹1000</button>
+          </div>
+        </div>
+
+        <hr class="fee-divider">
+
+        <!-- Payment mode -->
+        <div class="fee-section-label">How is the patient paying?</div>
+        <div class="fee-mode-grid">
+
+          <div>
+            <input type="radio" name="payment_mode" id="mode-cash" value="cash" class="fee-mode-option"
+              {% if not visit.payment_mode or visit.payment_mode == 'cash' %}checked{% endif %}>
+            <label for="mode-cash" class="fee-mode-label">
+              <span class="fee-mode-icon">💵</span>
+              <span class="fee-mode-text">Cash</span>
+            </label>
+          </div>
+
+          <div>
+            <input type="radio" name="payment_mode" id="mode-upi" value="upi" class="fee-mode-option"
+              {% if visit.payment_mode == 'upi' %}checked{% endif %}>
+            <label for="mode-upi" class="fee-mode-label">
+              <span class="fee-mode-icon">📱</span>
+              <span class="fee-mode-text">UPI</span>
+            </label>
+          </div>
+
+          <div>
+            <input type="radio" name="payment_mode" id="mode-card" value="card" class="fee-mode-option"
+              {% if visit.payment_mode == 'card' %}checked{% endif %}>
+            <label for="mode-card" class="fee-mode-label">
+              <span class="fee-mode-icon">💳</span>
+              <span class="fee-mode-text">Card</span>
+            </label>
+          </div>
+
+          <div>
+            <input type="radio" name="payment_mode" id="mode-insurance" value="insurance" class="fee-mode-option"
+              {% if visit.payment_mode == 'insurance' %}checked{% endif %}>
+            <label for="mode-insurance" class="fee-mode-label">
+              <span class="fee-mode-icon">🛡️</span>
+              <span class="fee-mode-text">Insurance</span>
+            </label>
+          </div>
+
+          <div class="fee-mode-waived-wrap">
+            <input type="radio" name="payment_mode" id="mode-waived" value="waived" class="fee-mode-option"
+              {% if visit.payment_mode == 'waived' %}checked{% endif %}>
+            <label for="mode-waived" class="fee-mode-label">
+              <span class="fee-mode-icon">🤝</span>
+              <span class="fee-mode-text">Waive fee (charity / staff / family)</span>
+            </label>
+          </div>
+
+        </div>
+
+        <!-- Submit -->
+        <button type="submit" class="fee-submit" id="submit-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
+          </svg>
+          <span id="submit-label">{% if already_paid %}Update & View Receipt{% else %}Collect & Generate Receipt{% endif %}</span>
+        </button>
+
+      </form>
+
+      <!-- Back link -->
+      <a href="/" class="fee-back">
+        ← Back to dashboard
+      </a>
+    </div><!-- /fee-body -->
+
+  </div><!-- /fee-card -->
+
+</div><!-- /fee-page -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const feeInput = document.getElementById('fee-input');
+const submitBtn = document.getElementById('submit-btn');
+const submitLabel = document.getElementById('submit-label');
+
+function setFee(amount) {
+  feeInput.value = amount;
+  highlightActivePill();
+}
+
+function highlightActivePill() {
+  const val = parseFloat(feeInput.value);
+  document.querySelectorAll('.fee-quick-pill').forEach(pill => {
+    const pillVal = parseFloat(pill.textContent.replace('₹',''));
+    pill.classList.toggle('active', pillVal === val);
+  });
+}
+
+// Highlight pill matching the default fee on load
+highlightActivePill();
+feeInput.addEventListener('input', highlightActivePill);
+
+// Update submit button appearance when "Waived" is selected
+document.querySelectorAll('.fee-mode-option').forEach(radio => {
+  radio.addEventListener('change', () => {
+    if (radio.value === 'waived') {
+      submitBtn.classList.add('waived-mode');
+      submitLabel.textContent = 'Mark as Waived & Generate Receipt';
+      feeInput.value = '0';
+      highlightActivePill();
+    } else {
+      submitBtn.classList.remove('waived-mode');
+      submitLabel.textContent = document.querySelector('[data-already]') ? 'Update & View Receipt' : 'Collect & Generate Receipt';
+      if (feeInput.value === '0') feeInput.value = '';
+    }
+  });
+});
+
+// Validate before submit
+document.getElementById('fee-form').addEventListener('submit', e => {
+  const mode = document.querySelector('.fee-mode-option:checked')?.value;
+  const fee = parseFloat(feeInput.value);
+  if (mode !== 'waived' && (isNaN(fee) || fee < 0)) {
+    e.preventDefault();
+    feeInput.style.borderColor = '#EF4444';
+    feeInput.focus();
+    return;
+  }
+  submitBtn.disabled = true;
+  submitLabel.textContent = 'Saving…';
+});
+</script>
+{% endblock %}

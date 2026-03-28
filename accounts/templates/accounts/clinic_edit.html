@@ -49,6 +49,17 @@
       </div>
 
       <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
+      <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">Consultation Fee</div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:4px;">Default OPD Consultation Fee (₹)</label>
+        <input type="number" name="default_opd_fee" value="{{ clinic.default_opd_fee|floatformat:0 }}"
+          class="input-field" placeholder="e.g. 300" min="0" step="1" style="font-size:14px; max-width:200px;">
+        <div style="font-size:11px; color:#6B7280; margin-top:3px; line-height:1.5;">
+          Pre-filled when collecting consultation fees. Receptionists and doctors can still edit it per patient. Set to 0 to leave blank.
+        </div>
+      </div>
+
+      <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
       <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">GST / Tax</div>
       <div style="margin-bottom:12px;">
         <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:4px;">GSTIN</label>

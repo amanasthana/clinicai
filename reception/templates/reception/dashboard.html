@@ -471,6 +471,29 @@
   </div>
 </div>
 
+<!-- Delete visit modal -->
+<div id="delete-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:500; align-items:center; justify-content:center; padding:16px;">
+  <div style="background:#fff; border-radius:20px; width:100%; max-width:380px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+      <div style="width:36px; height:36px; background:#FEF2F2; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </div>
+      <div style="font-size:17px; font-weight:700; color:#111827;">Remove from queue?</div>
+    </div>
+    <div style="font-size:13px; color:#6B7280; margin-bottom:6px;">
+      Patient: <strong id="delete-patient-name" style="color:#111827;"></strong>
+    </div>
+    <div style="font-size:13px; color:#6B7280; background:#FEF2F2; border-radius:8px; padding:10px 12px; margin-bottom:20px; line-height:1.5;">
+      This permanently removes the queue entry. Use this only if the patient was added by mistake.<br>
+      <span style="color:#9CA3AF; font-size:12px;">Note: visits with a saved prescription cannot be deleted.</span>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button onclick="submitDelete()" class="btn btn-sm" style="flex:1; background:#DC2626; color:#fff; font-weight:600; padding:10px;">Yes, Remove</button>
+      <button onclick="closeDeleteModal()" class="btn btn-secondary" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -884,8 +907,11 @@ function renderQueue(queue, container) {
     const actionBtns = [
       v.status === 'waiting' ? `<button onclick="updateStatus('${v.id}','in_consultation')" class="btn btn-primary btn-sm">Call In</button>` : '',
       v.status === 'in_consultation' ? `<a href="/rx/consult/${v.id}/" class="btn btn-primary btn-sm">Prescribe</a>` : '',
+      v.status === 'in_consultation' ? `<a href="/visit/${v.id}/collect-fee/" class="btn btn-sm" style="background:#EEF2FF;color:#4F46E5;border:1.5px solid #C7D2FE;font-weight:600;">₹ Fee</a>` : '',
+      v.status === 'done' ? (v.fee_receipt_number ? `<a href="/visit/${v.id}/opd-receipt/" class="btn btn-sm" style="background:#ECFDF5;color:#065F46;border:1.5px solid #A7F3D0;font-weight:600;">✓ Receipt</a>` : `<a href="/visit/${v.id}/collect-fee/" class="btn btn-sm" style="background:#EEF2FF;color:#4F46E5;border:1.5px solid #C7D2FE;font-weight:600;">₹ Collect Fee</a>`) : '',
       isActive ? `<button onclick="updateStatus('${v.id}','no_show')" class="btn btn-secondary btn-sm" style="color:#EF4444;" title="Patient did not show up">No Show</button>` : '',
       isActive ? `<button onclick="openCancelModal('${v.id}','${v.name.replace(/'/g,"\\'")}') " class="btn btn-secondary btn-sm" style="color:#6B7280;" title="Cancel with reason">Cancel</button>` : '',
+      `<button onclick="openDeleteModal('${v.id}','${v.name.replace(/'/g,"\\'")}') " class="btn btn-secondary btn-sm" style="color:#EF4444; padding:5px 8px;" title="Remove this entry from the queue"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>`,
     ].join('');
     return `
       <div class="card queue-card" style="margin-bottom:10px; cursor:pointer;"
@@ -944,6 +970,39 @@ async function submitCancellation() {
 // Close modal on backdrop click
 document.getElementById('cancel-modal').addEventListener('click', function(e) {
   if (e.target === this) closeCancelModal();
+});
+
+// ── Delete visit modal ───────────────────────────────────────────
+let _deleteVisitId = null;
+
+function openDeleteModal(visitId, patientName) {
+  _deleteVisitId = visitId;
+  document.getElementById('delete-patient-name').textContent = patientName;
+  document.getElementById('delete-modal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').style.display = 'none';
+  _deleteVisitId = null;
+}
+
+async function submitDelete() {
+  if (!_deleteVisitId) return;
+  try {
+    const resp = await fetch(`/api/visit/${_deleteVisitId}/delete/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrfToken() },
+    });
+    const data = await resp.json();
+    if (data.ok) { closeDeleteModal(); refreshQueue(); }
+    else alert(data.error || 'Could not remove visit.');
+  } catch(e) {
+    alert('Network error. Please try again.');
+  }
+}
+
+document.getElementById('delete-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeDeleteModal();
 });
 
 // Auto-refresh every 30s using current filter
