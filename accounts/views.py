@@ -294,6 +294,16 @@ def admin_panel_view(request):
     pending = ClinicRegistrationRequest.objects.filter(status='pending')
     approved = ClinicRegistrationRequest.objects.filter(status='approved').order_by('-reviewed_at')[:20]
     rejected = ClinicRegistrationRequest.objects.filter(status='rejected').order_by('-reviewed_at')[:10]
+
+    # Annotate each registration with the referring executive's name
+    all_regs = list(pending) + list(approved) + list(rejected)
+    referred_mobiles = {r.referred_by_mobile for r in all_regs if r.referred_by_mobile}
+    exec_by_mobile = {}
+    if referred_mobiles:
+        for ex in ClinicAIExecutive.objects.filter(mobile__in=referred_mobiles):
+            exec_by_mobile[ex.mobile] = ex.name
+    for r in all_regs:
+        r.referred_exec_name = exec_by_mobile.get(r.referred_by_mobile, '') if r.referred_by_mobile else ''
     contact_messages = ContactMessage.objects.all()
     unread_count = contact_messages.filter(read=False).count()
     pending_pw_resets = PasswordResetRequest.objects.filter(handled=False).select_related('user')

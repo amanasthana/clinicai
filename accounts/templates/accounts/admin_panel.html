@@ -123,6 +123,14 @@
         <div>
           <div style="font-size:18px; font-weight:700; color:#111827;">{{ reg.clinic_name }}</div>
           <div style="font-size:13px; color:#6B7280; margin-top:2px;">{{ reg.get_clinic_type_display }} · {{ reg.city }}, {{ reg.state }}</div>
+          {% if reg.referred_by_mobile %}
+          <div style="margin-top:6px;">
+            <span style="display:inline-flex;align-items:center;gap:5px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;color:#1D4ED8;">
+              <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+              MR: {{ reg.referred_exec_name|default:reg.referred_by_mobile }}
+            </span>
+          </div>
+          {% endif %}
         </div>
         <div style="font-size:12px; color:#9CA3AF; white-space:nowrap;">{{ reg.created_at|date:"j M Y, H:i" }}</div>
       </div>
@@ -200,6 +208,7 @@
     <div>
       <div style="font-size:15px; font-weight:600; color:#111827;">{{ reg.clinic_name }}</div>
       <div style="font-size:13px; color:#6B7280;">{{ reg.doctor_name }} · {{ reg.city }}</div>
+      {% if reg.referred_by_mobile %}<div style="margin-top:4px;"><span style="display:inline-flex;align-items:center;gap:4px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:600;color:#1D4ED8;">MR: {{ reg.referred_exec_name|default:reg.referred_by_mobile }}</span></div>{% endif %}
     </div>
     <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
       <span style="font-size:12px; color:#059669; font-weight:600; background:#ECFDF5; padding:3px 10px; border-radius:20px;">✓ Approved {{ reg.reviewed_at|date:"j M"|default:"–" }}</span>
@@ -229,7 +238,7 @@
   </div>
   {% for reg in rejected %}
   <div class="card" style="margin-bottom:8px; padding:12px 16px; opacity:0.7;">
-    <div style="font-size:14px; font-weight:500; color:#374151;">{{ reg.clinic_name }} · {{ reg.city }}</div>
+    <div style="font-size:14px; font-weight:500; color:#374151;">{{ reg.clinic_name }} · {{ reg.city }}{% if reg.referred_by_mobile %} <span style="font-size:11px;font-weight:600;color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:4px;padding:1px 6px;">MR: {{ reg.referred_exec_name|default:reg.referred_by_mobile }}</span>{% endif %}</div>
     <div style="font-size:12px; color:#9CA3AF; margin-top:2px;">{{ reg.doctor_name }} · Rejected {{ reg.reviewed_at|date:"j M" }}{% if reg.admin_notes %} · {{ reg.admin_notes }}{% endif %}</div>
   </div>
   {% endfor %}
