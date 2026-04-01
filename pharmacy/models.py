@@ -74,6 +74,14 @@ class PharmacyBatch(models.Model):
     expiry_date = models.DateField(null=True, blank=True)
     quantity = models.PositiveIntegerField(default=0)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    purchase_price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text='Cost price per unit (excl. GST). Used for P&L calculation.'
+    )
+    purchase_gst_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        help_text='GST % on purchase (e.g. 12 for 12%).'
+    )
     received_date = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -135,6 +143,10 @@ class PharmacyBill(models.Model):
     bill_number = models.CharField(max_length=30, unique=True)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     discount_percent = models.PositiveSmallIntegerField(default=0)
+    discount_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text='Flat ₹ discount. If > 0 this overrides discount_percent.'
+    )
     gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     gst_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     final_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)

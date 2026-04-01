@@ -61,12 +61,16 @@
       <p class="text-xs text-gray-500 mt-0.5">Inventory management · <span id="inv-last-updated" style="color:#9CA3AF;">Updated just now</span></p>
     </div>
     <div class="ph-nav-btns" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-      <a href="/pharmacy/bills/" class="btn btn-secondary" style="font-size:13px;">📋 Bill History</a>
+      <a href="/pharmacy/bills/" class="btn btn-secondary" style="font-size:13px;">Bill History</a>
       {% if request.user.staff_profile.can_view_analytics %}
-      <a href="/pharmacy/analytics/" class="btn btn-secondary" style="font-size:13px;">📊 Analytics</a>
-      <a href="/pharmacy/ledger/" class="btn btn-secondary" style="font-size:13px;">📒 Ledger</a>
+      <a href="/pharmacy/analytics/" class="btn btn-secondary" style="font-size:13px;">Analytics</a>
+      <a href="/pharmacy/ledger/" class="btn btn-secondary" style="font-size:13px;">Ledger</a>
       {% endif %}
-      <a href="/pharmacy/return/" class="btn btn-secondary" style="font-size:13px;">↩ Returns</a>
+      <a href="/pharmacy/return/" class="btn btn-secondary" style="font-size:13px;">Returns</a>
+      {% if user.all_clinic_memberships|length > 1 %}
+      <a href="/pharmacy/import/" class="btn btn-secondary" style="font-size:13px;">Import Medicines</a>
+      {% endif %}
+      <a href="/pharmacy/inventory-report/" class="btn btn-secondary" style="font-size:13px;">Inventory Report</a>
       <a href="/pharmacy/add/" class="btn btn-primary" style="font-size:13px;">+ Add Stock</a>
     </div>
   </div>
@@ -76,7 +80,7 @@
   <div style="background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:12px; padding:16px 18px; margin-bottom:20px;">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px;">
       <div style="font-size:15px; font-weight:700; color:#92400E;">
-        ⚠ {{ zero_price_batches|length }} batch{{ zero_price_batches|length|pluralize:"es" }} with no price set
+        {{ zero_price_batches|length }} batch{{ zero_price_batches|length|pluralize:"es" }} with no price set
       </div>
       {% if zero_price_batches|length > 5 %}
       <button onclick="toggleZpList()" id="zp-toggle-btn"
@@ -202,6 +206,11 @@
       <div class="text-xl font-bold" style="color:#E11D48;">{{ expiring_3m_count }}</div>
       <div class="text-xs mt-0.5" style="color:#9F1239;">Exp &lt; 3 Months</div>
     </div>
+    <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="expired"
+         style="background:#FEF2F2; border:1.5px solid #FECACA; min-height:58px; cursor:pointer; user-select:none;">
+      <div class="text-xl font-bold" style="color:#DC2626;">{{ expired_items_count }}</div>
+      <div class="text-xs mt-0.5" style="color:#991B1B;">Expired</div>
+    </div>
   </div>
   <div id="active-filter-label" style="display:none; font-size:12px; color:#6B7280; margin-bottom:12px; padding:0 2px;">
     Showing filtered results. <button onclick="clearChipFilters()" style="color:#2563EB; background:none; border:none; cursor:pointer; font-size:12px; font-family:inherit; padding:0;">Show all</button>
@@ -267,6 +276,7 @@
            data-status="{% if not item.in_stock %}out{% elif item.low_stock %}low{% else %}ok{% endif %}"
            data-exp3m="{% for b in item.batches.all %}{% if b.is_near_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
            data-exp6m="{% for b in item.batches.all %}{% if b.is_approaching_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
+           data-expired="{% for b in item.batches.all %}{% if b.is_expired and b.quantity > 0 %}1{% endif %}{% endfor %}"
            id="med-{{ item.pk }}"
            style="border-left:3px solid {% if not item.in_stock %}#EF4444{% elif item.low_stock %}#F59E0B{% else %}#10B981{% endif %}; border-bottom:1px solid #F3F4F6;">
 
@@ -315,7 +325,7 @@
               <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
               <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
                 {% csrf_token %}
-                <button type="submit">{% if item.reorder_flagged %}✓ Remove Flag{% else %}🚩 Flag for Reorder{% endif %}</button>
+                <button type="submit">{% if item.reorder_flagged %}Remove Flag{% else %}Flag for Reorder{% endif %}</button>
               </form>
               <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
               <form method="post" action="/pharmacy/item/{{ item.pk }}/delete/" style="margin:0;"
@@ -387,7 +397,6 @@
 
     {% else %}
     <div class="text-center py-12 px-4">
-      <div class="text-4xl mb-3">💊</div>
       <div class="text-sm font-medium text-gray-700 mb-1">No medicines in inventory</div>
       <div class="text-xs text-gray-400 mb-5">Add your first stock item to get started.</div>
       <a href="/pharmacy/add/" class="btn btn-primary">+ Add Stock</a>
@@ -484,15 +493,17 @@ function applyChipFilters() {
   }
   label.style.display = 'block';
   items.forEach(row => {
-    const status = row.dataset.status;
-    const exp3m  = row.dataset.exp3m.includes('1');
-    const exp6m  = row.dataset.exp6m.includes('1');
+    const status  = row.dataset.status;
+    const exp3m   = row.dataset.exp3m.includes('1');
+    const exp6m   = row.dataset.exp6m.includes('1');
+    const expired = row.dataset.expired.includes('1');
     const match =
-      (activeChips.has('ok')    && status === 'ok')  ||
-      (activeChips.has('low')   && status === 'low') ||
-      (activeChips.has('out')   && status === 'out') ||
-      (activeChips.has('exp3m') && exp3m)            ||
-      (activeChips.has('exp6m') && exp6m);
+      (activeChips.has('ok')      && status === 'ok')  ||
+      (activeChips.has('low')     && status === 'low') ||
+      (activeChips.has('out')     && status === 'out') ||
+      (activeChips.has('exp3m')   && exp3m)            ||
+      (activeChips.has('exp6m')   && exp6m)            ||
+      (activeChips.has('expired') && expired);
     row.style.display = match ? '' : 'none';
   });
 }

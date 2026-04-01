@@ -29,4 +29,6 @@ urlpatterns = [
     path('bills/', views.bill_list_view, name='bill_list'),
     path('analytics/', views.pharmacy_analytics_view, name='analytics'),
     path('ledger/', views.ledger_view, name='ledger'),
+    path('import/', views.import_medicines_view, name='import_medicines'),
+    path('inventory-report/', views.inventory_report_view, name='inventory_report'),
 ]

@@ -750,3 +750,39 @@ def check_interactions_api(request):
     severity_order = {'major': 0, 'moderate': 1, 'minor': 2}
     alerts.sort(key=lambda a: severity_order.get(a['severity'], 9))
     return JsonResponse({'alerts': alerts})
+
+
+@require_permission('can_prescribe')
+def prescription_history_view(request):
+    """
+    List of all saved prescriptions for this clinic, newest first.
+    Acts like pharmacy's bill_list — lets the doctor browse and reopen any Rx.
+    """
+    clinic = request.user.staff_profile.clinic
+
+    # Optional date filter
+    from django.utils import timezone as tz
+    date_str = request.GET.get('date')
+    try:
+        filter_date = tz.datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else None
+    except ValueError:
+        filter_date = None
+
+    qs = (
+        Prescription.objects
+        .filter(visit__clinic=clinic)
+        .select_related('visit__patient', 'doctor')
+        .order_by('-created_at')
+    )
+    if filter_date:
+        qs = qs.filter(visit__visit_date=filter_date)
+
+    # Limit to 200 most recent to keep page fast
+    prescriptions = qs[:200]
+
+    return render(request, 'prescription/rx_history.html', {
+        'clinic': clinic,
+        'prescriptions': prescriptions,
+        'filter_date': filter_date,
+        'today': tz.localdate(),
+    })

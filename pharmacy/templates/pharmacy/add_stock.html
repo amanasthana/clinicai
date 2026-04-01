@@ -99,10 +99,10 @@
         </div>
         <div>
           <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Quantity <span style="color:#EF4444;">*</span></label>
-          <input type="number" name="quantity" min="0" value="0" required class="input-field" style="font-size:14px;">
+          <input type="number" name="quantity" id="stock-qty" min="0" value="0" required class="input-field" style="font-size:14px;" oninput="updateStockCost()">
         </div>
         <div>
-          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Unit Price / MRP (₹) <span style="color:#EF4444;">*</span></label>
+          <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Sale Price / MRP (₹) <span style="color:#EF4444;">*</span></label>
           <input type="number" name="unit_price" min="0.01" step="0.01" value="{{ suggested_price }}" required placeholder="e.g. 12.50" class="input-field" style="font-size:14px;">
           {% if suggested_price %}
           <div style="font-size:11px; color:#6B7280; margin-top:4px;">Pre-filled from last batch — change if MRP has been revised.</div>
@@ -112,6 +112,24 @@
           <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Reorder Level</label>
           <input type="number" name="reorder_level" min="0" value="{{ prefill_item.reorder_level|default:10 }}" class="input-field" style="font-size:14px;">
         </div>
+      </div>
+
+      <!-- Purchase / Cost section -->
+      <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px; padding:14px 16px; margin-bottom:16px;">
+        <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">Purchase / Cost Details <span style="font-size:11px; font-weight:400; color:#9CA3AF;">(optional — used for profit calculation)</span></div>
+        <div class="resp-grid-2" style="gap:14px;">
+          <div>
+            <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">Purchase Rate (₹ excl. GST)</label>
+            <input type="number" name="purchase_price" id="stock-purchase-price" min="0" step="0.01"
+              value="{{ suggested_purchase_price }}" placeholder="e.g. 8.00" class="input-field" style="font-size:14px;" oninput="updateStockCost()">
+          </div>
+          <div>
+            <label style="display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:6px;">GST on Purchase (%)</label>
+            <input type="number" name="purchase_gst_percent" id="stock-purchase-gst" min="0" max="100" step="0.1"
+              value="{{ suggested_purchase_gst|default:'0' }}" placeholder="0" class="input-field" style="font-size:14px;" oninput="updateStockCost()">
+          </div>
+        </div>
+        <div id="stock-cost-hint" style="font-size:12px; color:#374151; margin-top:10px; display:none; background:#fff; border:1px solid #D1FAE5; border-radius:6px; padding:8px 12px;"></div>
       </div>
 
       <div style="display:flex; gap:10px; flex-wrap:wrap; padding-top:16px; border-top:1px solid #E5E7EB;">
@@ -126,6 +144,22 @@
 
 {% block extra_js %}
 <script>
+function updateStockCost() {
+  const qty = parseFloat(document.getElementById('stock-qty')?.value || 0);
+  const pp = parseFloat(document.getElementById('stock-purchase-price')?.value || 0);
+  const gst = parseFloat(document.getElementById('stock-purchase-gst')?.value || 0);
+  const hint = document.getElementById('stock-cost-hint');
+  if (!hint) return;
+  if (pp > 0 && qty > 0) {
+    const costPerUnit = pp * (1 + gst / 100);
+    const total = costPerUnit * qty;
+    hint.innerHTML = `Cost per unit (incl. GST): <strong>₹${costPerUnit.toFixed(2)}</strong> &nbsp;·&nbsp; Total batch cost: <strong>₹${total.toFixed(2)}</strong>`;
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+
 let searchTimer = null;
 // Inventory lookup cache: catalogId → existing item info
 const existingItemsMap = {};

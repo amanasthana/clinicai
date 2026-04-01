@@ -263,15 +263,36 @@ body {
 
 /* ── Print styles ────────────────────────────────────────── */
 @media print {
-  @page { size: A5 portrait; margin: 8mm 10mm; }
+  /* @page size is set dynamically via #page-size-style */
   body { background: #fff; }
   .receipt-toolbar { display: none !important; }
   .receipt-page { padding: 0; }
-  .receipt-card {
-    box-shadow: none;
-    border-radius: 0;
-    max-width: 100%;
-  }
+  .receipt-card { box-shadow: none; border-radius: 0; max-width: 100%; }
+}
+
+/* ── Thermal 58mm overrides ──────────────────────────────── */
+@media print {
+  body.print-thermal .receipt-header { padding: 8pt 7pt 5pt; flex-direction: column; align-items: center; text-align: center; gap: 4pt; }
+  body.print-thermal .receipt-clinic-name { font-size: 10pt; }
+  body.print-thermal .receipt-clinic-address { font-size: 6.5pt; max-width: 100%; }
+  body.print-thermal .receipt-badge { align-self: center; padding: 3pt 8pt; }
+  body.print-thermal .receipt-badge-no { font-size: 10pt; }
+  body.print-thermal .receipt-patient { padding: 5pt 7pt; }
+  body.print-thermal .receipt-patient-name { font-size: 10pt; }
+  body.print-thermal .receipt-patient-sub { font-size: 7pt; }
+  body.print-thermal .receipt-token { font-size: 9pt; padding: 2pt 7pt; }
+  body.print-thermal .receipt-details { padding: 5pt 7pt; }
+  body.print-thermal .receipt-row { font-size: 7.5pt; padding: 3pt 0; }
+  body.print-thermal .receipt-row-value { font-size: 7.5pt; }
+  body.print-thermal .receipt-amount-box { margin: 0 7pt; padding: 6pt 8pt; }
+  body.print-thermal .receipt-amount-label { font-size: 8pt; }
+  body.print-thermal .receipt-amount-label-sub { font-size: 6pt; }
+  body.print-thermal .receipt-amount-value { font-size: 16pt; }
+  body.print-thermal .receipt-mode-pill { font-size: 7pt; padding: 1pt 6pt; }
+  body.print-thermal .receipt-stamp-row { padding: 5pt 7pt; font-size: 7pt; }
+  body.print-thermal .receipt-footer { padding: 5pt 7pt 6pt; }
+  body.print-thermal .receipt-footer-left { font-size: 6.5pt; }
+  body.print-thermal .receipt-sign-area { display: none; }
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
@@ -284,6 +305,8 @@ body {
   .receipt-amount-value { font-size: 22px; }
 }
 </style>
+<!-- Page size set dynamically by setReceiptSize() -->
+<style id="page-size-style">@media print { @page { size: 58mm auto; margin: 2mm 3mm; } }</style>
 </head>
 <body>
 
@@ -293,8 +316,14 @@ body {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
     </svg>
-    Print Receipt
+    Print
   </button>
+  <select id="receipt-size-select" onchange="setReceiptSize(this.value)"
+    style="padding:6px 10px; border:1px solid #374151; border-radius:8px; font-size:12px; font-weight:600; background:#1F2937; color:#F9FAFB; font-family:inherit; cursor:pointer;">
+    <option value="thermal">Thermal 2"</option>
+    <option value="a5">A5</option>
+    <option value="a4">A4</option>
+  </select>
   <a href="{% url 'reception:collect_fee' visit.id %}" class="tb-btn tb-fee">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
     Edit Fee
@@ -328,11 +357,19 @@ body {
   <div class="receipt-patient">
     <div>
       <div class="receipt-patient-name">{{ patient.full_name }}</div>
+      {% if patient.guardian_name %}
+      <div class="receipt-patient-sub" style="font-size:12px; color:#374151;">
+        W/o · H/o · S/o: {{ patient.guardian_name }}
+      </div>
+      {% endif %}
       <div class="receipt-patient-sub">
         {% if patient.age %}{{ patient.age }} yrs{% endif %}
         {% if patient.gender %} · {{ patient.get_gender_display }}{% endif %}
         {% if patient.phone %} · {{ patient.phone }}{% endif %}
       </div>
+      {% if patient.address %}
+      <div class="receipt-patient-sub" style="margin-top:2px;">{{ patient.address }}</div>
+      {% endif %}
     </div>
     <div class="receipt-token">Token {{ visit.token_number }}</div>
   </div>
@@ -372,7 +409,6 @@ body {
       <div class="receipt-amount-label-sub">Inclusive of all taxes</div>
       {% if visit.payment_mode %}
       <div class="receipt-mode-pill {% if visit.payment_mode == 'waived' %}waived{% elif visit.payment_mode == 'insurance' %}insurance{% elif visit.payment_mode == 'card' %}card{% elif visit.payment_mode == 'upi' %}upi{% endif %}">
-        {% if visit.payment_mode == 'cash' %}💵{% elif visit.payment_mode == 'upi' %}📱{% elif visit.payment_mode == 'card' %}💳{% elif visit.payment_mode == 'insurance' %}🛡️{% elif visit.payment_mode == 'waived' %}🤝{% endif %}
         {{ visit.get_payment_mode_display }}
       </div>
       {% endif %}
@@ -418,5 +454,25 @@ body {
 </div><!-- /receipt-card -->
 </div><!-- /receipt-page -->
 
+<script>
+const PAGE_RULES = {
+  thermal: '@media print { @page { size: 58mm auto; margin: 2mm 3mm; } }',
+  a5:      '@media print { @page { size: A5 portrait; margin: 8mm 10mm; } }',
+  a4:      '@media print { @page { size: A4 portrait; margin: 10mm 12mm; } }',
+};
+function setReceiptSize(val) {
+  document.getElementById('page-size-style').textContent = PAGE_RULES[val] || PAGE_RULES.thermal;
+  document.body.classList.remove('print-thermal');
+  if (val === 'thermal') document.body.classList.add('print-thermal');
+  localStorage.setItem('opd_receipt_size', val);
+}
+// Restore preference on load (default: thermal)
+(function() {
+  const saved = localStorage.getItem('opd_receipt_size') || 'thermal';
+  const sel = document.getElementById('receipt-size-select');
+  if (sel) sel.value = saved;
+  setReceiptSize(saved);
+})();
+</script>
 </body>
 </html>

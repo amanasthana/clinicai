@@ -54,14 +54,20 @@ def pharmacy_dashboard(request):
     today_plus_90 = (today + datetime.timedelta(days=90)).strftime('%Y-%m-%d')
     expiring_3m_count = 0
     expiring_6m_count = 0
+    expired_items_count = 0
     for item in items:
+        item_has_expired = False
         for batch in item.batches.all():
             if batch.quantity > 0 and batch.expiry_date:
                 days = (batch.expiry_date - today).days
-                if 0 < days <= 90:
+                if days < 0:
+                    item_has_expired = True
+                elif days <= 90:
                     expiring_3m_count += 1
-                elif 90 < days <= 180:
+                elif days <= 180:
                     expiring_6m_count += 1
+        if item_has_expired:
+            expired_items_count += 1
 
     # Layer 1: batches with ₹0 price that still have stock — warn the pharmacist
     zero_price_batches = list(
@@ -80,6 +86,7 @@ def pharmacy_dashboard(request):
         'low_stock_count': low_stock_count,
         'expiring_3m_count': expiring_3m_count,
         'expiring_6m_count': expiring_6m_count,
+        'expired_items_count': expired_items_count,
         'today_plus_90': today_plus_90,
         'pending_dispense': pending_dispense,
         'zero_price_batches': zero_price_batches,
@@ -98,6 +105,8 @@ def add_stock_view(request):
         expiry_date = request.POST.get('expiry_date') or None
         quantity = int(request.POST.get('quantity', 0) or 0)
         unit_price_raw = request.POST.get('unit_price', '0') or '0'
+        purchase_price_raw = request.POST.get('purchase_price', '0') or '0'
+        purchase_gst_raw = request.POST.get('purchase_gst_percent', '0') or '0'
         reorder_level = int(request.POST.get('reorder_level', 10) or 10)
 
         medicine = None
@@ -123,6 +132,14 @@ def add_stock_view(request):
                          'Medicines with no price will bill patients ₹0.',
             })
         unit_price = unit_price_raw
+        try:
+            purchase_price_dec = decimal.Decimal(str(purchase_price_raw))
+        except decimal.InvalidOperation:
+            purchase_price_dec = decimal.Decimal('0')
+        try:
+            purchase_gst_dec = decimal.Decimal(str(purchase_gst_raw))
+        except decimal.InvalidOperation:
+            purchase_gst_dec = decimal.Decimal('0')
 
         # Check if this medicine already exists in the clinic's inventory
         existing_item = None
@@ -139,6 +156,8 @@ def add_stock_view(request):
                 expiry_date=expiry_date,
                 quantity=quantity,
                 unit_price=unit_price,
+                purchase_price=purchase_price_dec,
+                purchase_gst_percent=purchase_gst_dec,
             )
             existing_item.reorder_level = reorder_level
             # Update generic name if provided and item is custom
@@ -160,6 +179,8 @@ def add_stock_view(request):
                 expiry_date=expiry_date,
                 quantity=quantity,
                 unit_price=unit_price,
+                purchase_price=purchase_price_dec,
+                purchase_gst_percent=purchase_gst_dec,
             )
 
         return redirect('pharmacy:dashboard')
@@ -167,15 +188,27 @@ def add_stock_view(request):
     # On GET: check if the URL has an item_id shortcut (from "Add Batch" button)
     prefill_item = None
     suggested_price = ''
+    suggested_purchase_price = ''
+    suggested_purchase_gst = ''
     item_id = request.GET.get('item_id')
     if item_id:
         prefill_item = PharmacyItem.objects.filter(pk=item_id, clinic=clinic).select_related('medicine').prefetch_related('batches').first()
         if prefill_item:
             last_batch = prefill_item.batches.order_by('-received_date', '-id').first()
-            if last_batch and last_batch.unit_price > 0:
-                suggested_price = str(last_batch.unit_price)
+            if last_batch:
+                if last_batch.unit_price > 0:
+                    suggested_price = str(last_batch.unit_price)
+                if last_batch.purchase_price > 0:
+                    suggested_purchase_price = str(last_batch.purchase_price)
+                if last_batch.purchase_gst_percent > 0:
+                    suggested_purchase_gst = str(last_batch.purchase_gst_percent)
 
-    return render(request, 'pharmacy/add_stock.html', {'prefill_item': prefill_item, 'suggested_price': suggested_price})
+    return render(request, 'pharmacy/add_stock.html', {
+        'prefill_item': prefill_item,
+        'suggested_price': suggested_price,
+        'suggested_purchase_price': suggested_purchase_price,
+        'suggested_purchase_gst': suggested_purchase_gst,
+    })
 
 
 @require_permission('can_edit_inventory')
@@ -189,6 +222,8 @@ def add_batch_view(request, pk):
         expiry_date = request.POST.get('expiry_date') or None
         quantity = int(request.POST.get('quantity', 0) or 0)
         unit_price_raw = request.POST.get('unit_price', '0') or '0'
+        purchase_price_raw = request.POST.get('purchase_price', '0') or '0'
+        purchase_gst_raw = request.POST.get('purchase_gst_percent', '0') or '0'
 
         # Layer 3: reject zero/missing price
         try:
@@ -201,6 +236,14 @@ def add_batch_view(request, pk):
                 'error': 'Unit price (MRP per unit) must be greater than ₹0. '
                          'Medicines with no price will bill patients ₹0.',
             })
+        try:
+            purchase_price_dec = decimal.Decimal(str(purchase_price_raw))
+        except decimal.InvalidOperation:
+            purchase_price_dec = decimal.Decimal('0')
+        try:
+            purchase_gst_dec = decimal.Decimal(str(purchase_gst_raw))
+        except decimal.InvalidOperation:
+            purchase_gst_dec = decimal.Decimal('0')
 
         PharmacyBatch.objects.create(
             item=item,
@@ -208,13 +251,22 @@ def add_batch_view(request, pk):
             expiry_date=expiry_date,
             quantity=quantity,
             unit_price=unit_price_raw,
+            purchase_price=purchase_price_dec,
+            purchase_gst_percent=purchase_gst_dec,
         )
         return redirect('pharmacy:dashboard')
 
     # GET: pre-fill price from most recently added batch so pharmacist doesn't re-type unchanged MRPs
     last_batch = item.batches.order_by('-received_date', '-id').first()
     suggested_price = str(last_batch.unit_price) if last_batch and last_batch.unit_price > 0 else ''
-    return render(request, 'pharmacy/add_batch.html', {'item': item, 'suggested_price': suggested_price})
+    suggested_purchase_price = str(last_batch.purchase_price) if last_batch and last_batch.purchase_price > 0 else ''
+    suggested_purchase_gst = str(last_batch.purchase_gst_percent) if last_batch and last_batch.purchase_gst_percent > 0 else ''
+    return render(request, 'pharmacy/add_batch.html', {
+        'item': item,
+        'suggested_price': suggested_price,
+        'suggested_purchase_price': suggested_purchase_price,
+        'suggested_purchase_gst': suggested_purchase_gst,
+    })
 
 
 @require_permission('can_edit_inventory')
@@ -225,6 +277,8 @@ def edit_batch_view(request, pk):
 
     if request.method == 'POST':
         unit_price_raw = request.POST.get('unit_price', '0') or '0'
+        purchase_price_raw = request.POST.get('purchase_price', '0') or '0'
+        purchase_gst_raw = request.POST.get('purchase_gst_percent', '0') or '0'
 
         # Layer 3: reject zero/missing price
         try:
@@ -237,11 +291,21 @@ def edit_batch_view(request, pk):
                 'error': 'Unit price (MRP per unit) must be greater than ₹0. '
                          'Medicines with no price will bill patients ₹0.',
             })
+        try:
+            purchase_price_dec = decimal.Decimal(str(purchase_price_raw))
+        except decimal.InvalidOperation:
+            purchase_price_dec = decimal.Decimal('0')
+        try:
+            purchase_gst_dec = decimal.Decimal(str(purchase_gst_raw))
+        except decimal.InvalidOperation:
+            purchase_gst_dec = decimal.Decimal('0')
 
         batch.batch_number = request.POST.get('batch_number', '').strip()
         batch.expiry_date = request.POST.get('expiry_date') or None
         batch.quantity = int(request.POST.get('quantity', 0) or 0)
         batch.unit_price = unit_price_raw
+        batch.purchase_price = purchase_price_dec
+        batch.purchase_gst_percent = purchase_gst_dec
         batch.save()
         # Also save generic composition on the item if it's a custom medicine
         if not batch.item.medicine:
@@ -536,6 +600,11 @@ def confirm_dispense_api(request, visit_id):
 
     items_data = data.get('items', [])
     discount_percent = int(data.get('discount', 0) or 0)
+    discount_type = data.get('discount_type', 'pct')  # 'pct' or 'amount'
+    try:
+        discount_flat = decimal.Decimal(str(data.get('discount_flat', 0) or 0))
+    except decimal.InvalidOperation:
+        discount_flat = decimal.Decimal('0')
     payment_mode = data.get('payment_mode', 'cash')
 
     if not items_data:
@@ -627,8 +696,18 @@ def confirm_dispense_api(request, visit_id):
                 remaining -= use
 
         # Calculate final amount with optional GST
-        discount_amount = subtotal * decimal.Decimal(discount_percent) / 100
-        taxable_amount = subtotal - discount_amount
+        # Support both flat ₹ discount and % discount
+        if discount_type == 'amount' and discount_flat > 0:
+            bill_discount_amount = min(discount_flat, subtotal).quantize(decimal.Decimal('0.01'))
+            bill_discount_percent = 0
+        else:
+            bill_discount_amount = decimal.Decimal('0')
+            bill_discount_percent = discount_percent
+        computed_discount = (
+            bill_discount_amount if bill_discount_amount > 0
+            else (subtotal * decimal.Decimal(bill_discount_percent) / 100)
+        )
+        taxable_amount = subtotal - computed_discount
         gst_percent = clinic.default_gst_percent
         gst_amount = (taxable_amount * gst_percent / 100).quantize(decimal.Decimal('0.01'))
         final_amount = taxable_amount + gst_amount
@@ -638,7 +717,8 @@ def confirm_dispense_api(request, visit_id):
             clinic=clinic,
             bill_number=PharmacyBill.generate_bill_number(clinic.pk),
             subtotal=subtotal,
-            discount_percent=discount_percent,
+            discount_percent=bill_discount_percent,
+            discount_amount=bill_discount_amount,
             gst_percent=gst_percent,
             gst_amount=gst_amount,
             final_amount=final_amount,
@@ -667,7 +747,10 @@ def bill_view(request, bill_id):
     for item in dispensed_items:
         item.line_amount = item.quantity_dispensed * item.unit_price
     prescription = getattr(bill.visit, 'prescription', None)
-    discount_amount = (bill.subtotal * bill.discount_percent / 100).quantize(decimal.Decimal('0.01'))
+    if bill.discount_amount > 0:
+        discount_amount = bill.discount_amount.quantize(decimal.Decimal('0.01'))
+    else:
+        discount_amount = (bill.subtotal * bill.discount_percent / 100).quantize(decimal.Decimal('0.01'))
     # CGST + SGST split (each = gst_percent / 2)
     half_gst_percent = (bill.gst_percent / 2) if bill.gst_percent else decimal.Decimal('0')
     half_gst_amount = (bill.gst_amount / 2).quantize(decimal.Decimal('0.01')) if bill.gst_percent else decimal.Decimal('0')
@@ -1168,7 +1251,12 @@ def ledger_view(request):
         .select_related('item')
         .order_by('-received_date', '-pk')
     )
-    purchase_total = sum(b.unit_price * b.quantity for b in batches)
+    # Use purchase_price (cost) if set, else fall back to unit_price (MRP) for old records
+    def _batch_cost(b):
+        if b.purchase_price > 0:
+            return b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100')) * b.quantity
+        return b.unit_price * b.quantity
+    purchase_total = sum(_batch_cost(b) for b in batches)
 
     # ── Sales (pharmacy bills) ──────────────────────────────────────────────
     bills = (
@@ -1188,18 +1276,35 @@ def ledger_view(request):
     )
     returns_total = sum(r.quantity_returned * r.unit_price for r in returns)
 
+    # ── Expiry losses (expired batches with remaining stock) ───────────────
+    expired_batches = (
+        PharmacyBatch.objects
+        .filter(item__clinic=clinic, expiry_date__lt=today, quantity__gt=0)
+        .select_related('item')
+        .order_by('expiry_date')
+    )
+    def _expiry_loss_value(b):
+        if b.purchase_price > 0:
+            return b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100')) * b.quantity
+        return b.unit_price * b.quantity
+    expiry_losses_total = sum(_expiry_loss_value(b) for b in expired_batches)
+
     # ── Build combined timeline entries ────────────────────────────────────
     entries = []
     for b in batches:
+        cost = _batch_cost(b)
         entries.append({
             'date': b.received_date,
             'type': 'purchase',
             'label': b.item.display_name,
             'detail': f'Batch {b.batch_number}' if b.batch_number else 'No batch no.',
             'qty': b.quantity,
-            'unit_price': b.unit_price,
-            'amount': b.unit_price * b.quantity,
-            'in': b.unit_price * b.quantity,
+            'unit_price': b.purchase_price if b.purchase_price > 0 else b.unit_price,
+            'purchase_price': b.purchase_price,
+            'purchase_gst': b.purchase_gst_percent,
+            'mrp': b.unit_price,
+            'amount': cost,
+            'in': cost,
             'out': None,
         })
     for bill in bills:
@@ -1239,7 +1344,7 @@ def ledger_view(request):
     for bill in bills:
         daily_sales[str(bill.created_at.date())] += float(bill.final_amount)
     for b in batches:
-        daily_purchases[str(b.received_date)] += float(b.unit_price * b.quantity)
+        daily_purchases[str(b.received_date)] += float(_batch_cost(b))
 
     chart_labels = []
     chart_sales_data = []
@@ -1260,8 +1365,202 @@ def ledger_view(request):
         'purchase_total': purchase_total,
         'sales_total': sales_total,
         'returns_total': returns_total,
+        'expiry_losses_total': expiry_losses_total,
+        'expired_batches': expired_batches,
         'profit': profit,
         'chart_labels': _json.dumps(chart_labels),
         'chart_sales': _json.dumps(chart_sales_data),
         'chart_purchases': _json.dumps(chart_purchase_data),
+    })
+
+
+@require_permission('can_edit_inventory')
+def import_medicines_view(request):
+    """
+    Let a user who belongs to multiple clinics copy the medicine list
+    (PharmacyItem records, WITHOUT batches) from one of their other clinics
+    into their currently-active clinic.
+    """
+    from django.contrib import messages
+
+    current_clinic = _get_clinic(request)
+    all_memberships = request.user.all_clinic_memberships
+    other_memberships = [m for m in all_memberships if m.clinic_id != current_clinic.id]
+
+    if not other_memberships:
+        messages.error(request, "You only have access to one clinic — nothing to import from.")
+        return redirect('pharmacy:dashboard')
+
+    # ── What already exists in the current clinic (for duplicate detection) ──
+    existing_items = (
+        PharmacyItem.objects.filter(clinic=current_clinic).select_related('medicine')
+    )
+    existing_catalog_ids = {
+        item.medicine_id for item in existing_items if item.medicine_id
+    }
+    existing_custom_names = {
+        item.custom_name.strip().lower()
+        for item in existing_items
+        if not item.medicine_id and item.custom_name
+    }
+
+    # ── Resolve source clinic from GET param (preview) or POST param (import) ──
+    source_id = None
+    if request.method == 'POST':
+        source_id = request.POST.get('source')
+    else:
+        source_id = request.GET.get('source')
+
+    source_clinic = None
+    source_items = []   # list of dicts: {item, already_exists}
+
+    if source_id:
+        # Security: source must be one of the user's own clinics
+        source_membership = next(
+            (m for m in other_memberships if str(m.clinic_id) == str(source_id)),
+            None,
+        )
+        if source_membership:
+            source_clinic = source_membership.clinic
+            qs = (
+                PharmacyItem.objects.filter(clinic=source_clinic)
+                .select_related('medicine')
+                .order_by('medicine__name', 'custom_name')
+            )
+            for item in qs:
+                if item.medicine_id:
+                    already_exists = item.medicine_id in existing_catalog_ids
+                else:
+                    already_exists = item.custom_name.strip().lower() in existing_custom_names
+                source_items.append({'item': item, 'already_exists': already_exists})
+
+    # ── POST: perform the actual import ──
+    if request.method == 'POST' and not source_clinic:
+        # Invalid or unowned source — silently ignore
+        return redirect('pharmacy:dashboard')
+
+    if request.method == 'POST' and source_clinic:
+        selected_ids = set(request.POST.getlist('items'))
+        imported_count = 0
+        skipped_count = 0
+
+        with transaction.atomic():
+            # Re-fetch from DB, scoped to source_clinic — never trust user-submitted IDs blindly
+            items_to_process = (
+                PharmacyItem.objects.filter(pk__in=selected_ids, clinic=source_clinic)
+                .select_related('medicine')
+            )
+            for item in items_to_process:
+                if item.medicine_id:
+                    already_exists = item.medicine_id in existing_catalog_ids
+                else:
+                    already_exists = item.custom_name.strip().lower() in existing_custom_names
+
+                if already_exists:
+                    skipped_count += 1
+                    continue
+
+                PharmacyItem.objects.create(
+                    clinic=current_clinic,
+                    medicine=item.medicine,
+                    custom_name=item.custom_name,
+                    custom_generic_name=item.custom_generic_name,
+                    reorder_level=item.reorder_level,
+                )
+                imported_count += 1
+
+        if imported_count:
+            msg = f"Imported {imported_count} medicine(s) from {source_clinic.name}."
+            if skipped_count:
+                msg += f" {skipped_count} already existed and were skipped."
+            messages.success(request, msg)
+        else:
+            messages.warning(request, "No new medicines imported — all selected items already exist in this clinic.")
+
+        return redirect('pharmacy:dashboard')
+
+    # ── GET: render preview page ──
+    new_count = sum(1 for s in source_items if not s['already_exists'])
+    return render(request, 'pharmacy/import_medicines.html', {
+        'clinic': current_clinic,
+        'other_memberships': other_memberships,
+        'source_clinic': source_clinic,
+        'source_items': source_items,
+        'source_id': source_id or '',
+        'new_count': new_count,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Inventory Report — printable stock list with PDF export
+# ---------------------------------------------------------------------------
+
+@require_permission('can_view_pharmacy')
+def inventory_report_view(request):
+    """Printable inventory snapshot — all items with batch details, MRP, and purchase cost."""
+    import datetime as dt
+    from django.utils import timezone as tz
+
+    clinic = _get_clinic(request)
+    today = tz.localdate()
+
+    items = (
+        PharmacyItem.objects
+        .filter(clinic=clinic)
+        .select_related('medicine')
+        .prefetch_related('batches')
+        .order_by('medicine__name', 'custom_name')
+    )
+
+    # Build rich item list with totals and per-batch detail
+    report_items = []
+    total_mrp_value = decimal.Decimal('0')
+    total_cost_value = decimal.Decimal('0')
+    total_units = 0
+
+    for item in items:
+        batches = list(item.batches.order_by('expiry_date'))
+        item_qty = sum(b.quantity for b in batches)
+        item_mrp = sum(b.unit_price * b.quantity for b in batches)
+        item_cost = sum(
+            (b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100')) * b.quantity)
+            if b.purchase_price > 0
+            else (b.unit_price * b.quantity)
+            for b in batches
+        )
+        total_mrp_value += item_mrp
+        total_cost_value += item_cost
+        total_units += item_qty
+
+        batch_details = []
+        for b in batches:
+            cost_per_unit = (
+                b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100'))
+                if b.purchase_price > 0 else decimal.Decimal('0')
+            )
+            days_to_expiry = (b.expiry_date - today).days if b.expiry_date else None
+            batch_details.append({
+                'batch': b,
+                'cost_per_unit': cost_per_unit,
+                'days_to_expiry': days_to_expiry,
+                'is_expired': b.expiry_date and b.expiry_date < today,
+                'is_near_expiry': days_to_expiry is not None and 0 <= days_to_expiry <= 90,
+            })
+
+        report_items.append({
+            'item': item,
+            'batches': batch_details,
+            'total_qty': item_qty,
+            'total_mrp_value': item_mrp,
+            'total_cost_value': item_cost,
+        })
+
+    return render(request, 'pharmacy/inventory_report.html', {
+        'clinic': clinic,
+        'today': today,
+        'report_items': report_items,
+        'total_mrp_value': total_mrp_value,
+        'total_cost_value': total_cost_value,
+        'total_units': total_units,
+        'total_items': len(report_items),
     })

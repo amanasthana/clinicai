@@ -1935,12 +1935,12 @@ function addMedicineRow(m) {
     </div>
   `;
 
-  // Manual add (no drug name) → prepend so doctor sees it first; AI render → append in order
+  // Always append so medicines stay in the order the doctor writes them.
+  // Scroll the new blank row into view so the doctor doesn't have to scroll down.
+  container.appendChild(div);
   if (!m?.drug_name) {
-    container.insertBefore(div, container.firstChild);
     _medPage = 0;
-  } else {
-    container.appendChild(div);
+    div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   renumberMedicines();
   updateMedCarousel();

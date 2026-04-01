@@ -3009,3 +3009,235 @@ class GSTBillingTest(TestCase):
         })
         self.clinic.refresh_from_db()
         self.assertEqual(self.clinic.gst_number, '29AABCU9603R1ZY')
+
+
+# ---------------------------------------------------------------------------
+# Import Medicines feature tests
+# ---------------------------------------------------------------------------
+
+class ImportMedicinesViewTest(TestCase):
+    """Tests for /pharmacy/import/ — cross-clinic medicine import."""
+
+    def setUp(self):
+        # Clinic A — the user's active clinic (target)
+        self.clinic_a, self.user, self.staff_a = make_clinic_and_user(
+            username='importdoc', clinic_name='Clinic A'
+        )
+        # Clinic B — another clinic the same user belongs to (source)
+        self.clinic_b = Clinic.objects.create(
+            name='Clinic B', address='456 Other St', city='Pune', phone='9000000002'
+        )
+        self.staff_b = StaffMember.objects.create(
+            clinic=self.clinic_b, user=self.user, role='admin', display_name='Import Doc'
+        )
+        set_permissions_from_role(self.staff_b)
+        self.staff_b.save()
+
+        # Log in with Clinic A as active clinic
+        self.client.login(username='importdoc', password='testpass123')
+        session = self.client.session
+        session['active_staff_id'] = self.staff_a.pk
+        session.save()
+
+        # Catalog medicines
+        self.med1 = make_catalog_medicine('Paracetamol', 'Acetaminophen')
+        self.med2 = make_catalog_medicine('Amoxicillin', 'Amoxicillin trihydrate')
+
+    # ── GET — single-clinic user is redirected ──────────────────────────────
+
+    def test_single_clinic_user_redirected(self):
+        """User with only one clinic gets redirected to dashboard."""
+        make_clinic_and_user(username='solouser', clinic_name='Solo Clinic')
+        self.client.login(username='solouser', password='testpass123')
+        resp = self.client.get('/pharmacy/import/')
+        self.assertRedirects(resp, '/pharmacy/', fetch_redirect_response=False)
+
+    # ── GET — preview page renders ──────────────────────────────────────────
+
+    def test_get_no_source_renders_form(self):
+        """GET without ?source shows the clinic selector form."""
+        resp = self.client.get('/pharmacy/import/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Clinic B')
+        self.assertEqual(resp.context['source_items'], [])
+
+    def test_get_with_source_shows_medicines(self):
+        """GET ?source=<clinic_b_id> lists medicines from Clinic B."""
+        PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med1)
+        PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med2)
+        resp = self.client.get(f'/pharmacy/import/?source={self.clinic_b.pk}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.context['source_items']), 2)
+        self.assertContains(resp, 'Paracetamol')
+        self.assertContains(resp, 'Amoxicillin')
+
+    def test_already_imported_medicine_flagged(self):
+        """Medicine already in target clinic is flagged already_exists=True."""
+        PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med1)
+        PharmacyItem.objects.create(clinic=self.clinic_a, medicine=self.med1)
+        resp = self.client.get(f'/pharmacy/import/?source={self.clinic_b.pk}')
+        entry = resp.context['source_items'][0]
+        self.assertTrue(entry['already_exists'])
+
+    def test_new_medicine_not_flagged(self):
+        """Medicine not yet in target clinic has already_exists=False."""
+        PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med2)
+        resp = self.client.get(f'/pharmacy/import/?source={self.clinic_b.pk}')
+        entry = resp.context['source_items'][0]
+        self.assertFalse(entry['already_exists'])
+
+    def test_new_count_correct(self):
+        """new_count equals medicines not yet in target clinic."""
+        PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med1)
+        PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med2)
+        PharmacyItem.objects.create(clinic=self.clinic_a, medicine=self.med1)
+        resp = self.client.get(f'/pharmacy/import/?source={self.clinic_b.pk}')
+        self.assertEqual(resp.context['new_count'], 1)
+
+    # ── Custom-name medicine duplicate detection ────────────────────────────
+
+    def test_custom_medicine_not_flagged_when_absent(self):
+        """Custom-named medicine absent from target is new."""
+        PharmacyItem.objects.create(clinic=self.clinic_b, custom_name='Ayurvedic Churna')
+        resp = self.client.get(f'/pharmacy/import/?source={self.clinic_b.pk}')
+        entry = resp.context['source_items'][0]
+        self.assertFalse(entry['already_exists'])
+
+    def test_custom_medicine_flagged_case_insensitive(self):
+        """Same custom name (different case) is detected as duplicate."""
+        PharmacyItem.objects.create(clinic=self.clinic_b, custom_name='Ayurvedic Churna')
+        PharmacyItem.objects.create(clinic=self.clinic_a, custom_name='ayurvedic churna')
+        resp = self.client.get(f'/pharmacy/import/?source={self.clinic_b.pk}')
+        entry = resp.context['source_items'][0]
+        self.assertTrue(entry['already_exists'])
+
+    # ── POST — successful import ────────────────────────────────────────────
+
+    def test_post_imports_medicines_into_target_clinic(self):
+        """POST creates PharmacyItem in target clinic and redirects to dashboard."""
+        item_b = PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med1)
+        resp = self.client.post('/pharmacy/import/', {
+            'source': self.clinic_b.pk,
+            'items': [item_b.pk],
+        })
+        self.assertRedirects(resp, '/pharmacy/', fetch_redirect_response=False)
+        self.assertTrue(
+            PharmacyItem.objects.filter(clinic=self.clinic_a, medicine=self.med1).exists()
+        )
+
+    def test_post_copies_reorder_level(self):
+        """Imported item inherits reorder_level from source."""
+        item_b = PharmacyItem.objects.create(
+            clinic=self.clinic_b, medicine=self.med1, reorder_level=25
+        )
+        self.client.post('/pharmacy/import/', {'source': self.clinic_b.pk, 'items': [item_b.pk]})
+        imported = PharmacyItem.objects.get(clinic=self.clinic_a, medicine=self.med1)
+        self.assertEqual(imported.reorder_level, 25)
+
+    def test_post_does_not_copy_batches(self):
+        """No PharmacyBatch records created in target clinic during import."""
+        item_b = PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med1)
+        PharmacyBatch.objects.create(
+            item=item_b, batch_number='B001',
+            expiry_date=datetime.date(2026, 12, 31), quantity=100, unit_price=10
+        )
+        self.client.post('/pharmacy/import/', {'source': self.clinic_b.pk, 'items': [item_b.pk]})
+        imported = PharmacyItem.objects.get(clinic=self.clinic_a, medicine=self.med1)
+        self.assertEqual(imported.batches.count(), 0)
+
+    def test_post_skips_already_existing_medicine(self):
+        """Duplicate medicine is not created twice in target clinic."""
+        PharmacyItem.objects.create(clinic=self.clinic_a, medicine=self.med1)
+        item_b = PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med1)
+        self.client.post('/pharmacy/import/', {'source': self.clinic_b.pk, 'items': [item_b.pk]})
+        self.assertEqual(
+            PharmacyItem.objects.filter(clinic=self.clinic_a, medicine=self.med1).count(), 1
+        )
+
+    def test_post_imports_custom_medicine(self):
+        """Custom-named medicines are imported with custom_generic_name."""
+        item_b = PharmacyItem.objects.create(
+            clinic=self.clinic_b, custom_name='Herbal Mix', custom_generic_name='Neem + Tulsi'
+        )
+        self.client.post('/pharmacy/import/', {'source': self.clinic_b.pk, 'items': [item_b.pk]})
+        qs = PharmacyItem.objects.filter(clinic=self.clinic_a, custom_name='Herbal Mix')
+        self.assertEqual(qs.count(), 1)
+        self.assertEqual(qs.first().custom_generic_name, 'Neem + Tulsi')
+
+    def test_post_partial_selection(self):
+        """Only selected medicines are imported; unchecked ones are left out."""
+        item1 = PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med1)
+        item2 = PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med2)
+        self.client.post('/pharmacy/import/', {'source': self.clinic_b.pk, 'items': [item1.pk]})
+        self.assertTrue(PharmacyItem.objects.filter(clinic=self.clinic_a, medicine=self.med1).exists())
+        self.assertFalse(PharmacyItem.objects.filter(clinic=self.clinic_a, medicine=self.med2).exists())
+
+    # ── Security ────────────────────────────────────────────────────────────
+
+    def test_cannot_import_from_unowned_clinic(self):
+        """POST with clinic the user does not belong to is silently rejected."""
+        other_clinic = Clinic.objects.create(
+            name='Unrelated Clinic', city='Delhi', phone='9111111111'
+        )
+        other_item = PharmacyItem.objects.create(clinic=other_clinic, medicine=self.med1)
+        resp = self.client.post('/pharmacy/import/', {
+            'source': other_clinic.pk,
+            'items': [other_item.pk],
+        })
+        self.assertRedirects(resp, '/pharmacy/', fetch_redirect_response=False)
+        self.assertFalse(
+            PharmacyItem.objects.filter(clinic=self.clinic_a, medicine=self.med1).exists()
+        )
+
+    def test_item_ids_scoped_to_declared_source_clinic(self):
+        """Item IDs from a different clinic than source are not imported."""
+        item_b = PharmacyItem.objects.create(clinic=self.clinic_b, medicine=self.med1)
+        # Declare source=clinic_b but submit an item that doesn't belong there
+        other_clinic = Clinic.objects.create(name='Other', city='X', phone='9333333333')
+        other_item = PharmacyItem.objects.create(clinic=other_clinic, medicine=self.med2)
+        self.client.post('/pharmacy/import/', {
+            'source': self.clinic_b.pk,
+            'items': [item_b.pk, other_item.pk],  # other_item not from clinic_b
+        })
+        # med1 imported; med2 NOT (other_item filtered out by clinic=source_clinic)
+        self.assertTrue(PharmacyItem.objects.filter(clinic=self.clinic_a, medicine=self.med1).exists())
+        self.assertFalse(PharmacyItem.objects.filter(clinic=self.clinic_a, medicine=self.med2).exists())
+
+    # ── Permission guard ────────────────────────────────────────────────────
+
+    def test_requires_can_edit_inventory_permission(self):
+        """Receptionist (no inventory permission) cannot access import page."""
+        clinic_d = Clinic.objects.create(name='Clinic D', city='Nagpur', phone='9222222222')
+        clinic_e = Clinic.objects.create(name='Clinic E', city='Nashik', phone='9222222223')
+        recept_user = User.objects.create_user(username='recept1', password='testpass123')
+        staff_d = StaffMember.objects.create(
+            clinic=clinic_d, user=recept_user, role='receptionist', display_name='R1'
+        )
+        set_permissions_from_role(staff_d)
+        staff_d.save()
+        staff_e = StaffMember.objects.create(
+            clinic=clinic_e, user=recept_user, role='receptionist', display_name='R1e'
+        )
+        set_permissions_from_role(staff_e)
+        staff_e.save()
+        self.assertFalse(staff_d.can_edit_inventory)
+        self.client.login(username='recept1', password='testpass123')
+        session = self.client.session
+        session['active_staff_id'] = staff_d.pk
+        session.save()
+        resp = self.client.get('/pharmacy/import/')
+        self.assertNotEqual(resp.status_code, 200)
+
+    # ── Dashboard button visibility ─────────────────────────────────────────
+
+    def test_import_button_visible_for_multi_clinic_user(self):
+        """Import Medicines button appears on pharmacy dashboard for multi-clinic users."""
+        resp = self.client.get('/pharmacy/')
+        self.assertContains(resp, 'Import Medicines')
+
+    def test_import_button_hidden_for_single_clinic_user(self):
+        """Import Medicines button is absent for single-clinic users."""
+        make_clinic_and_user(username='singleclinic', clinic_name='Clinic F')
+        self.client.login(username='singleclinic', password='testpass123')
+        resp = self.client.get('/pharmacy/')
+        self.assertNotContains(resp, 'Import Medicines')

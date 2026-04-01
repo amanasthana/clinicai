@@ -215,13 +215,46 @@
 
     <!-- Discount -->
     <div style="background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:16px; margin-bottom:16px;">
-      <label style="font-size:13px; font-weight:500; color:#374151; display:block; margin-bottom:8px;">
-        Discount (%)
-        {% if clinic.default_medicine_discount %}<span style="font-size:11px; color:#059669; font-weight:400;">— clinic default {{ clinic.default_medicine_discount }}% pre-filled</span>{% endif %}
-      </label>
-      <input type="number" id="discount-pct" min="0" max="100" value="{{ clinic.default_medicine_discount|default:0 }}"
-        style="width:100px; padding:10px; border:1px solid #D1D5DB; border-radius:8px; font-size:15px; font-family:inherit; outline:none;"
-        oninput="updateTotal()">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+        <span style="font-size:13px; font-weight:500; color:#374151;">Discount</span>
+        <!-- Toggle tabs -->
+        <div style="display:flex; border:1px solid #D1D5DB; border-radius:8px; overflow:hidden;">
+          <button type="button" id="disc-tab-pct" onclick="setDiscountMode('pct')"
+            style="padding:6px 16px; font-size:13px; font-weight:600; border:none; cursor:pointer; font-family:inherit; background:#111827; color:#fff;">
+            % Percent
+          </button>
+          <button type="button" id="disc-tab-amt" onclick="setDiscountMode('amount')"
+            style="padding:6px 16px; font-size:13px; font-weight:600; border:none; cursor:pointer; font-family:inherit; background:#fff; color:#6B7280;">
+            ₹ Amount
+          </button>
+        </div>
+      </div>
+
+      <!-- Percent mode -->
+      <div id="disc-pct-wrap">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <input type="number" id="discount-pct" min="0" max="100" value="{{ clinic.default_medicine_discount|default:0 }}"
+            style="width:90px; padding:10px; border:1px solid #D1D5DB; border-radius:8px; font-size:15px; font-family:inherit; outline:none;"
+            oninput="updateTotal()">
+          <span style="font-size:15px; color:#6B7280; font-weight:500;">%</span>
+          <span id="disc-pct-equiv" style="font-size:13px; color:#059669; font-weight:500;"></span>
+        </div>
+        {% if clinic.default_medicine_discount %}
+        <div style="font-size:11px; color:#9CA3AF; margin-top:6px;">Clinic default {{ clinic.default_medicine_discount }}% pre-filled</div>
+        {% endif %}
+      </div>
+
+      <!-- Amount mode (hidden by default) -->
+      <div id="disc-amt-wrap" style="display:none;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:15px; color:#6B7280; font-weight:500;">₹</span>
+          <input type="number" id="discount-flat" min="0" step="0.01" value="0"
+            style="width:120px; padding:10px; border:1px solid #D1D5DB; border-radius:8px; font-size:15px; font-family:inherit; outline:none;"
+            oninput="updateTotal()">
+          <span id="disc-amt-equiv" style="font-size:13px; color:#059669; font-weight:500;"></span>
+        </div>
+        <div style="font-size:11px; color:#9CA3AF; margin-top:6px;">Enter the exact rupee amount to discount from the bill</div>
+      </div>
     </div>
 
     <!-- Payment mode -->
@@ -291,6 +324,19 @@ function getRows() {
 }
 
 const CLINIC_GST_PERCENT = {{ clinic.default_gst_percent|default:0 }};
+let discountMode = 'pct';  // 'pct' or 'amount'
+
+function setDiscountMode(mode) {
+  discountMode = mode;
+  const isPct = mode === 'pct';
+  document.getElementById('disc-pct-wrap').style.display = isPct ? '' : 'none';
+  document.getElementById('disc-amt-wrap').style.display = isPct ? 'none' : '';
+  document.getElementById('disc-tab-pct').style.background = isPct ? '#111827' : '#fff';
+  document.getElementById('disc-tab-pct').style.color = isPct ? '#fff' : '#6B7280';
+  document.getElementById('disc-tab-amt').style.background = isPct ? '#fff' : '#111827';
+  document.getElementById('disc-tab-amt').style.color = isPct ? '#6B7280' : '#fff';
+  updateTotal();
+}
 
 function updateTotal() {
   let subtotal = 0;
@@ -299,8 +345,24 @@ function updateTotal() {
     const price = parseFloat(row.querySelector('.f-unit-price').value) || 0;
     subtotal += qty * price;
   });
-  const discountPct = parseInt(document.getElementById('discount-pct').value) || 0;
-  const discountAmt = subtotal * discountPct / 100;
+
+  let discountAmt = 0;
+  if (discountMode === 'amount') {
+    const flat = parseFloat(document.getElementById('discount-flat').value) || 0;
+    discountAmt = Math.min(flat, subtotal);
+    // Show equivalent %
+    const equiv = document.getElementById('disc-amt-equiv');
+    if (equiv) equiv.textContent = subtotal > 0 && discountAmt > 0
+      ? '(' + ((discountAmt / subtotal) * 100).toFixed(1) + '%)'
+      : '';
+  } else {
+    const discountPct = parseFloat(document.getElementById('discount-pct').value) || 0;
+    discountAmt = subtotal * discountPct / 100;
+    // Show equivalent ₹
+    const equiv = document.getElementById('disc-pct-equiv');
+    if (equiv) equiv.textContent = discountAmt > 0 ? '= ₹' + discountAmt.toFixed(2) : '';
+  }
+
   const taxable = subtotal - discountAmt;
   const gstAmt = taxable * CLINIC_GST_PERCENT / 100;
   const total = taxable + gstAmt;
@@ -461,7 +523,17 @@ async function submitDispense() {
     showError('No medicines with quantity greater than 0.');
     return;
   }
-  const discount = parseInt(document.getElementById('discount-pct').value) || 0;
+  const discountPayload = discountMode === 'amount'
+    ? {
+        discount: 0,
+        discount_type: 'amount',
+        discount_flat: parseFloat(document.getElementById('discount-flat').value) || 0,
+      }
+    : {
+        discount: parseInt(document.getElementById('discount-pct').value) || 0,
+        discount_type: 'pct',
+        discount_flat: 0,
+      };
   const btn = document.querySelector('button[onclick="submitDispense()"]');
   btn.disabled = true;
   btn.textContent = 'Processing...';
@@ -469,7 +541,7 @@ async function submitDispense() {
     const resp = await fetch('/pharmacy/dispense/' + VISIT_ID + '/confirm/', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
-      body: JSON.stringify({items, discount, payment_mode: paymentMode}),
+      body: JSON.stringify({items, ...discountPayload, payment_mode: paymentMode}),
     });
     const data = await resp.json();
     if (data.ok) {

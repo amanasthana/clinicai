@@ -365,7 +365,7 @@
           <span style="font-size:11px; font-weight:600; background:#6366F1; color:#fff; padding:2px 8px; border-radius:20px;">LIVE</span>
         </div>
         <div style="font-size:13px; color:#374151; line-height:1.6;">
-          <strong>📊 Analytics Dashboard</strong> — patient volume trends, top diagnoses &amp; most prescribed medicines.<br>
+          <strong>Analytics Dashboard</strong> — patient volume trends, top diagnoses &amp; most prescribed medicines.<br>
           <strong>⚕ Drug Interaction Alerts</strong> — real-time safety alerts on the prescription screen as you add medicines.
         </div>
         <a href="/analytics/" style="display:inline-block; margin-top:10px; font-size:13px; font-weight:600; color:#4F46E5; text-decoration:none;">
@@ -397,20 +397,21 @@
   <!-- Patient Search (PRIMARY ACTION) -->
   <div class="card" style="margin-bottom: 24px;">
     <div style="font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 10px;">
-      Patient Lookup by Phone Number
+      Patient Lookup
     </div>
     <div style="display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
-      <div style="flex: 1; min-width: 180px;">
+      <div style="flex: 1; min-width: 180px; position: relative;">
         <input
-          type="tel"
-          id="phone-search"
+          type="search"
+          id="patient-search"
           class="input-field"
-          placeholder="Enter 10-digit mobile number..."
-          maxlength="10"
-          inputmode="numeric"
-          autocomplete="tel"
+          placeholder="Name or 10-digit mobile..."
+          maxlength="100"
+          autocomplete="off"
           style="font-size: 18px; padding: 14px 16px;"
         >
+        <!-- Name autocomplete dropdown -->
+        <div id="name-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #E5E7EB; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:200; overflow:hidden; margin-top:4px;"></div>
       </div>
       <a href="/patient/new/" class="btn btn-secondary btn-mobile-full" style="padding: 14px 20px;" id="new-patient-btn">
         + New Patient
@@ -747,32 +748,108 @@
 })();
 </script>
 <script>
-const phoneInput = document.getElementById('phone-search');
+const patientInput = document.getElementById('patient-search');
+// Keep backward-compat alias used by other code on this page
+const phoneInput = patientInput;
 const resultDiv = document.getElementById('search-result');
 const newPatientBtn = document.getElementById('new-patient-btn');
+const nameDropdown = document.getElementById('name-dropdown');
 let searchTimeout = null;
 
-phoneInput.addEventListener('input', function() {
-  const phone = this.value.replace(/\D/g, '');
-  this.value = phone;  // strip non-digits
+patientInput.addEventListener('input', function() {
+  const raw = this.value;
+  const digitsOnly = /^\d+$/.test(raw.trim());
 
   clearTimeout(searchTimeout);
   resultDiv.innerHTML = '';
+  nameDropdown.style.display = 'none';
+  nameDropdown.innerHTML = '';
 
-  // Update new patient link with phone number
-  if (phone.length >= 1) {
-    newPatientBtn.href = `/patient/new/?phone=${phone}`;
-  } else {
+  if (!raw.trim()) {
     newPatientBtn.href = '/patient/new/';
+    return;
   }
 
-  if (phone.length === 10) {
-    resultDiv.innerHTML = '<div style="color:#6B7280; font-size:14px; padding:8px 0;">Searching...</div>';
-    searchTimeout = setTimeout(() => searchPatient(phone), 300);
+  if (digitsOnly) {
+    // Phone number mode
+    const phone = raw.replace(/\D/g, '');
+    newPatientBtn.href = phone.length >= 1 ? `/patient/new/?phone=${phone}` : '/patient/new/';
+    if (phone.length === 10) {
+      resultDiv.innerHTML = '<div style="color:#6B7280; font-size:14px; padding:8px 0;">Searching...</div>';
+      searchTimeout = setTimeout(() => searchByPhone(phone), 300);
+    }
+  } else {
+    // Name search mode
+    newPatientBtn.href = '/patient/new/';
+    if (raw.trim().length >= 2) {
+      searchTimeout = setTimeout(() => searchByName(raw.trim()), 300);
+    }
   }
 });
 
-async function searchPatient(phone) {
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  if (!patientInput.contains(e.target) && !nameDropdown.contains(e.target)) {
+    nameDropdown.style.display = 'none';
+  }
+});
+
+async function searchByName(q) {
+  try {
+    const resp = await fetch(`/api/patient/autocomplete/?q=${encodeURIComponent(q)}`);
+    const data = await resp.json();
+    if (!data.results || data.results.length === 0) {
+      nameDropdown.innerHTML = '<div style="padding:14px 16px; font-size:13px; color:#9CA3AF;">No patients found for "' + escHtml(q) + '"</div>';
+      nameDropdown.style.display = 'block';
+      return;
+    }
+    nameDropdown.innerHTML = data.results.map(p => `
+      <div onclick="selectPatientFromDropdown(${JSON.stringify(p).replace(/"/g, '&quot;')})"
+           style="padding:11px 16px; cursor:pointer; border-bottom:1px solid #F3F4F6; transition:background .1s;"
+           onmouseenter="this.style.background='#F9FAFB'" onmouseleave="this.style.background=''">
+        <div style="font-size:15px; font-weight:600; color:#111827;">${escHtml(p.name)}</div>
+        <div style="font-size:12px; color:#6B7280; margin-top:1px;">
+          ${p.phone ? p.phone : ''}${p.age ? ' · ' + p.age + 'y' : ''}${p.gender_display ? ' · ' + p.gender_display : ''}
+        </div>
+      </div>
+    `).join('') + (data.results.length >= 8 ? '<div style="padding:9px 16px; font-size:12px; color:#9CA3AF; text-align:center;">Showing top 8 — type more to narrow down</div>' : '');
+    nameDropdown.style.display = 'block';
+  } catch (e) {
+    nameDropdown.style.display = 'none';
+  }
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function selectPatientFromDropdown(p) {
+  nameDropdown.style.display = 'none';
+  patientInput.value = p.name;
+  if (p.phone) {
+    resultDiv.innerHTML = '<div style="color:#6B7280; font-size:14px; padding:8px 0;">Loading...</div>';
+    await searchByPhone(p.phone);
+  } else {
+    // No phone on record — show what we have with direct links
+    resultDiv.innerHTML = `
+      <div style="border:1px solid #D1FAE5; border-radius:12px; padding:16px; background:#F0FDF4;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="font-size:16px; font-weight:700; color:#111827;">${escHtml(p.name)}</div>
+            <div style="font-size:14px; color:#6B7280; margin-top:2px;">
+              ${p.age ? p.age + ' yrs' : ''} ${p.gender_display ? '· ' + p.gender_display : ''}
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="/patient/${p.id}/?add_to_queue=1" class="btn btn-success btn-sm">+ Add to Queue</a>
+            <a href="/patient/${p.id}/" class="btn btn-secondary btn-sm">View Profile</a>
+          </div>
+        </div>
+      </div>`;
+  }
+}
+
+async function searchByPhone(phone) {
   try {
     const resp = await fetch(`/api/patient/search/?phone=${phone}`);
     const data = await resp.json();

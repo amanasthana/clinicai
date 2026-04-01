@@ -16,9 +16,10 @@ class PatientForm(forms.ModelForm):
 
     class Meta:
         model = Patient
-        fields = ['full_name', 'phone', 'age', 'gender', 'address', 'blood_group', 'allergies', 'notes']
+        fields = ['full_name', 'guardian_name', 'phone', 'age', 'gender', 'address', 'blood_group', 'allergies', 'notes']
         widgets = {
             'full_name': forms.TextInput(attrs={'class': 'input-field', 'placeholder': 'Patient full name'}),
+            'guardian_name': forms.TextInput(attrs={'class': 'input-field', 'placeholder': "Husband's / Father's name (optional)"}),
             'phone': forms.TextInput(attrs={
                 'class': 'input-field',
                 'placeholder': '10-digit mobile number',
@@ -64,9 +65,10 @@ class PatientEditForm(forms.ModelForm):
     """Edit existing patient demographics. Phone excluded — it's the lookup key."""
     class Meta:
         model = Patient
-        fields = ['full_name', 'age', 'gender', 'address', 'blood_group', 'allergies', 'notes']
+        fields = ['full_name', 'guardian_name', 'age', 'gender', 'address', 'blood_group', 'allergies', 'notes']
         widgets = {
             'full_name': forms.TextInput(attrs={'class': 'input-field', 'placeholder': 'Patient full name'}),
+            'guardian_name': forms.TextInput(attrs={'class': 'input-field', 'placeholder': "Husband's / Father's name (optional)"}),
             'age': forms.NumberInput(attrs={'class': 'input-field', 'placeholder': 'Age (0–99)', 'min': 0, 'max': 99, 'oninput': 'if(parseInt(this.value)>99)this.value=99;if(this.value<0)this.value=0;'}),
             'gender': forms.RadioSelect(),
             'address': forms.Textarea(attrs={'class': 'input-field', 'rows': 2, 'placeholder': 'Address (optional)'}),

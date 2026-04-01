@@ -9,7 +9,10 @@
       <h1 class="page-title">Doctor's Queue</h1>
       <p class="page-subtitle">{{ today|date:"l, j F Y" }} · {{ done_today }} completed today</p>
     </div>
-    <span style="font-size:14px; color:#6B7280;">{{ queue.count }} waiting</span>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:14px; color:#6B7280;">{{ queue.count }} waiting</span>
+      <a href="/rx/history/" style="font-size:13px; color:#6B7280; text-decoration:none; border:1px solid #E5E7EB; padding:6px 12px; border-radius:8px; white-space:nowrap;">Rx History</a>
+    </div>
   </div>
 
   {% if queue %}
@@ -53,7 +56,6 @@
 
   {% else %}
   <div class="card" style="text-align:center; padding:64px 20px; color:#6B7280;">
-    <div style="font-size:48px; margin-bottom:16px;">✓</div>
     <div style="font-size:18px; font-weight:600; margin-bottom:8px; color:#111827;">All caught up!</div>
     <div style="font-size:14px;">No patients waiting. {{ done_today }} completed today.</div>
   </div>

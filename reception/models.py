@@ -24,6 +24,7 @@ class Patient(models.Model):
         'accounts.Clinic', on_delete=models.CASCADE, related_name='patients'
     )
     full_name = models.CharField(max_length=200)
+    guardian_name = models.CharField(max_length=150, blank=True, help_text="Husband's / Father's name (optional)")
     phone = models.CharField(max_length=15, db_index=True)  # primary lookup key
     age = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(99)])
     gender = models.CharField(

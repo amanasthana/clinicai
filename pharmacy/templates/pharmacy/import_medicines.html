@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Import Medicines — {{ clinic.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.im-row { transition: background .1s; }
+.im-row:hover { background: #F9FAFB; }
+.im-row.already { opacity: .45; }
+.im-row input[type="checkbox"]:disabled { cursor: not-allowed; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:720px;">
+
+  <!-- ── Header ── -->
+  <div style="display:flex; align-items:center; gap:14px; margin-bottom:24px; flex-wrap:wrap;">
+    <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">← Back</a>
+    <div>
+      <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Import Medicines</h1>
+      <p style="font-size:13px; color:#6B7280; margin:4px 0 0 0;">
+        Copy the medicine list from another clinic you manage into <strong>{{ clinic.name }}</strong>.
+        Batch details (stock, expiry, price) are <em>not</em> copied — only the medicine names.
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Step 1: pick source clinic ── -->
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">
+      Step 1 — Choose source clinic
+    </div>
+    <form method="get" action="/pharmacy/import/" id="source-form"
+          style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <select name="source" id="source-select"
+              onchange="document.getElementById('source-form').submit()"
+              style="flex:1; min-width:200px; padding:9px 12px; border:1px solid #D1D5DB; border-radius:8px; font-size:14px; font-family:inherit; color:#111827; background:#fff;">
+        <option value="">— Select a clinic —</option>
+        {% for m in other_memberships %}
+        <option value="{{ m.clinic.id }}"
+          {% if source_id == m.clinic.id|stringformat:"s" %}selected{% endif %}>
+          {{ m.clinic.name }} · {{ m.clinic.city }}
+        </option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-secondary" style="font-size:13px; white-space:nowrap;">
+        Preview medicines
+      </button>
+    </form>
+  </div>
+
+  {% if source_clinic %}
+  <!-- ── Step 2: select medicines ── -->
+  <form method="post" action="/pharmacy/import/" id="import-form">
+    {% csrf_token %}
+    <input type="hidden" name="source" value="{{ source_clinic.id }}">
+
+    <div class="card" style="padding:0; overflow:hidden;">
+
+      <!-- Card header -->
+      <div style="padding:16px 18px; border-bottom:1px solid #F3F4F6; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px;">
+            Step 2 — Select medicines to import
+          </div>
+          <div style="font-size:14px; font-weight:600; color:#111827;">
+            From: {{ source_clinic.name }} · {{ source_clinic.city }}
+          </div>
+          <div style="font-size:12px; color:#6B7280; margin-top:3px;">
+            {{ source_items|length }} medicine{{ source_items|length|pluralize }} in that clinic ·
+            <span style="color:#059669; font-weight:600;">{{ new_count }} new</span> not yet in {{ clinic.name }}
+          </div>
+        </div>
+
+        {% if new_count > 0 %}
+        <button type="button" onclick="toggleAll(this)"
+                style="font-size:12px; font-weight:600; color:#2563EB; background:none; border:none; cursor:pointer; font-family:inherit; padding:0; white-space:nowrap;">
+          Select all new ({{ new_count }})
+        </button>
+        {% endif %}
+      </div>
+
+      {% if source_items %}
+
+      <!-- Column headers -->
+      <div style="display:grid; grid-template-columns:32px 1fr 1fr 90px; gap:0; padding:9px 18px; background:#F9FAFB; border-bottom:1px solid #F3F4F6;">
+        <div></div>
+        <div style="font-size:11px; font-weight:700; color:#9CA3AF; text-transform:uppercase; letter-spacing:.4px;">Medicine</div>
+        <div style="font-size:11px; font-weight:700; color:#9CA3AF; text-transform:uppercase; letter-spacing:.4px;">Generic / Composition</div>
+        <div style="font-size:11px; font-weight:700; color:#9CA3AF; text-transform:uppercase; letter-spacing:.4px; text-align:center;">Status</div>
+      </div>
+
+      <!-- Medicine rows -->
+      {% for entry in source_items %}
+      <div class="im-row{% if entry.already_exists %} already{% endif %}"
+           style="display:grid; grid-template-columns:32px 1fr 1fr 90px; gap:0; padding:11px 18px; border-bottom:1px solid #F3F4F6; align-items:center;">
+
+        <!-- Checkbox -->
+        <div>
+          <input type="checkbox" name="items" value="{{ entry.item.pk }}"
+                 class="medicine-checkbox"
+                 {% if not entry.already_exists %}checked{% endif %}
+                 {% if entry.already_exists %}disabled{% endif %}
+                 style="width:16px; height:16px; accent-color:#2563EB; cursor:pointer;">
+        </div>
+
+        <!-- Medicine name -->
+        <div style="min-width:0; padding-right:12px;">
+          <div style="font-size:14px; font-weight:600; color:#111827; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            {{ entry.item.display_name }}
+          </div>
+          {% if entry.item.medicine.form %}
+          <div style="font-size:11px; color:#9CA3AF; margin-top:1px;">{{ entry.item.medicine.form }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Generic / composition -->
+        <div style="min-width:0; padding-right:12px;">
+          <div style="font-size:13px; color:#6B7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            {{ entry.item.display_generic|default:"—" }}
+          </div>
+        </div>
+
+        <!-- Status badge -->
+        <div style="text-align:center;">
+          {% if entry.already_exists %}
+          <span style="font-size:11px; font-weight:600; color:#059669; background:#ECFDF5; border-radius:20px; padding:3px 9px; white-space:nowrap;">
+            Already added
+          </span>
+          {% else %}
+          <span style="font-size:11px; font-weight:600; color:#2563EB; background:#EFF6FF; border-radius:20px; padding:3px 9px; white-space:nowrap;">
+            New
+          </span>
+          {% endif %}
+        </div>
+
+      </div>
+      {% endfor %}
+
+      <!-- Footer action -->
+      {% if new_count > 0 %}
+      <div style="padding:16px 18px; background:#F9FAFB; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div style="font-size:13px; color:#6B7280;">
+          <span id="selected-count">{{ new_count }}</span> medicine{{ new_count|pluralize }} selected for import
+        </div>
+        <button type="submit" class="btn btn-primary"
+                style="font-size:14px; font-weight:600; padding:10px 22px;">
+          Import Selected →
+        </button>
+      </div>
+      {% else %}
+      <div style="padding:20px 18px; text-align:center; color:#6B7280; font-size:14px;">
+        All medicines from {{ source_clinic.name }} are already in {{ clinic.name }}.
+        Nothing new to import.
+      </div>
+      {% endif %}
+
+      {% else %}
+      <div style="padding:32px 18px; text-align:center;">
+        <div style="font-size:15px; font-weight:600; color:#374151; margin-bottom:4px;">No medicines in {{ source_clinic.name }}</div>
+        <div style="font-size:13px; color:#9CA3AF;">Add medicines to that clinic first, then import here.</div>
+      </div>
+      {% endif %}
+
+    </div><!-- .card -->
+  </form>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Toggle all importable checkboxes
+function toggleAll(btn) {
+  const boxes = document.querySelectorAll('.medicine-checkbox:not(:disabled)');
+  const allChecked = Array.from(boxes).every(b => b.checked);
+  boxes.forEach(b => b.checked = !allChecked);
+  btn.textContent = allChecked ? 'Select all new ({{ new_count }})' : 'Deselect all';
+  updateCount();
+}
+
+// Live count of selected medicines
+document.querySelectorAll('.medicine-checkbox').forEach(cb => {
+  cb.addEventListener('change', updateCount);
+});
+
+function updateCount() {
+  const n = document.querySelectorAll('.medicine-checkbox:checked').length;
+  const el = document.getElementById('selected-count');
+  if (el) el.textContent = n;
+}
+</script>
+{% endblock %}

@@ -20,4 +20,5 @@ urlpatterns = [
     path('share/<uuid:token>/', views.public_prescription_view, name='public_print'),
     path('api/interactions/', views.check_interactions_api, name='check_interactions'),
     path('api/scan-bill/', views.scan_bill_api, name='scan_bill'),
+    path('history/', views.prescription_history_view, name='history'),
 ]

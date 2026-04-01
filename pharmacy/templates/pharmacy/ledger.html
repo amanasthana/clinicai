@@ -4,8 +4,7 @@
 {% block extra_head %}
 <style>
 /* Summary cards */
-.ledger-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
-@media (max-width: 800px) { .ledger-cards { grid-template-columns: repeat(2, 1fr); } }
+.ledger-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
 @media (max-width: 480px) { .ledger-cards { grid-template-columns: 1fr 1fr; gap: 10px; } }
 
 .ledger-card {
@@ -108,28 +107,71 @@
   </div>
 
   <!-- Summary cards -->
-  <div class="ledger-cards">
+  <div class="ledger-cards" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
     <div class="ledger-card blue">
-      <div class="ledger-card-label">Purchases (Stock In)</div>
+      <div class="ledger-card-label">Purchases (Cost)</div>
       <div class="ledger-card-value">₹{{ purchase_total|floatformat:0 }}</div>
-      <div class="ledger-card-sub">Cost of stock received</div>
+      <div class="ledger-card-sub">Purchase cost incl. GST</div>
     </div>
     <div class="ledger-card green">
       <div class="ledger-card-label">Sales (Revenue)</div>
       <div class="ledger-card-value">₹{{ sales_total|floatformat:0 }}</div>
-      <div class="ledger-card-sub">Billed to patients</div>
+      <div class="ledger-card-sub">Billed to patients (MRP)</div>
     </div>
     <div class="ledger-card red">
       <div class="ledger-card-label">Returns</div>
       <div class="ledger-card-value">₹{{ returns_total|floatformat:0 }}</div>
-      <div class="ledger-card-sub">Medicine returned</div>
+      <div class="ledger-card-sub">Medicine returned to stock</div>
     </div>
+    {% if expiry_losses_total %}
+    <div class="ledger-card" style="border-color:#FECACA; background:#FFF5F5;">
+      <div class="ledger-card-label" style="color:#991B1B;">Expiry Losses</div>
+      <div class="ledger-card-value" style="color:#991B1B;">₹{{ expiry_losses_total|floatformat:0 }}</div>
+      <div class="ledger-card-sub">{{ expired_batches|length }} expired batch{{ expired_batches|length|pluralize:"es" }} with stock</div>
+    </div>
+    {% endif %}
     <div class="ledger-card {% if profit >= 0 %}profit-pos{% else %}profit-neg{% endif %}">
       <div class="ledger-card-label">Gross Margin</div>
       <div class="ledger-card-value">{% if profit >= 0 %}+{% endif %}₹{{ profit|floatformat:0 }}</div>
-      <div class="ledger-card-sub">Sales − Purchases − Returns</div>
+      <div class="ledger-card-sub">Sales − Cost − Returns</div>
     </div>
   </div>
+
+  {% if expired_batches %}
+  <!-- Expiry losses detail -->
+  <div style="background:#FFF5F5; border:1.5px solid #FECACA; border-radius:12px; padding:16px 18px; margin-bottom:24px;">
+    <div style="font-size:14px; font-weight:700; color:#991B1B; margin-bottom:10px;">
+      Expired Stock — Potential Losses ({{ expired_batches|length }} batch{{ expired_batches|length|pluralize:"es" }})
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; padding:0 0 8px; border-bottom:1px solid #FECACA;">Medicine</th>
+          <th style="text-align:left; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; padding:0 0 8px 12px; border-bottom:1px solid #FECACA;">Batch</th>
+          <th style="text-align:left; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; padding:0 0 8px 12px; border-bottom:1px solid #FECACA;">Expiry</th>
+          <th style="text-align:right; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; padding:0 0 8px 12px; border-bottom:1px solid #FECACA;">Qty</th>
+          <th style="text-align:right; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; padding:0 0 8px 12px; border-bottom:1px solid #FECACA;">Loss Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in expired_batches %}
+        <tr>
+          <td style="padding:7px 0; color:#111827; font-weight:500;">{{ b.item.display_name }}</td>
+          <td style="padding:7px 12px; color:#6B7280;">{{ b.batch_number|default:"—" }}</td>
+          <td style="padding:7px 12px; color:#DC2626;">{{ b.expiry_date|date:"M Y" }}</td>
+          <td style="padding:7px 12px; text-align:right; color:#374151;">{{ b.quantity }}</td>
+          <td style="padding:7px 12px; text-align:right; font-weight:700; color:#991B1B;">
+            {% if b.purchase_price %}₹{{ b.purchase_price|floatformat:2 }}{% else %}₹{{ b.unit_price|floatformat:2 }}{% endif %} × {{ b.quantity }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="font-size:12px; color:#DC2626; margin-top:10px; padding-top:8px; border-top:1px solid #FECACA;">
+      Write off expired stock to free up shelf space and remove ₹{{ expiry_losses_total|floatformat:0 }} from your P&amp;L.
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Chart -->
   <div class="ledger-chart-wrap">
@@ -191,8 +233,20 @@
           <td class="hide-mobile" style="color:#6B7280; font-size:12px;">
             {% if entry.qty %}
               {{ entry.qty }} units
-              {% if entry.unit_price %}
-                <span style="color:#9CA3AF;">@ ₹{{ entry.unit_price }}</span>
+              {% if entry.type == 'purchase' %}
+                {% if entry.purchase_price %}
+                  <span style="color:#9CA3AF;">@ ₹{{ entry.purchase_price }} cost</span>
+                  {% if entry.purchase_gst %}
+                    <span style="color:#9CA3AF;"> + {{ entry.purchase_gst }}% GST</span>
+                  {% endif %}
+                  <span style="color:#B0B7C0;"> · MRP ₹{{ entry.mrp }}</span>
+                {% else %}
+                  <span style="color:#9CA3AF;">@ ₹{{ entry.unit_price }} MRP</span>
+                {% endif %}
+              {% else %}
+                {% if entry.unit_price %}
+                  <span style="color:#9CA3AF;">@ ₹{{ entry.unit_price }}</span>
+                {% endif %}
               {% endif %}
             {% elif entry.type == 'sale' %}
               <span style="color:#9CA3AF;">Bill</span>
@@ -215,7 +269,6 @@
     </table>
     {% else %}
     <div class="ledger-empty">
-      <div style="font-size:32px; margin-bottom:12px;">📋</div>
       <div style="font-weight:600; color:#374151; margin-bottom:6px;">No transactions in the last 30 days</div>
       <div>Purchases, sales, and returns will appear here as they happen.</div>
     </div>

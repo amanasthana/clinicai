@@ -106,9 +106,10 @@
   .bill-table td { font-size: 9pt; padding: 5pt 4pt 5pt 0; }
   .total-row { font-size: 9pt; margin-bottom: 3pt; }
   .total-final  { font-size: 12pt; }
-  @page { size: A5 portrait; margin: 8mm 10mm; }
+  /* @page size set dynamically via #page-size-style */
 }
 </style>
+<style id="page-size-style">@media print { @page { size: A5 portrait; margin: 8mm 10mm; } }</style>
 {% endblock %}
 
 {% block content %}
@@ -116,6 +117,15 @@
 
   <!-- ── Toolbar ── -->
   <div class="bill-toolbar no-print">
+    <button class="tb-btn" onclick="window.print()" style="background:#fff; color:#111827; border:1.5px solid #D1D5DB;">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+      Print
+    </button>
+    <select id="bill-size-select" onchange="setBillSize(this.value)"
+      style="padding:6px 10px; border:1.5px solid #D1D5DB; border-radius:8px; font-size:12px; font-weight:600; background:#fff; color:#374151; font-family:inherit; cursor:pointer;">
+      <option value="a5">A5</option>
+      <option value="a4">A4</option>
+    </select>
     <button class="tb-btn tb-print" id="pdf-btn" onclick="savePdf()">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Save as PDF
@@ -252,9 +262,13 @@
         <span>Subtotal</span>
         <span>Rs {{ bill.subtotal }}</span>
       </div>
-      {% if bill.discount_percent %}
+      {% if bill.discount_amount or bill.discount_percent %}
       <div class="total-row" style="color:#059669;">
+        {% if bill.discount_amount %}
+        <span>Discount</span>
+        {% else %}
         <span>Discount ({{ bill.discount_percent }}%)</span>
+        {% endif %}
         <span>− Rs {{ discount_amount }}</span>
       </div>
       {% endif %}
@@ -290,6 +304,22 @@
 
 {% block extra_js %}
 <script>
+// ── Paper size picker ──────────────────────────────────────
+const BILL_PAGE_RULES = {
+  a5: '@media print { @page { size: A5 portrait; margin: 8mm 10mm; } }',
+  a4: '@media print { @page { size: A4 portrait; margin: 10mm 12mm; } }',
+};
+function setBillSize(val) {
+  document.getElementById('page-size-style').textContent = BILL_PAGE_RULES[val] || BILL_PAGE_RULES.a5;
+  localStorage.setItem('bill_size', val);
+}
+(function() {
+  const saved = localStorage.getItem('bill_size') || 'a5';
+  const sel = document.getElementById('bill-size-select');
+  if (sel) sel.value = saved;
+  setBillSize(saved);
+})();
+
 async function savePdf() {
   const btn = document.getElementById('pdf-btn');
   const orig = btn.innerHTML;

@@ -372,7 +372,6 @@
             <input type="radio" name="payment_mode" id="mode-cash" value="cash" class="fee-mode-option"
               {% if not visit.payment_mode or visit.payment_mode == 'cash' %}checked{% endif %}>
             <label for="mode-cash" class="fee-mode-label">
-              <span class="fee-mode-icon">💵</span>
               <span class="fee-mode-text">Cash</span>
             </label>
           </div>
@@ -381,7 +380,6 @@
             <input type="radio" name="payment_mode" id="mode-upi" value="upi" class="fee-mode-option"
               {% if visit.payment_mode == 'upi' %}checked{% endif %}>
             <label for="mode-upi" class="fee-mode-label">
-              <span class="fee-mode-icon">📱</span>
               <span class="fee-mode-text">UPI</span>
             </label>
           </div>
@@ -390,7 +388,6 @@
             <input type="radio" name="payment_mode" id="mode-card" value="card" class="fee-mode-option"
               {% if visit.payment_mode == 'card' %}checked{% endif %}>
             <label for="mode-card" class="fee-mode-label">
-              <span class="fee-mode-icon">💳</span>
               <span class="fee-mode-text">Card</span>
             </label>
           </div>
@@ -399,7 +396,6 @@
             <input type="radio" name="payment_mode" id="mode-insurance" value="insurance" class="fee-mode-option"
               {% if visit.payment_mode == 'insurance' %}checked{% endif %}>
             <label for="mode-insurance" class="fee-mode-label">
-              <span class="fee-mode-icon">🛡️</span>
               <span class="fee-mode-text">Insurance</span>
             </label>
           </div>
@@ -408,7 +404,6 @@
             <input type="radio" name="payment_mode" id="mode-waived" value="waived" class="fee-mode-option"
               {% if visit.payment_mode == 'waived' %}checked{% endif %}>
             <label for="mode-waived" class="fee-mode-label">
-              <span class="fee-mode-icon">🤝</span>
               <span class="fee-mode-text">Waive fee (charity / staff / family)</span>
             </label>
           </div>

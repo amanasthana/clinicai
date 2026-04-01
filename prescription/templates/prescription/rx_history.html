@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Prescription History — {{ clinic.name }}{% endblock %}
+{% block nav_rx_history %}active{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:760px;">
+
+  <!-- Header -->
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+    <div>
+      <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Prescription History</h1>
+      <p style="font-size:13px; color:#6B7280; margin:4px 0 0 0;">{{ clinic.name }}</p>
+    </div>
+    <a href="/rx/doctor/" style="font-size:13px; color:#6B7280; text-decoration:none; border:1px solid #E5E7EB; padding:7px 14px; border-radius:8px;">
+      ← Doctor's Queue
+    </a>
+  </div>
+
+  <!-- Date filter -->
+  <form method="get" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:20px;">
+    <input type="date" name="date"
+           value="{{ filter_date|date:'Y-m-d' }}"
+           max="{{ today|date:'Y-m-d' }}"
+           style="padding:8px 12px; border:1px solid #D1D5DB; border-radius:8px; font-size:14px; font-family:inherit; color:#111827;"
+           onchange="this.form.submit()">
+    {% if filter_date %}
+    <a href="/rx/history/" style="font-size:13px; color:#6B7280; text-decoration:none; border:1px solid #E5E7EB; padding:7px 12px; border-radius:8px;">
+      Clear filter
+    </a>
+    {% else %}
+    <span style="font-size:13px; color:#9CA3AF;">Showing latest 200</span>
+    {% endif %}
+  </form>
+
+  {% if prescriptions %}
+  <div style="display:flex; flex-direction:column; gap:2px;">
+
+    {% regroup prescriptions by visit.visit_date as dated_groups %}
+    {% for group in dated_groups %}
+
+    <!-- Date header -->
+    <div style="font-size:11px; font-weight:700; color:#9CA3AF; text-transform:uppercase; letter-spacing:.6px; padding:12px 4px 6px 4px; margin-top:{% if not forloop.first %}8px{% else %}0{% endif %};">
+      {{ group.grouper|date:"l, j F Y" }}{% if group.grouper == today %} — Today{% endif %}
+    </div>
+
+    {% for rx in group.list %}
+    <div style="background:#fff; border:1px solid #F3F4F6; border-radius:12px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; transition:border-color .1s;"
+         onmouseenter="this.style.borderColor='#E5E7EB'" onmouseleave="this.style.borderColor='#F3F4F6'">
+
+      <!-- Patient info -->
+      <div style="flex:1; min-width:180px;">
+        <div style="font-size:15px; font-weight:600; color:#111827;">
+          {{ rx.visit.patient.full_name }}
+        </div>
+        <div style="font-size:12px; color:#6B7280; margin-top:3px;">
+          {% if rx.visit.patient.age %}{{ rx.visit.patient.age }}y{% endif %}
+          {% if rx.visit.patient.gender %} · {{ rx.visit.patient.gender_display }}{% endif %}
+          {% if rx.visit.patient.phone %} · {{ rx.visit.patient.phone }}{% endif %}
+        </div>
+        {% if rx.diagnosis %}
+        <div style="font-size:12px; color:#374151; margin-top:4px; font-style:italic;">
+          {{ rx.diagnosis|truncatechars:80 }}
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Doctor + time -->
+      <div style="text-align:right; flex-shrink:0;">
+        {% if rx.doctor %}
+        <div style="font-size:12px; color:#6B7280;">{{ rx.doctor.display_name }}</div>
+        {% endif %}
+        <div style="font-size:11px; color:#9CA3AF; margin-top:2px;">
+          {{ rx.created_at|date:"g:i A" }}
+        </div>
+        <div style="margin-top:8px;">
+          <a href="/rx/print/{{ rx.id }}/"
+             style="font-size:12px; font-weight:600; color:#2563EB; text-decoration:none; border:1px solid #BFDBFE; background:#EFF6FF; border-radius:6px; padding:5px 12px; white-space:nowrap;">
+            View Rx →
+          </a>
+        </div>
+      </div>
+
+    </div>
+    {% endfor %}
+
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="card" style="text-align:center; padding:48px 20px;">
+    <div style="font-size:16px; font-weight:600; color:#374151; margin-bottom:6px;">
+      {% if filter_date %}No prescriptions on {{ filter_date|date:"j F Y" }}{% else %}No prescriptions saved yet{% endif %}
+    </div>
+    <div style="font-size:13px; color:#9CA3AF;">
+      Prescriptions appear here after saving from the consultation screen.
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
