@@ -455,7 +455,7 @@ def _calc_qty(dosage, duration, drug_name='', frequency=''):
     parts = [p.strip() for p in dosage.split('-')]
     per_dose = sum(int(p) for p in parts if p.isdigit())
     days = 0
-    dur_lower = (duration or '').lower()
+    dur_lower = (duration or '').lower().strip()
     m = re.search(r'(\d+)\s*(?:day|din)', dur_lower)
     if m:
         days = int(m.group(1))
@@ -467,6 +467,11 @@ def _calc_qty(dosage, duration, drug_name='', frequency=''):
             m = re.search(r'(\d+)\s*month', dur_lower)
             if m:
                 days = int(m.group(1)) * 30
+            else:
+                # Bare number with no unit — treat as days (e.g. doctor typed "15")
+                m = re.fullmatch(r'\d+', dur_lower)
+                if m:
+                    days = int(dur_lower)
 
     if days == 0:
         return 1

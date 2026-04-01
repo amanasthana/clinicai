@@ -33,6 +33,28 @@ def login_view(request):
         return redirect('accounts:clinic_setup')
 
     form = StyledAuthForm(request, data=request.POST or None)
+
+    # ── Step 2: user picked their clinic from the conflict selector ──
+    chosen_namespaced = request.POST.get('chosen_namespaced_username', '').strip()
+    if request.method == 'POST' and chosen_namespaced:
+        password = request.POST.get('password', '')
+        from django.contrib.auth import authenticate as _auth
+        user = _auth(request, username=chosen_namespaced, password=password)
+        if user:
+            if not user.is_superuser and not StaffMember.objects.filter(user=user).exists():
+                messages.error(request, 'Account not linked to any clinic.')
+                return render(request, 'accounts/login.html', {'form': form})
+            login(request, user)
+            if StaffMember.objects.filter(user=user, must_change_password=True).exists():
+                return redirect('accounts:change_password')
+            return redirect(request.GET.get('next', '/'))
+        else:
+            return render(request, 'accounts/login.html', {
+                'form': form,
+                'login_hint': 'Incorrect password. Please try again.',
+            })
+
+    # ── Step 1: normal login attempt ────────────────────────────────
     if request.method == 'POST':
         if form.is_valid():
             user = form.get_user()
@@ -41,22 +63,58 @@ def login_view(request):
                 messages.error(request, 'Your account is not linked to any clinic. Contact your admin.')
                 return render(request, 'accounts/login.html', {'form': form})
             login(request, user)
-            # Check if admin has flagged a forced password change
             if StaffMember.objects.filter(user=user, must_change_password=True).exists():
                 return redirect('accounts:change_password')
-            next_url = request.GET.get('next', '/')
-            return redirect(next_url)
+            return redirect(request.GET.get('next', '/'))
         else:
             typed_username = request.POST.get('username', '').strip()
+            typed_password = request.POST.get('password', '')
+
+            # Check if same username exists at multiple clinics
+            if typed_username and '__' not in typed_username:
+                candidates = list(
+                    User.objects.filter(username__endswith=f'__{typed_username}')
+                    .select_related()
+                )
+                if len(candidates) > 1:
+                    # Build clinic options — only show clinics where password matches
+                    # (don't expose clinic names to someone who doesn't know the password)
+                    from django.contrib.auth import authenticate as _auth
+                    valid_candidates = []
+                    for c in candidates:
+                        if c.check_password(typed_password):
+                            sm = StaffMember.objects.filter(user=c).select_related('clinic').first()
+                            if sm:
+                                valid_candidates.append({
+                                    'namespaced': c.username,
+                                    'clinic_name': sm.clinic.name,
+                                    'city': sm.clinic.city or '',
+                                })
+                    if len(valid_candidates) > 1:
+                        # Show clinic picker
+                        return render(request, 'accounts/login.html', {
+                            'form': form,
+                            'clinic_picker': valid_candidates,
+                            'picker_username': typed_username,
+                            'picker_password': typed_password,
+                        })
+                    elif len(valid_candidates) == 1:
+                        # Only one clinic has matching password — log in directly
+                        user = User.objects.get(username=valid_candidates[0]['namespaced'])
+                        login(request, user)
+                        return redirect(request.GET.get('next', '/'))
+
             user_exists = (
                 User.objects.filter(username=typed_username).exists() or
-                User.objects.filter(email__iexact=typed_username).exists()
+                User.objects.filter(email__iexact=typed_username).exists() or
+                User.objects.filter(username__endswith=f'__{typed_username}').exists()
             ) if typed_username else False
-            if typed_username and not user_exists:
-                login_hint = f'No account found for "{typed_username}". Check if the clinic was approved by the admin.'
-            else:
-                login_hint = 'Incorrect password. Please try again.'
-            logger.warning('LOGIN_FAILED username=%s user_exists=%s', typed_username, user_exists)
+            login_hint = (
+                f'No account found for "{typed_username}". Check username or contact your admin.'
+                if typed_username and not user_exists
+                else 'Incorrect password. Please try again.'
+            )
+            logger.warning('LOGIN_FAILED username=%s', typed_username)
             return render(request, 'accounts/login.html', {'form': form, 'login_hint': login_hint})
 
     return render(request, 'accounts/login.html', {'form': form})
@@ -172,24 +230,40 @@ def add_staff_view(request):
 
     if request.method == 'POST' and form.is_valid():
         cd = form.cleaned_data
+        # Username is globally unique (phone_name format), validated by the form.
+        new_username = cd['username']
+
         user = User.objects.create_user(
-            username=cd['username'],
+            username=new_username,
             password=cd['password'],
             first_name=cd['first_name'],
             last_name=cd['last_name'],
             email=cd.get('email', '') or '',
         )
+        # Convert date → aware datetime (end of that day) if supplied
+        expires_date = cd.get('access_expires_at')
+        expires_dt = None
+        if expires_date:
+            from datetime import datetime, time
+            from django.utils import timezone as tz
+            expires_dt = tz.make_aware(datetime.combine(expires_date, time(23, 59, 59)))
+
         sm = StaffMember.objects.create(
             user=user,
             clinic=clinic,
             role=cd['role'],
             display_name=cd['display_name'],
+            phone=cd['phone'],
             qualification=cd.get('qualification', ''),
             registration_number=cd.get('registration_number', ''),
+            access_expires_at=expires_dt,
         )
         set_permissions_from_role(sm)
         sm.save()
-        messages.success(request, f"{cd['display_name']} added successfully.")
+        messages.success(
+            request,
+            f"{cd['display_name']} added. Their User ID is: {new_username}"
+        )
         return redirect('accounts:staff_list')
 
     import json as _json
@@ -231,6 +305,19 @@ def edit_staff_view(request, pk):
                 messages.error(request, 'You cannot remove staff management access from yourself — you are the only admin.')
                 return redirect('accounts:edit_staff', pk=pk)
 
+        # Access expiry date
+        expires_str = request.POST.get('access_expires_at', '').strip()
+        if expires_str:
+            from datetime import datetime, time, date as date_type
+            from django.utils import timezone as tz
+            try:
+                expires_date = date_type.fromisoformat(expires_str)
+                sm.access_expires_at = tz.make_aware(datetime.combine(expires_date, time(23, 59, 59)))
+            except ValueError:
+                pass
+        else:
+            sm.access_expires_at = None  # Clear expiry → permanent access
+
         sm.save()
         messages.success(request, f'{sm.display_name} updated.')
         return redirect('accounts:staff_list')
@@ -248,7 +335,7 @@ def edit_staff_view(request, pk):
 @require_permission('can_manage_staff')
 @require_POST
 def delete_staff_view(request, pk):
-    """Remove a staff member from this clinic. Does not delete the Django User."""
+    """Remove a staff member from this clinic and delete their User account completely."""
     my_clinic = request.user.staff_profile.clinic
     sm = get_object_or_404(StaffMember, pk=pk, clinic=my_clinic)
 
@@ -257,9 +344,20 @@ def delete_staff_view(request, pk):
         messages.error(request, 'You cannot remove yourself from the clinic.')
         return redirect('accounts:staff_list')
 
+    # Clinic admin accounts can only be deleted by a Django superuser
+    if sm.role == 'admin':
+        messages.error(request, 'Clinic admin accounts cannot be deleted by staff. Contact ClinicAI support.')
+        return redirect('accounts:staff_list')
+
     name = sm.display_name
+    login_id = sm.login_username
+    user = sm.user
     sm.delete()
-    messages.success(request, f'{name} has been removed from the clinic.')
+    # Always delete the underlying Django User so the User ID is freed for future re-registration.
+    # Superuser accounts are never touched.
+    if not user.is_superuser:
+        user.delete()
+    messages.success(request, f'{name} ({login_id}) has been removed and their account deleted.')
     return redirect('accounts:staff_list')
 
 

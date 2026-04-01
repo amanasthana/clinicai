@@ -2072,7 +2072,12 @@ document.addEventListener('input', function(e) {
   const group = input.closest('.pill-group');
   const row = input.closest('.med-row');
   if (!group || !row) return;
-  row.dataset[group.dataset.field] = input.value;
+  let val = input.value;
+  // Normalize bare numbers for duration field → append " days" so quantity calculation works
+  if (group.dataset.field === 'duration' && /^\s*\d+\s*$/.test(val)) {
+    val = val.trim() + ' days';
+  }
+  row.dataset[group.dataset.field] = val;
 });
 
 // ── Read prescription from form ────────────────────────────────

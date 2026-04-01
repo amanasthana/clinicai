@@ -34,6 +34,16 @@
     <div class="card" style="margin-bottom: 16px;">
       <h2 style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 16px 0;">Basic Information</h2>
 
+      <!-- User ID — read-only, shown prominently -->
+      <div class="form-group" style="margin-bottom:18px;">
+        <label class="form-label" style="font-size:12px; text-transform:uppercase; letter-spacing:.4px; color:#6B7280; font-weight:700;">Login User ID</label>
+        <div style="display:flex; align-items:center; gap:10px; background:#F3F4F6; border:1px solid #E5E7EB; border-radius:8px; padding:10px 14px;">
+          <span style="font-family:monospace; font-size:15px; font-weight:700; color:#111827; flex:1;">{{ sm.login_username }}</span>
+          <span style="font-size:11px; color:#6B7280; white-space:nowrap;">staff logs in with this ID</span>
+        </div>
+        {% if sm.phone %}<div style="font-size:11px; color:#9CA3AF; margin-top:4px;">Mobile: {{ sm.phone }}</div>{% endif %}
+      </div>
+
       <div class="form-group">
         <label class="form-label">Display Name *</label>
         <input type="text" name="display_name" value="{{ sm.display_name }}" class="form-control" required>
@@ -158,6 +168,21 @@
           </div>
         </label>
 
+      </div>
+    </div>
+
+    <!-- Access Expiry -->
+    <div class="card" style="margin-bottom: 16px;">
+      <div style="font-size:14px; font-weight:700; color:#111827; margin-bottom:12px;">Access Expiry (optional)</div>
+      <div class="form-group">
+        <label class="form-label">Access expires on</label>
+        <input type="date" name="access_expires_at"
+          value="{% if sm.access_expires_at %}{{ sm.access_expires_at|date:'Y-m-d' }}{% endif %}"
+          class="form-control" style="max-width:240px;">
+        <div style="font-size:12px; color:#6B7280; margin-top:4px;">
+          Leave blank for permanent access. Set a date to automatically block this login after that day.
+          {% if sm.access_expired %}<span style="color:#DC2626; font-weight:600;"> ⚠ Access has already expired.</span>{% endif %}
+        </div>
       </div>
     </div>
 

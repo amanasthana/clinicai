@@ -71,8 +71,21 @@ class StaffMember(models.Model):
     can_dispense_bill     = models.BooleanField(default=False)
     can_view_analytics    = models.BooleanField(default=False)
     can_manage_staff      = models.BooleanField(default=False)
+    phone                 = models.CharField(max_length=10, blank=True,
+        help_text='Staff mobile number — used to build their login User ID.')
     must_change_password  = models.BooleanField(default=False)
+    access_expires_at     = models.DateTimeField(
+        null=True, blank=True,
+        help_text='If set, staff cannot log in after this date/time.'
+    )
     updated_at            = models.DateTimeField(auto_now=True)
+
+    @property
+    def access_expired(self):
+        if self.access_expires_at is None:
+            return False
+        from django.utils import timezone
+        return timezone.now() > self.access_expires_at
 
     def __str__(self):
         return f"{self.display_name} ({self.get_role_display()}) — {self.clinic.name}"
@@ -80,6 +93,17 @@ class StaffMember(models.Model):
     @property
     def is_doctor(self):
         return self.role == 'doctor'
+
+    @property
+    def login_username(self):
+        """Returns the username staff use to log in.
+        New-format accounts: username is the full ID (e.g. 9876543210_prakash).
+        Legacy accounts: username is clinicphone__staffname — return the staff part only.
+        """
+        u = self.user.username
+        if '__' in u:
+            return u.split('__', 1)[1]
+        return u
 
 
 class ClinicRegistrationRequest(models.Model):

@@ -489,7 +489,7 @@ class StaffManagementViewTest(TestCase):
         self.assertFalse(sm.can_prescribe)
         self.assertFalse(sm.can_register_patients)
 
-    def test_delete_staff_removes_membership_not_user(self):
+    def test_delete_staff_also_deletes_user_when_no_other_memberships(self):
         target_user = make_user('mgmt_delete_target')
         sm = make_membership(target_user, self.clinic, role='receptionist', display_name='Delete Target')
         pk = sm.pk
@@ -497,8 +497,25 @@ class StaffManagementViewTest(TestCase):
         resp = self.client.post(f'/accounts/staff/{pk}/delete/')
         self.assertEqual(resp.status_code, 302)
         self.assertFalse(StaffMember.objects.filter(pk=pk).exists())
+        # User should also be deleted so the username is freed for reuse
         from django.contrib.auth.models import User as _User
-        self.assertTrue(_User.objects.filter(pk=user_pk).exists())
+        self.assertFalse(_User.objects.filter(pk=user_pk).exists())
+
+    def test_delete_staff_always_deletes_user(self):
+        """Deleting a non-admin staff member always deletes the underlying User account completely,
+        even if they had memberships at other clinics (new design: one User = one login identity)."""
+        target_user = make_user('mgmt_delete_shared')
+        other_clinic = make_clinic('Second Clinic Delete Test')
+        make_membership(target_user, other_clinic, role='doctor', display_name='Doc Other')
+        sm = make_membership(target_user, self.clinic, role='receptionist', display_name='Delete Shared')
+        pk = sm.pk
+        user_pk = target_user.pk
+        resp = self.client.post(f'/accounts/staff/{pk}/delete/')
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(StaffMember.objects.filter(pk=pk).exists())
+        from django.contrib.auth.models import User as _User
+        # User is fully deleted so the User ID is freed for re-registration
+        self.assertFalse(_User.objects.filter(pk=user_pk).exists())
 
     def test_cannot_edit_staff_from_another_clinic(self):
         other_clinic = make_clinic('Other Clinic Edit Test')
@@ -804,20 +821,23 @@ class AddStaffEmailTest(TestCase):
         self.client.login(username='9444000001', password='testpass123')
         resp = self.client.post('/accounts/staff/add/', {
             'first_name': 'Jane', 'last_name': 'Doe',
-            'username': '9555000001', 'password': 'staffpass123',
+            'phone': '9776543210',
+            'username': '9776543210_jane', 'password': 'staffpass123',
             'display_name': 'Jane Doe', 'role': 'receptionist',
             'email': 'jane@clinic.com',
         })
         self.assertRedirects(resp, '/accounts/staff/')
         from django.contrib.auth.models import User
-        u = User.objects.get(username='9555000001')
+        # Username is the globally-unique ID chosen at creation
+        u = User.objects.get(username='9776543210_jane')
         self.assertEqual(u.email, 'jane@clinic.com')
 
     def test_add_staff_without_email_works(self):
         self.client.login(username='9444000001', password='testpass123')
         resp = self.client.post('/accounts/staff/add/', {
             'first_name': 'John', 'last_name': 'Doe',
-            'username': '9555000002', 'password': 'staffpass123',
+            'phone': '9776543211',
+            'username': '9776543211_john', 'password': 'staffpass123',
             'display_name': 'John Doe', 'role': 'receptionist',
             'email': '',
         })
@@ -890,3 +910,205 @@ class ClinicDeleteTest(TestCase):
         resp = c.post(f'/accounts/clinic/{self.clinic.pk}/delete/')
         self.assertNotEqual(resp.status_code, 200)
         self.assertTrue(Clinic.objects.filter(pk=self.clinic.pk).exists())
+
+
+# ---------------------------------------------------------------------------
+# New staff identity scheme — phone-based globally-unique User ID
+# ---------------------------------------------------------------------------
+
+class StaffPhoneUsernameTest(TestCase):
+    """
+    Tests for the new staff identity model:
+    - phone is required and must be 10 digits
+    - default username = phone_firstname
+    - username is globally unique (not clinic-scoped)
+    - min 6 chars on username
+    - min 8 chars on password
+    - admin role cannot be deleted by staff
+    - deletion always removes the User object completely
+    """
+
+    def setUp(self):
+        self.clinic = make_clinic('Phone Username Clinic')
+        self.admin_user = make_user('9100000001', password='adminpass1')
+        self.admin_sm = make_membership(self.admin_user, self.clinic, role='admin', display_name='Admin')
+        self.client = Client()
+        self.client.login(username='9100000001', password='adminpass1')
+
+    # ── Form validation ──────────────────────────────────────────────────────
+
+    def _post_add(self, **overrides):
+        data = {
+            'first_name': 'Ravi', 'last_name': 'Kumar',
+            'phone': '9200000001',
+            'username': '9200000001_ravi',
+            'password': 'ravi1234!',
+            'display_name': 'Ravi Kumar',
+            'role': 'receptionist',
+            'email': '',
+        }
+        data.update(overrides)
+        return self.client.post('/accounts/staff/add/', data)
+
+    def test_add_staff_success_creates_user_with_phone_username(self):
+        resp = self._post_add()
+        self.assertRedirects(resp, '/accounts/staff/')
+        u = User.objects.get(username='9200000001_ravi')
+        sm = StaffMember.objects.get(user=u)
+        self.assertEqual(sm.phone, '9200000001')
+        self.assertEqual(sm.clinic, self.clinic)
+
+    def test_phone_required(self):
+        resp = self._post_add(phone='')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'required')
+
+    def test_phone_must_be_10_digits(self):
+        resp = self._post_add(phone='12345')
+        self.assertEqual(resp.status_code, 200)
+        # form redisplayed with error
+        self.assertFalse(User.objects.filter(username='12345_ravi').exists())
+
+    def test_phone_must_be_numeric(self):
+        resp = self._post_add(phone='98765abcde')
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(User.objects.filter(username='98765abcde_ravi').exists())
+
+    def test_username_min_length_6(self):
+        # 'ravi' is only 4 chars — should fail
+        resp = self._post_add(username='ravi1')
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(User.objects.filter(username='ravi1').exists())
+
+    def test_username_exactly_6_chars_accepted(self):
+        resp = self._post_add(username='ravi12')
+        self.assertRedirects(resp, '/accounts/staff/')
+        self.assertTrue(User.objects.filter(username='ravi12').exists())
+
+    def test_password_min_length_8(self):
+        resp = self._post_add(password='short7!')
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(User.objects.filter(username='9200000001_ravi').exists())
+
+    def test_username_global_uniqueness_enforced(self):
+        """Same User ID cannot be used at two different clinics."""
+        # Create user at another clinic with the same username
+        other_clinic = make_clinic('Other Clinic Global Unique')
+        existing_user = make_user('9200000001_ravi', password='pass1234!')
+        make_membership(existing_user, other_clinic, role='doctor', display_name='Ravi')
+
+        resp = self._post_add()  # tries to create same username at this clinic
+        self.assertEqual(resp.status_code, 200)  # form error, not redirect
+        self.assertContains(resp, 'already taken')
+        # Only one User with that name should exist
+        self.assertEqual(User.objects.filter(username='9200000001_ravi').count(), 1)
+
+    def test_username_no_double_underscore(self):
+        resp = self._post_add(username='9200000001__ravi')
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(User.objects.filter(username='9200000001__ravi').exists())
+
+    def test_staff_member_phone_stored_on_model(self):
+        self._post_add()
+        sm = StaffMember.objects.get(user__username='9200000001_ravi')
+        self.assertEqual(sm.phone, '9200000001')
+
+    # ── Deletion: admin protection ───────────────────────────────────────────
+
+    def test_cannot_delete_admin_staff(self):
+        """Staff with role=admin cannot be deleted via the staff delete view."""
+        other_admin_user = make_user('9300000002', password='adminpass2')
+        other_admin_sm = make_membership(other_admin_user, self.clinic, role='admin', display_name='Other Admin')
+        pk = other_admin_sm.pk
+        resp = self.client.post(f'/accounts/staff/{pk}/delete/')
+        self.assertEqual(resp.status_code, 302)
+        # Must still exist
+        self.assertTrue(StaffMember.objects.filter(pk=pk).exists())
+        self.assertTrue(User.objects.filter(pk=other_admin_user.pk).exists())
+
+    def test_can_delete_non_admin_staff(self):
+        """Receptionist/doctor/pharmacist staff can be deleted by admin."""
+        target = make_user('9400000003', password='staffpass3')
+        sm = make_membership(target, self.clinic, role='receptionist', display_name='Receptionist')
+        pk = sm.pk
+        user_pk = target.pk
+        resp = self.client.post(f'/accounts/staff/{pk}/delete/')
+        self.assertRedirects(resp, '/accounts/staff/')
+        self.assertFalse(StaffMember.objects.filter(pk=pk).exists())
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
+
+    def test_delete_doctor_also_deletes_user(self):
+        target = make_user('9400000004', password='docpass4')
+        sm = make_membership(target, self.clinic, role='doctor', display_name='Dr Test')
+        pk = sm.pk
+        user_pk = target.pk
+        self.client.post(f'/accounts/staff/{pk}/delete/')
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
+
+    def test_delete_pharmacist_also_deletes_user(self):
+        target = make_user('9400000005', password='pharmapass5')
+        sm = make_membership(target, self.clinic, role='pharmacist', display_name='Pharmacist Test')
+        pk = sm.pk
+        user_pk = target.pk
+        self.client.post(f'/accounts/staff/{pk}/delete/')
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
+
+    # ── login_username property ──────────────────────────────────────────────
+
+    def test_login_username_returns_full_id_for_new_format(self):
+        """New-format accounts (phone_name) — login_username returns the full username."""
+        user = make_user('9500000001_test', password='pass12345')
+        sm = make_membership(user, self.clinic, role='receptionist', display_name='Test')
+        self.assertEqual(sm.login_username, '9500000001_test')
+
+    def test_login_username_strips_prefix_for_legacy_format(self):
+        """Legacy accounts (clinicphone__staffname) — login_username returns just the staff part."""
+        user = make_user('9000000099__legacydoc', password='pass12345')
+        sm = make_membership(user, self.clinic, role='doctor', display_name='Legacy Doc')
+        self.assertEqual(sm.login_username, 'legacydoc')
+
+    # ── Add staff form — username re-use after deletion ──────────────────────
+
+    def test_deleted_staff_username_can_be_reused(self):
+        """After deleting a staff member (User deleted), the same User ID can be registered again."""
+        # Create and then delete
+        resp1 = self._post_add(phone='9600000006', username='9600000006_reuse')
+        self.assertRedirects(resp1, '/accounts/staff/')
+        user = User.objects.get(username='9600000006_reuse')
+        sm = StaffMember.objects.get(user=user)
+        self.client.post(f'/accounts/staff/{sm.pk}/delete/')
+        self.assertFalse(User.objects.filter(username='9600000006_reuse').exists())
+
+        # Now re-register with the same User ID — must succeed
+        resp2 = self._post_add(phone='9600000006', username='9600000006_reuse',
+                               first_name='Reuse', last_name='Test',
+                               display_name='Reuse Test')
+        self.assertRedirects(resp2, '/accounts/staff/')
+        self.assertTrue(User.objects.filter(username='9600000006_reuse').exists())
+
+    # ── Staff list template — admin label shown instead of Remove button ─────
+
+    def test_staff_list_shows_protected_label_for_admin(self):
+        # "Admin — protected" only shows for OTHER admins (not the logged-in user's own row)
+        second_admin = make_user('9800000099', password='admin2pass')
+        make_membership(second_admin, self.clinic, role='admin', display_name='Second Admin')
+        resp = self.client.get('/accounts/staff/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Admin \u2014 protected')
+
+    # ── Edit staff page shows User ID ────────────────────────────────────────
+
+    def test_edit_staff_page_shows_login_user_id(self):
+        target = make_user('9700000007', password='editpass7')
+        sm = make_membership(target, self.clinic, role='receptionist', display_name='Edit Test')
+        resp = self.client.get(f'/accounts/staff/{sm.pk}/edit/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, '9700000007')  # username shown on page
+
+    # ── Add staff page loads cleanly ─────────────────────────────────────────
+
+    def test_add_staff_page_loads(self):
+        resp = self.client.get('/accounts/staff/add/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Mobile Number')
+        self.assertContains(resp, 'User ID')

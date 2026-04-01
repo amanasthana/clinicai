@@ -4,18 +4,82 @@
 
 {% block extra_head %}
 <style>
-  .role-badge {
-    display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px;
-    border-radius: 20px; text-transform: uppercase; letter-spacing: .4px;
-  }
-  .role-doctor    { background: #DBEAFE; color: #1D4ED8; }
-  .role-admin     { background: #F3E8FF; color: #7C3AED; }
-  .role-receptionist { background: #D1FAE5; color: #065F46; }
-  .role-pharmacist   { background: #FEF3C7; color: #92400E; }
-  .perm-tag {
-    display: inline-block; font-size: 11px; color: #4B5563; background: #F3F4F6;
-    border-radius: 4px; padding: 1px 7px; margin: 2px 2px 0 0;
-  }
+/* ── Role badges ─────────────────────────────────────────── */
+.role-badge {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 2px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap;
+}
+.role-doctor       { background:#DBEAFE; color:#1D4ED8; }
+.role-admin        { background:#F3E8FF; color:#7C3AED; }
+.role-receptionist { background:#D1FAE5; color:#065F46; }
+.role-pharmacist   { background:#FEF3C7; color:#92400E; }
+
+/* ── Permission tags ────────────────────────────────────── */
+.perm-tag {
+  display: inline-block; font-size: 10px; color: #4B5563;
+  background: #F3F4F6; border-radius: 4px;
+  padding: 1px 6px; margin: 2px 2px 0 0; white-space: nowrap;
+}
+
+/* ── Desktop table ──────────────────────────────────────── */
+.staff-table { width:100%; border-collapse:collapse; }
+.staff-table th {
+  text-align:left; font-size:11px; font-weight:700; color:#6B7280;
+  text-transform:uppercase; letter-spacing:.5px;
+  padding:10px 14px; border-bottom:2px solid #E5E7EB; white-space:nowrap;
+}
+.staff-table td {
+  padding:14px 14px; border-bottom:1px solid #F3F4F6;
+  font-size:13px; color:#374151; vertical-align:top;
+}
+.staff-table tr:last-child td { border-bottom:none; }
+.staff-table tr:hover td { background:#FAFAFA; }
+
+/* ── Avatar ─────────────────────────────────────────────── */
+.staff-avatar {
+  width:40px; height:40px; border-radius:50%; background:#EFF6FF;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:15px; color:#2563EB; flex-shrink:0;
+}
+
+/* ── Action buttons ─────────────────────────────────────── */
+.act-btn {
+  display:inline-flex; align-items:center; padding:5px 11px;
+  border-radius:7px; font-size:12px; font-weight:600;
+  cursor:pointer; text-decoration:none; border:none; font-family:inherit;
+  white-space:nowrap; transition:opacity .15s;
+}
+.act-btn:hover { opacity:.82; }
+.act-edit   { background:#EFF6FF; color:#1D4ED8; }
+.act-reset  { background:#FEF3C7; color:#92400E; }
+.act-remove { background:#FEF2F2; color:#DC2626; }
+
+/* ── Mobile cards (hidden on desktop) ───────────────────── */
+.staff-mobile-list { display:none; flex-direction:column; gap:12px; }
+
+/* ── Responsive breakpoint ──────────────────────────────── */
+@media (max-width: 700px) {
+  .staff-table-wrap { display:none; }
+  .staff-mobile-list { display:flex; }
+}
+
+/* ── Mobile card ────────────────────────────────────────── */
+.staff-card {
+  background:#fff; border:1px solid #E5E7EB; border-radius:14px;
+  padding:16px; display:flex; flex-direction:column; gap:12px;
+}
+.staff-card-top { display:flex; align-items:flex-start; gap:12px; }
+.staff-card-info { flex:1; min-width:0; }
+.staff-card-name { font-size:15px; font-weight:700; color:#111827; margin-bottom:3px; }
+.staff-card-sub  { font-size:12px; color:#6B7280; margin-bottom:6px; line-height:1.5; }
+.staff-card-login {
+  font-size:11px; color:#6B7280; background:#F3F4F6;
+  border-radius:6px; padding:5px 8px; font-family:monospace;
+  word-break:break-all; margin-bottom:6px;
+}
+.staff-card-perms { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:2px; }
+.staff-card-actions { display:flex; gap:8px; flex-wrap:wrap; padding-top:10px; border-top:1px solid #F3F4F6; }
+.staff-card-actions .act-btn { flex:1; justify-content:center; min-width:70px; }
 </style>
 {% endblock %}
 
@@ -23,36 +87,14 @@
 <div class="page-container">
 
   <!-- Page header -->
-  <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 24px;">
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:24px;">
     <div>
       <h1 class="page-title">Staff Members</h1>
       <p class="page-subtitle">{{ clinic.name }}</p>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <a href="/accounts/staff/add/" class="btn btn-primary">Add Staff</a>
+      <a href="/accounts/staff/add/" class="btn btn-primary">+ Add Staff</a>
       <a href="/accounts/clinic/edit/" class="btn btn-secondary">Edit Clinic</a>
-    </div>
-  </div>
-
-  <!-- Understanding roles info box -->
-  <div class="card" style="margin-bottom: 24px; background: #F8FAFC; border: 1px solid #E2E8F0;">
-    <h2 style="font-size: 14px; font-weight: 700; color: #374151; margin: 0 0 12px 0;">Understanding roles</h2>
-    <p style="font-size: 13px; color: #6B7280; margin: 0 0 12px 0;">
-      Each role comes with a default set of permissions. You can adjust individual permissions by clicking Edit on any staff member.
-    </p>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
-      <div style="padding: 10px 12px; background: #fff; border-radius: 8px; border: 1px solid #E5E7EB;">
-        <div style="font-weight: 600; font-size: 13px; color: #111827; margin-bottom: 4px;">Doctor / Admin</div>
-        <div style="font-size: 12px; color: #6B7280;">Full access to all features — reception, prescriptions, pharmacy, analytics, and staff management.</div>
-      </div>
-      <div style="padding: 10px 12px; background: #fff; border-radius: 8px; border: 1px solid #E5E7EB;">
-        <div style="font-weight: 600; font-size: 13px; color: #111827; margin-bottom: 4px;">Receptionist</div>
-        <div style="font-size: 12px; color: #6B7280;">Patient registration and queue management only. No access to prescriptions, pharmacy, or reports.</div>
-      </div>
-      <div style="padding: 10px 12px; background: #fff; border-radius: 8px; border: 1px solid #E5E7EB;">
-        <div style="font-weight: 600; font-size: 13px; color: #111827; margin-bottom: 4px;">Pharmacist</div>
-        <div style="font-size: 12px; color: #6B7280;">Pharmacy, stock management, and patient billing only. No access to prescriptions or clinical reports.</div>
-      </div>
     </div>
   </div>
 
@@ -60,7 +102,7 @@
   {% if wa_reset_url %}
   <div class="card" style="background:#F0FDF4; border:1px solid #BBF7D0; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
     <div style="font-size:14px; color:#166534;">
-      <strong>Password reset done for {{ wa_reset_name }}.</strong> Temporary password shown above — now notify them via WhatsApp.
+      <strong>Password reset done for {{ wa_reset_name }}.</strong> Notify them via WhatsApp.
     </div>
     <a href="{{ wa_reset_url }}" target="_blank" rel="noopener"
        style="display:inline-flex; align-items:center; gap:6px; background:#25D366; color:#fff; font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px; text-decoration:none;">
@@ -69,75 +111,181 @@
   </div>
   {% endif %}
 
-  <!-- Staff cards -->
-  <div style="display: flex; flex-direction: column; gap: 12px;">
+  <!-- ── Desktop table ── -->
+  <div class="card staff-table-wrap" style="padding:0; overflow:hidden;">
+    {% if staff %}
+    <table class="staff-table">
+      <thead>
+        <tr>
+          <th style="padding-left:20px;">Staff Member</th>
+          <th>Login ID</th>
+          <th>Permissions</th>
+          <th>Access</th>
+          <th style="text-align:right; padding-right:20px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for member in staff %}
+        <tr>
+          <!-- Name + role -->
+          <td style="padding-left:20px; min-width:200px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div class="staff-avatar">{{ member.display_name|first|upper }}</div>
+              <div>
+                <div style="font-weight:600; font-size:14px; color:#111827; margin-bottom:3px;">{{ member.display_name }}</div>
+                <span class="role-badge role-{{ member.role }}">{{ member.get_role_display }}</span>
+                {% if member.qualification %}
+                <div style="font-size:11px; color:#9CA3AF; margin-top:3px;">{{ member.qualification }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+
+          <!-- Login ID -->
+          <td style="min-width:140px;">
+            <div style="font-family:monospace; font-size:12px; background:#F3F4F6; padding:4px 8px; border-radius:6px; color:#374151;">
+              {{ member.login_username }}
+            </div>
+            <div style="font-size:10px; color:#9CA3AF; margin-top:2px;">login username</div>
+          </td>
+
+          <!-- Permissions -->
+          <td style="min-width:180px;">
+            <div style="display:flex; flex-wrap:wrap; gap:3px;">
+              {% if member.can_register_patients %}<span class="perm-tag">Reception</span>{% endif %}
+              {% if member.can_prescribe %}<span class="perm-tag">Rx</span>{% endif %}
+              {% if member.can_view_pharmacy %}<span class="perm-tag">Pharmacy</span>{% endif %}
+              {% if member.can_edit_inventory %}<span class="perm-tag">Inventory</span>{% endif %}
+              {% if member.can_dispense_bill %}<span class="perm-tag">Billing</span>{% endif %}
+              {% if member.can_view_analytics %}<span class="perm-tag">Analytics</span>{% endif %}
+              {% if member.can_manage_staff %}<span class="perm-tag">Staff Mgmt</span>{% endif %}
+              {% if not member.can_register_patients and not member.can_prescribe and not member.can_view_pharmacy and not member.can_view_analytics and not member.can_manage_staff %}
+              <span style="font-size:12px; color:#9CA3AF; font-style:italic;">None set</span>
+              {% endif %}
+            </div>
+          </td>
+
+          <!-- Access expiry -->
+          <td style="min-width:100px;">
+            {% if member.access_expired %}
+            <span style="background:#FEF2F2; color:#DC2626; border:1px solid #FECACA; border-radius:6px; font-size:11px; font-weight:700; padding:3px 8px;">EXPIRED</span>
+            {% elif member.access_expires_at %}
+            <span style="background:#FEF9C3; color:#92400E; border:1px solid #FDE68A; border-radius:6px; font-size:11px; font-weight:600; padding:3px 8px;">{{ member.access_expires_at|date:"d M Y" }}</span>
+            {% else %}
+            <span style="font-size:12px; color:#9CA3AF;">Permanent</span>
+            {% endif %}
+          </td>
+
+          <!-- Actions -->
+          <td style="text-align:right; padding-right:20px; white-space:nowrap;">
+            <a href="/accounts/staff/{{ member.pk }}/edit/" class="act-btn act-edit">Edit</a>
+            {% if member.user != request.user %}
+            <form method="post" action="/accounts/staff/{{ member.pk }}/reset-password/" style="display:inline; margin:0 4px;"
+                  onsubmit="return confirm('Reset password for {{ member.display_name }}?');">
+              {% csrf_token %}
+              <button type="submit" class="act-btn act-reset">Reset PW</button>
+            </form>
+            {% if member.role != 'admin' %}
+            <form method="post" action="/accounts/staff/{{ member.pk }}/delete/" style="display:inline; margin:0;"
+                  onsubmit="return confirm('Remove {{ member.display_name }} ({{ member.login_username }}) from {{ clinic.name }}? This will permanently delete their account.');">
+              {% csrf_token %}
+              <button type="submit" class="act-btn act-remove">Remove</button>
+            </form>
+            {% else %}
+            <span style="font-size:11px; color:#9CA3AF; padding:5px 8px; display:inline-block;" title="Admin accounts can only be deleted by ClinicAI support">Admin — protected</span>
+            {% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center; color:#6B7280; padding:48px 24px;">
+      No staff members yet. <a href="/accounts/staff/add/" style="color:#2563EB; font-weight:600;">Add your first team member →</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Mobile cards ── -->
+  <div class="staff-mobile-list">
     {% for member in staff %}
-    <div class="card" style="display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
-
-      <!-- Avatar -->
-      <div style="width: 46px; height: 46px; border-radius: 50%; background: #EFF6FF;
-                  display: flex; align-items: center; justify-content: center;
-                  font-weight: 700; font-size: 17px; color: #2563EB; flex-shrink: 0;">
-        {{ member.display_name|first|upper }}
-      </div>
-
-      <!-- Info -->
-      <div style="flex: 1; min-width: 180px;">
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
-          <span style="font-weight: 600; font-size: 15px;">{{ member.display_name }}</span>
-          <span class="role-badge role-{{ member.role }}">{{ member.get_role_display }}</span>
-        </div>
-        {% if member.qualification or member.registration_number %}
-        <div style="font-size: 12px; color: #6B7280; margin-bottom: 6px;">
-          {% if member.qualification %}{{ member.qualification }}{% endif %}
-          {% if member.registration_number %} &middot; Reg: {{ member.registration_number }}{% endif %}
-        </div>
-        {% endif %}
-
-        <!-- Permission summary -->
-        <div style="margin-top: 6px;">
-          {% if member.can_register_patients %}<span class="perm-tag">Reception</span>{% endif %}
-          {% if member.can_prescribe %}<span class="perm-tag">Prescriptions</span>{% endif %}
-          {% if member.can_view_pharmacy %}<span class="perm-tag">Pharmacy</span>{% endif %}
-          {% if member.can_edit_inventory %}<span class="perm-tag">Inventory</span>{% endif %}
-          {% if member.can_dispense_bill %}<span class="perm-tag">Billing</span>{% endif %}
-          {% if member.can_view_analytics %}<span class="perm-tag">Analytics</span>{% endif %}
-          {% if member.can_manage_staff %}<span class="perm-tag">Staff Mgmt</span>{% endif %}
-          {% if not member.can_register_patients and not member.can_prescribe and not member.can_view_pharmacy and not member.can_view_analytics and not member.can_manage_staff %}
-          <span style="font-size: 12px; color: #9CA3AF; font-style: italic;">No permissions set</span>
+    <div class="staff-card">
+      <div class="staff-card-top">
+        <div class="staff-avatar" style="width:44px; height:44px; font-size:16px;">{{ member.display_name|first|upper }}</div>
+        <div class="staff-card-info">
+          <div class="staff-card-name">{{ member.display_name }}</div>
+          <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:6px;">
+            <span class="role-badge role-{{ member.role }}">{{ member.get_role_display }}</span>
+            {% if member.access_expired %}
+            <span style="background:#FEF2F2; color:#DC2626; border:1px solid #FECACA; border-radius:6px; font-size:11px; font-weight:700; padding:2px 7px;">EXPIRED</span>
+            {% elif member.access_expires_at %}
+            <span style="background:#FEF9C3; color:#92400E; border:1px solid #FDE68A; border-radius:6px; font-size:11px; font-weight:600; padding:2px 7px;">Exp {{ member.access_expires_at|date:"d M Y" }}</span>
+            {% endif %}
+          </div>
+          {% if member.qualification %}
+          <div class="staff-card-sub">{{ member.qualification }}{% if member.registration_number %} · Reg: {{ member.registration_number }}{% endif %}</div>
           {% endif %}
+          <div class="staff-card-login">Login: {{ member.login_username }}</div>
+          <div class="staff-card-perms">
+            {% if member.can_register_patients %}<span class="perm-tag">Reception</span>{% endif %}
+            {% if member.can_prescribe %}<span class="perm-tag">Rx</span>{% endif %}
+            {% if member.can_view_pharmacy %}<span class="perm-tag">Pharmacy</span>{% endif %}
+            {% if member.can_edit_inventory %}<span class="perm-tag">Inventory</span>{% endif %}
+            {% if member.can_dispense_bill %}<span class="perm-tag">Billing</span>{% endif %}
+            {% if member.can_view_analytics %}<span class="perm-tag">Analytics</span>{% endif %}
+            {% if member.can_manage_staff %}<span class="perm-tag">Staff Mgmt</span>{% endif %}
+          </div>
         </div>
       </div>
-
-      <!-- Actions -->
-      <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0; margin-top: 4px; flex-wrap:wrap;">
-        <a href="/accounts/staff/{{ member.pk }}/edit/" class="btn btn-secondary btn-sm">Edit</a>
+      <div class="staff-card-actions">
+        <a href="/accounts/staff/{{ member.pk }}/edit/" class="act-btn act-edit">Edit</a>
         {% if member.user != request.user %}
-        <form method="post" action="/accounts/staff/{{ member.pk }}/reset-password/" style="margin:0;"
-              onsubmit="return confirm('Reset password for {{ member.display_name }}? A temporary password will be shown.');">
+        <form method="post" action="/accounts/staff/{{ member.pk }}/reset-password/" style="flex:1; margin:0;"
+              onsubmit="return confirm('Reset password for {{ member.display_name }}?');">
           {% csrf_token %}
-          <button type="submit" class="btn btn-sm"
-                  style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;">
-            Reset PW
-          </button>
+          <button type="submit" class="act-btn act-reset" style="width:100%;">Reset PW</button>
         </form>
-        <form method="post" action="/accounts/staff/{{ member.pk }}/delete/" style="margin:0;"
-              onsubmit="return confirm('Remove {{ member.display_name }} from {{ clinic.name }}? This cannot be undone.');">
+        {% if member.role != 'admin' %}
+        <form method="post" action="/accounts/staff/{{ member.pk }}/delete/" style="flex:1; margin:0;"
+              onsubmit="return confirm('Remove {{ member.display_name }} ({{ member.login_username }})? This will permanently delete their account.');">
           {% csrf_token %}
-          <button type="submit" class="btn btn-sm"
-                  style="background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;">
-            Remove
-          </button>
+          <button type="submit" class="act-btn act-remove" style="width:100%;">Remove</button>
         </form>
+        {% else %}
+        <span style="font-size:11px; color:#9CA3AF; padding:5px 0; flex:1; text-align:center;">Admin — protected</span>
+        {% endif %}
         {% endif %}
       </div>
     </div>
     {% empty %}
-    <div class="card" style="text-align: center; color: #6B7280; padding: 40px;">
-      No staff members yet. <a href="/accounts/staff/add/" style="color:#2563EB;">Add your first team member.</a>
+    <div class="card" style="text-align:center; color:#6B7280; padding:40px 24px;">
+      No staff members yet. <a href="/accounts/staff/add/" style="color:#2563EB; font-weight:600;">Add your first team member →</a>
     </div>
     {% endfor %}
   </div>
+
+  <!-- Roles info (collapsed on mobile) -->
+  <details style="margin-top:24px;">
+    <summary style="font-size:13px; font-weight:600; color:#6B7280; cursor:pointer; padding:10px 0; list-style:none; display:flex; align-items:center; gap:6px;">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      Understanding roles
+    </summary>
+    <div style="margin-top:10px; display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px;">
+      <div style="padding:10px 12px; background:#fff; border-radius:8px; border:1px solid #E5E7EB;">
+        <div style="font-weight:600; font-size:13px; color:#111827; margin-bottom:4px;">Doctor / Admin</div>
+        <div style="font-size:12px; color:#6B7280;">Full access — reception, Rx, pharmacy, analytics, staff management.</div>
+      </div>
+      <div style="padding:10px 12px; background:#fff; border-radius:8px; border:1px solid #E5E7EB;">
+        <div style="font-weight:600; font-size:13px; color:#111827; margin-bottom:4px;">Receptionist</div>
+        <div style="font-size:12px; color:#6B7280;">Patient registration and queue only. No Rx, pharmacy, or reports.</div>
+      </div>
+      <div style="padding:10px 12px; background:#fff; border-radius:8px; border:1px solid #E5E7EB;">
+        <div style="font-weight:600; font-size:13px; color:#111827; margin-bottom:4px;">Pharmacist</div>
+        <div style="font-size:12px; color:#6B7280;">Pharmacy, inventory, and billing only.</div>
+      </div>
+    </div>
+  </details>
 
   <!-- Danger Zone -->
   <div class="card" style="margin-top:32px; border:1.5px solid #FECACA; background:#FFF5F5;">
@@ -146,21 +294,18 @@
       <span style="font-size:15px; font-weight:700; color:#DC2626;">Danger Zone</span>
     </div>
     <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px;">
-      <div>
+      <div style="flex:1; min-width:0;">
         <div style="font-size:14px; font-weight:600; color:#111827; margin-bottom:4px;">Delete this clinic</div>
         <div style="font-size:13px; color:#6B7280; line-height:1.6; max-width:420px;">
-          Deleting <strong>{{ clinic.name }}</strong> will permanently remove all patient records, prescriptions, pharmacy inventory, and billing data for this clinic. Each clinic maintains its own separate inventory and data.<br>
-          <span style="color:#DC2626; font-weight:500;">Your deletion request will be reviewed and completed within 24–48 hours.</span>
+          Deleting <strong>{{ clinic.name }}</strong> will permanently remove all patient records, prescriptions, pharmacy inventory, and billing data.<br>
+          <span style="color:#DC2626; font-weight:500;">Deletion request reviewed within 24–48 hours.</span>
         </div>
       </div>
-      <div>
+      <div style="flex-shrink:0;">
         {% if pending_deletion %}
         <div style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:10px; padding:12px 16px;">
-          <div style="font-size:13px; font-weight:700; color:#92400E; margin-bottom:4px;">⏳ Deletion request submitted</div>
-          <div style="font-size:13px; color:#78350F; line-height:1.5;">
-            Submitted {{ pending_deletion.created_at|date:"j M Y, g:i A" }}<br>
-            The ClinicAI team will review and delete the clinic within 24–48 hours. You will be contacted on WhatsApp.
-          </div>
+          <div style="font-size:13px; font-weight:700; color:#92400E; margin-bottom:4px;">⏳ Request submitted</div>
+          <div style="font-size:12px; color:#78350F;">{{ pending_deletion.created_at|date:"j M Y, g:i A" }}<br>Team will contact you on WhatsApp.</div>
         </div>
         {% else %}
         <button type="button" onclick="document.getElementById('delete-clinic-form').style.display='block'; this.style.display='none';"
@@ -171,13 +316,11 @@
           <div style="font-size:13px; font-weight:600; color:#DC2626; margin-bottom:8px;">Confirm deletion request for {{ clinic.name }}</div>
           <form method="post" action="{% url 'accounts:request_clinic_deletion' %}">
             {% csrf_token %}
-            <textarea name="reason" class="input-field" rows="2" placeholder="Reason for deletion (optional)..."
+            <textarea name="reason" class="input-field" rows="2" placeholder="Reason (optional)..."
               style="margin-bottom:10px; font-size:13px;"></textarea>
             <div style="display:flex; gap:8px;">
               <button type="submit" class="btn btn-sm" style="background:#DC2626; color:#fff; border:none;"
-                onclick="return confirm('Submit deletion request for {{ clinic.name }}? All clinic data will be permanently deleted after admin approval.');">
-                Submit Request
-              </button>
+                onclick="return confirm('Submit deletion request for {{ clinic.name }}?');">Submit Request</button>
               <button type="button" onclick="document.getElementById('delete-clinic-form').style.display='none'; document.querySelector('[onclick*=delete-clinic-form]').style.display='';"
                 class="btn btn-secondary btn-sm">Cancel</button>
             </div>

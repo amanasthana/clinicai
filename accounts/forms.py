@@ -82,13 +82,27 @@ class AddStaffForm(forms.Form):
     """Add a new staff member to the clinic."""
     first_name = forms.CharField(max_length=50, widget=forms.TextInput(attrs={'class': 'input-field'}))
     last_name = forms.CharField(max_length=50, widget=forms.TextInput(attrs={'class': 'input-field'}))
-    username = forms.CharField(max_length=150, widget=forms.TextInput(attrs={'class': 'input-field'}))
+    phone = forms.CharField(
+        max_length=10,
+        widget=forms.TextInput(attrs={
+            'class': 'input-field', 'placeholder': '10-digit mobile number',
+            'inputmode': 'numeric', 'maxlength': '10', 'id': 'staff-phone',
+        }),
+        help_text="Staff member's mobile number. Used to build their login User ID.",
+    )
+    username = forms.CharField(
+        max_length=150,
+        min_length=6,
+        widget=forms.TextInput(attrs={'class': 'input-field', 'id': 'staff-username'}),
+        help_text='Auto-filled from phone + first name. You may customise it. Minimum 6 characters.',
+    )
     email = forms.EmailField(
         required=False,
         widget=forms.EmailInput(attrs={'class': 'input-field', 'placeholder': 'staff@example.com (optional — needed for password reset)'}),
     )
     password = forms.CharField(
-        widget=forms.PasswordInput(attrs={'class': 'input-field'}), min_length=8
+        widget=forms.PasswordInput(attrs={'class': 'input-field', 'placeholder': 'Minimum 8 characters'}),
+        min_length=8,
     )
     display_name = forms.CharField(max_length=120, widget=forms.TextInput(attrs={'class': 'input-field'}))
     role = forms.ChoiceField(
@@ -101,11 +115,27 @@ class AddStaffForm(forms.Form):
     registration_number = forms.CharField(
         max_length=50, required=False, widget=forms.TextInput(attrs={'class': 'input-field'})
     )
+    access_expires_at = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'input-field', 'type': 'date'}),
+        help_text='Leave blank for permanent access. Set a date to auto-expire this login.',
+    )
+
+    def clean_phone(self):
+        phone = self.cleaned_data['phone'].strip()
+        if not phone.isdigit() or len(phone) != 10:
+            raise forms.ValidationError('Enter a valid 10-digit mobile number.')
+        return phone
 
     def clean_username(self):
-        username = self.cleaned_data['username']
+        username = self.cleaned_data['username'].strip()
+        if len(username) < 6:
+            raise forms.ValidationError('User ID must be at least 6 characters.')
+        if '__' in username:
+            raise forms.ValidationError('User ID cannot contain double underscore (__).')
+        # Check global uniqueness — the username must be unique across all clinics
         if User.objects.filter(username=username).exists():
-            raise forms.ValidationError('This username is already taken.')
+            raise forms.ValidationError('This User ID is already taken. Choose a different one.')
         return username
 
 

@@ -2,8 +2,10 @@
 Role presets and the require_permission decorator.
 """
 from functools import wraps
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 
 # What each role gets by default
 ROLE_PERMISSIONS = {
@@ -59,6 +61,7 @@ def require_permission(flag):
     """
     View decorator. Checks request.user.staff_profile.<flag>.
     Superusers always pass. Returns 403 page if denied.
+    If staff access has expired, logs the user out and redirects to login.
     """
     def decorator(view_func):
         @wraps(view_func)
@@ -67,6 +70,13 @@ def require_permission(flag):
             if request.user.is_superuser:
                 return view_func(request, *args, **kwargs)
             profile = getattr(request.user, 'staff_profile', None)
+            if profile and profile.access_expired:
+                logout(request)
+                messages.error(
+                    request,
+                    'Your access has expired. Please contact the clinic administrator.'
+                )
+                return redirect('accounts:login')
             if profile and getattr(profile, flag, False):
                 return view_func(request, *args, **kwargs)
             return render(request, 'accounts/403.html', {

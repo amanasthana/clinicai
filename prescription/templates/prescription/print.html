@@ -416,7 +416,11 @@
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Download PDF
   </button>
-  <button class="tb-btn tb-size" id="size-toggle" onclick="toggleSize()">A4 / A5</button>
+  <select id="rx-size-select" onchange="setRxSize(this.value)"
+    style="padding:6px 10px; border:1.5px solid #374151; border-radius:8px; font-size:12px; font-weight:600; background:#1F2937; color:#F9FAFB; font-family:inherit; cursor:pointer;">
+    <option value="a4">A4 (210×297mm)</option>
+    <option value="a5">A5 (148×210mm)</option>
+  </select>
   <button class="tb-btn tb-hindi" id="hindi-toggle" onclick="toggleHindi()">
     <span style="font-family:'Noto Sans Devanagari',sans-serif;font-size:15px;line-height:1;">अ</span>
     हिंदी
@@ -433,7 +437,11 @@
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Save as PDF
   </button>
-  <button class="tb-btn tb-size" id="size-toggle" onclick="toggleSize()">A4 / A5</button>
+  <select id="rx-size-select" onchange="setRxSize(this.value)"
+    style="padding:6px 10px; border:1.5px solid #D1D5DB; border-radius:8px; font-size:12px; font-weight:600; background:#fff; color:#374151; font-family:inherit; cursor:pointer;">
+    <option value="a4">A4 (210×297mm)</option>
+    <option value="a5">A5 (148×210mm)</option>
+  </select>
   <button class="tb-btn tb-hindi" id="hindi-toggle" onclick="toggleHindi()">
     <span style="font-family:'Noto Sans Devanagari',sans-serif;font-size:15px;line-height:1;">अ</span>
     Hindi
@@ -825,22 +833,25 @@ function toggleHindi() {
 }
 
 let _isA5 = false;
-function toggleSize() {
-  _isA5 = !_isA5;
+const RX_PAGE_RULES = {
+  a4: '@media print { @page { size: A4 portrait; margin: 8mm 12mm; } }',
+  a5: '@media print { @page { size: A5 portrait; margin: 5mm 8mm; } }',
+};
+function setRxSize(val) {
+  _isA5 = (val === 'a5');
   document.body.classList.toggle('print-a5', _isA5);
-  const btn = document.getElementById('size-toggle');
-  if (_isA5) {
-    btn.textContent = 'A5 ✓';
-    btn.classList.add('a5-active');
-    document.getElementById('page-size-style').textContent =
-      '@media print { @page { size: A5 portrait; margin: 5mm 8mm; } }';
-  } else {
-    btn.textContent = 'A4 / A5';
-    btn.classList.remove('a5-active');
-    document.getElementById('page-size-style').textContent =
-      '@media print { @page { size: A4 portrait; margin: 8mm 12mm; } }';
-  }
+  document.getElementById('page-size-style').textContent = RX_PAGE_RULES[val] || RX_PAGE_RULES.a4;
+  localStorage.setItem('rx_print_size', val);
 }
+// Restore saved preference on load (default: a4)
+(function() {
+  const saved = localStorage.getItem('rx_print_size') || 'a4';
+  const sel = document.getElementById('rx-size-select');
+  if (sel) sel.value = saved;
+  setRxSize(saved);
+})();
+// Legacy: keep toggleSize as no-op so any cached calls don't break
+function toggleSize() { /* replaced by setRxSize dropdown */ }
 
 // ── Download PDF (patient share page) ─────────────────────────
 async function downloadPdf() {
@@ -853,7 +864,7 @@ async function downloadPdf() {
     const fmt  = _isA5 ? 'a5' : 'a4';
     const opt = {
       margin:      _isA5 ? [4, 5, 4, 5] : [6, 8, 6, 8],
-      filename:    'prescription-{{ patient.full_name|slugify }}.pdf',
+      filename:    'prescription-{{ patient.full_name|slugify }}-{{ rx.created_at|date:"Y-m-d" }}.pdf',
       image:       { type: 'jpeg', quality: 0.97 },
       html2canvas: { scale: 2.5, useCORS: true, logging: false },
       jsPDF:       { unit: 'mm', format: fmt, orientation: 'portrait' },
