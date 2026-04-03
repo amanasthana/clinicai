@@ -53,14 +53,18 @@ class PharmacyItem(models.Model):
 
     @property
     def earliest_expiry(self):
-        """Earliest expiry date among batches that have stock."""
-        batches = [b for b in self.batches.all() if b.quantity > 0 and b.expiry_date]
+        """Earliest expiry date among non-expired batches that have stock."""
+        from django.utils import timezone
+        today = timezone.now().date()
+        batches = [b for b in self.batches.all() if b.quantity > 0 and b.expiry_date and b.expiry_date >= today]
         return min((b.expiry_date for b in batches), default=None)
 
     @property
     def use_first_batch(self):
-        """The batch to dispense first (FEFO — soonest expiry with stock)."""
-        batches = [b for b in self.batches.all() if b.quantity > 0 and b.expiry_date]
+        """The batch to dispense first (FEFO — soonest expiry with stock, expired batches excluded)."""
+        from django.utils import timezone
+        today = timezone.now().date()
+        batches = [b for b in self.batches.all() if b.quantity > 0 and b.expiry_date and b.expiry_date >= today]
         return min(batches, key=lambda b: b.expiry_date, default=None)
 
     def __str__(self):

@@ -2423,7 +2423,7 @@ class MultiBatchDispenseTest(TestCase):
         resp = self.client.post(self.confirm_url, data=self._payload(30), content_type='application/json')
         self.assertEqual(resp.status_code, 400)
         self.assertFalse(resp.json()['ok'])
-        self.assertIn('total stock', resp.json()['error'].lower())
+        self.assertIn('not enough stock', resp.json()['error'].lower())
 
     def test_stock_qty_in_dispense_view_shows_total(self):
         """The dispense page should show total stock (sum of batches), not just first batch qty."""

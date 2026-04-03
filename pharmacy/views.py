@@ -8,6 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.db.models import Q
 from django.db import transaction
+from django.utils import timezone
 
 from accounts.permissions import require_permission
 from .models import MedicineCatalog, PharmacyItem, PharmacyBatch, DoctorFavorite, DispensedItem, PharmacyBill
@@ -612,6 +613,8 @@ def confirm_dispense_api(request, visit_id):
         discount_flat = decimal.Decimal('0')
     payment_mode = data.get('payment_mode', 'cash')
 
+    today = timezone.now().date()
+
     if not items_data:
         return JsonResponse({'ok': False, 'error': 'No items to dispense.'}, status=400)
 
@@ -625,20 +628,29 @@ def confirm_dispense_api(request, visit_id):
             return JsonResponse({'ok': False, 'error': 'Invalid item data.'}, status=400)
         batch = get_object_or_404(PharmacyBatch, pk=batch_id, item__clinic=clinic)
         pharmacy_item = batch.item
-        total_available = pharmacy_item.batches.filter(quantity__gt=0).aggregate(
+        # Only count non-expired batches — expired stock must not be dispensed
+        total_available = pharmacy_item.batches.filter(
+            quantity__gt=0
+        ).exclude(
+            expiry_date__lt=today
+        ).aggregate(
             total=Sum('quantity')
         )['total'] or 0
         if total_available < qty:
             return JsonResponse({
                 'ok': False,
                 'error': (
-                    f'Not enough total stock for {pharmacy_item.display_name}. '
-                    f'Total available across all batches: {total_available}'
+                    f'Not enough stock for {pharmacy_item.display_name}. '
+                    f'Available (non-expired): {total_available}'
                 )
             }, status=400)
-        # Layer 2: block dispense if the billing batch (first FEFO batch) has price=0
+        # Layer 2: block dispense if the billing batch (first non-expired FEFO batch) has price=0
         first_fefo = (
-            pharmacy_item.batches.filter(quantity__gt=0).order_by('expiry_date').first()
+            pharmacy_item.batches
+            .filter(quantity__gt=0)
+            .exclude(expiry_date__lt=today)
+            .order_by('expiry_date')
+            .first()
         )
         billing_price_check = first_fefo.unit_price if first_fefo else decimal.Decimal('0')
         if billing_price_check <= 0:
@@ -669,11 +681,12 @@ def confirm_dispense_api(request, visit_id):
             # their individual price would silently under-bill patients.
             billing_price = first_batch.unit_price
 
-            # FEFO multi-batch: get all batches with stock in expiry order, lock them
+            # FEFO multi-batch: get all non-expired batches with stock, lock them
             fefo_batches = list(
                 PharmacyBatch.objects
                 .select_for_update()
                 .filter(item=pharmacy_item, quantity__gt=0)
+                .exclude(expiry_date__lt=today)
                 .order_by('expiry_date')
             )
 
