@@ -1573,6 +1573,9 @@ def inventory_report_view(request):
             'total_cost_value': item_cost,
         })
 
+    # Cost/P&L data is sensitive — only show to users with analytics access (doctor/admin)
+    show_cost = getattr(request.user.staff_profile, 'can_view_analytics', False)
+
     return render(request, 'pharmacy/inventory_report.html', {
         'clinic': clinic,
         'today': today,
@@ -1581,4 +1584,5 @@ def inventory_report_view(request):
         'total_cost_value': total_cost_value,
         'total_units': total_units,
         'total_items': len(report_items),
+        'show_cost': show_cost,
     })

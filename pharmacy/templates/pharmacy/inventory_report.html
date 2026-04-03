@@ -11,13 +11,13 @@
 }
 .inv-table-wrap {
   background: #fff; border: 1.5px solid #E5E7EB; border-radius: 12px;
-  overflow: hidden; margin-bottom: 24px;
+  overflow-x: auto; margin-bottom: 24px;
 }
-.inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
 .inv-table th {
   background: #F9FAFB; font-size: 11px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .04em; color: #6B7280; padding: 10px 14px; text-align: left;
-  border-bottom: 1.5px solid #E5E7EB;
+  border-bottom: 1.5px solid #E5E7EB; white-space: nowrap;
 }
 .inv-table td { padding: 10px 14px; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
 .inv-table tr:last-child td { border-bottom: none; }
@@ -32,13 +32,18 @@
 .summary-card-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #6B7280; }
 .summary-card-value { font-size: 22px; font-weight: 800; color: #111827; line-height: 1.3; }
 
+/* Hide generic/expiry on narrow screens — keep medicine, stock, MRP visible */
+@media (max-width: 600px) {
+  .col-generic, .col-expiry { display: none; }
+}
+
 /* Print styles */
 @media print {
   .inv-toolbar, nav, header, .sidebar, .no-print { display: none !important; }
   body { background: #fff !important; }
   .page-container { max-width: none !important; padding: 0 !important; }
-  .inv-table-wrap { border: none; border-radius: 0; box-shadow: none; }
-  .inv-table { font-size: 11px; }
+  .inv-table-wrap { border: none; border-radius: 0; box-shadow: none; overflow: visible; }
+  .inv-table { font-size: 11px; min-width: 0; }
   .inv-table th { font-size: 10px; background: #F3F4F6 !important; }
   .inv-table td { padding: 6px 10px; }
   .inv-table tr.batch-row td { padding: 4px 10px 4px 22px; }
@@ -67,7 +72,12 @@
       <h1 class="page-title" style="margin:0;">Inventory Report</h1>
       <p class="page-subtitle" style="margin:4px 0 0 0;">{{ today|date:"d F Y" }} · {{ total_items }} medicines · {{ total_units }} units</p>
     </div>
-    <a href="{% url 'pharmacy:dashboard' %}" class="btn btn-secondary btn-sm">← Pharmacy</a>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      {% if show_cost %}
+      <a href="{% url 'pharmacy:analytics' %}" class="btn btn-secondary btn-sm">P&L Analytics →</a>
+      {% endif %}
+      <a href="{% url 'pharmacy:dashboard' %}" class="btn btn-secondary btn-sm">← Pharmacy</a>
+    </div>
   </div>
 
   <!-- Toolbar -->
@@ -97,10 +107,12 @@
       <div class="summary-card-label" style="color:#1E40AF;">MRP Value</div>
       <div class="summary-card-value" style="color:#1E40AF;">₹{{ total_mrp_value|floatformat:0 }}</div>
     </div>
+    {% if show_cost %}
     <div class="summary-card" style="border-color:#A7F3D0; background:#F0FDF4;">
       <div class="summary-card-label" style="color:#065F46;">Cost Value</div>
       <div class="summary-card-value" style="color:#065F46;">₹{{ total_cost_value|floatformat:0 }}</div>
     </div>
+    {% endif %}
   </div>
 
   <!-- Inventory table -->
@@ -109,12 +121,12 @@
     <table class="inv-table">
       <thead>
         <tr>
-          <th style="width:30%;">Medicine</th>
-          <th class="hide-mobile">Generic / Composition</th>
-          <th style="text-align:right;">Stock (Units)</th>
+          <th style="width:{% if show_cost %}28%{% else %}34%{% endif %};">Medicine</th>
+          <th class="col-generic">Generic / Composition</th>
+          <th style="text-align:right;">Stock</th>
           <th style="text-align:right;">MRP (₹)</th>
-          <th style="text-align:right;">Cost (₹)</th>
-          <th class="hide-mobile" style="text-align:center;">Expiry Status</th>
+          {% if show_cost %}<th style="text-align:right;">Cost (₹)</th>{% endif %}
+          <th class="col-expiry" style="text-align:center;">Expiry</th>
         </tr>
       </thead>
       <tbody>
@@ -127,25 +139,25 @@
             <div style="font-size:11px; color:#9CA3AF;">{{ row.item.medicine.form }}</div>
             {% endif %}
           </td>
-          <td class="hide-mobile" style="color:#6B7280; font-size:12px;">
+          <td class="col-generic" style="color:#6B7280; font-size:12px;">
             {{ row.item.display_generic|default:"—" }}
           </td>
           <td style="text-align:right; font-weight:700; color:{% if row.total_qty == 0 %}#DC2626{% elif row.item.low_stock %}#D97706{% else %}#111827{% endif %};">
             {{ row.total_qty }}
           </td>
           <td style="text-align:right; color:#374151;">₹{{ row.total_mrp_value|floatformat:2 }}</td>
+          {% if show_cost %}
           <td style="text-align:right; color:#374151;">
             {% if row.total_cost_value %}₹{{ row.total_cost_value|floatformat:2 }}{% else %}—{% endif %}
           </td>
-          <td class="hide-mobile" style="text-align:center;">
+          {% endif %}
+          <td class="col-expiry" style="text-align:center;">
             {% with earliest=row.item.earliest_expiry %}
             {% if earliest %}
               {% if earliest < today %}
                 <span class="badge-expired">Expired</span>
               {% else %}
-                {% with days_left=earliest|timeuntil %}
-                  <span class="badge-ok" style="font-size:10px; color:#065F46;">{{ earliest|date:"M Y" }}</span>
-                {% endwith %}
+                <span class="badge-ok" style="font-size:10px; color:#065F46;">{{ earliest|date:"M Y" }}</span>
               {% endif %}
             {% else %}
               <span style="color:#D1D5DB; font-size:11px;">No expiry</span>
@@ -156,16 +168,18 @@
         <!-- Batch detail rows -->
         {% for bd in row.batches %}
         <tr class="batch-row">
-          <td style="padding-left:28px; color:#6B7280;">
+          <td style="padding-left:28px;">
             <span style="font-size:11px;">Batch: {{ bd.batch.batch_number|default:"(no batch no.)" }}</span>
           </td>
-          <td class="hide-mobile" style="color:#9CA3AF; font-size:11px;">Received: {{ bd.batch.received_date|date:"d M Y" }}</td>
-          <td style="text-align:right; color:#6B7280;">{{ bd.batch.quantity }}</td>
-          <td style="text-align:right; color:#9CA3AF; font-size:12px;">₹{{ bd.batch.unit_price }}</td>
-          <td style="text-align:right; color:#9CA3AF; font-size:12px;">
-            {% if bd.batch.purchase_price %}₹{{ bd.batch.purchase_price }}{% if bd.batch.purchase_gst_percent %} + {{ bd.batch.purchase_gst_percent }}% GST{% endif %}{% else %}—{% endif %}
+          <td class="col-generic" style="color:#9CA3AF; font-size:11px;">Received: {{ bd.batch.received_date|date:"d M Y" }}</td>
+          <td style="text-align:right;">{{ bd.batch.quantity }}</td>
+          <td style="text-align:right; font-size:12px;">₹{{ bd.batch.unit_price }}</td>
+          {% if show_cost %}
+          <td style="text-align:right; font-size:12px;">
+            {% if bd.batch.purchase_price %}₹{{ bd.batch.purchase_price }}{% if bd.batch.purchase_gst_percent %} +{{ bd.batch.purchase_gst_percent }}%{% endif %}{% else %}—{% endif %}
           </td>
-          <td class="hide-mobile" style="text-align:center;">
+          {% endif %}
+          <td class="col-expiry" style="text-align:center;">
             {% if bd.batch.expiry_date %}
               {% if bd.is_expired %}
                 <span class="badge-expired">Expired {{ bd.batch.expiry_date|date:"M Y" }}</span>
@@ -187,8 +201,10 @@
           <td colspan="2" style="font-weight:700; color:#374151; padding:12px 14px;">Total</td>
           <td style="text-align:right; font-weight:800; color:#111827; padding:12px 14px;">{{ total_units }}</td>
           <td style="text-align:right; font-weight:800; color:#1E40AF; padding:12px 14px;">₹{{ total_mrp_value|floatformat:0 }}</td>
+          {% if show_cost %}
           <td style="text-align:right; font-weight:800; color:#065F46; padding:12px 14px;">₹{{ total_cost_value|floatformat:0 }}</td>
-          <td class="hide-mobile" style="padding:12px 14px;"></td>
+          {% endif %}
+          <td class="col-expiry" style="padding:12px 14px;"></td>
         </tr>
       </tfoot>
     </table>
