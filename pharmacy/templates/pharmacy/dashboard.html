@@ -3,79 +3,149 @@
 
 {% block extra_head %}
 <style>
-/* Custom micro-styles that Tailwind can't handle */
+/* ── Tooltip system ──────────────────────────────────────────── */
+.tip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: rgba(107,114,128,.12); color: #9CA3AF;
+  font-size: 9px; font-weight: 800;
+  cursor: help; position: relative; vertical-align: middle;
+  margin-left: 4px; flex-shrink: 0;
+  border: 1px solid rgba(107,114,128,.18);
+  transition: background .15s, color .15s;
+}
+.tip:hover, .tip.open { background: #374151; color: #fff; border-color: #374151; }
+.tip::after {
+  content: attr(data-tip);
+  display: none; position: absolute;
+  bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+  width: 210px;
+  background: #1F2937; color: #F3F4F6;
+  font-size: 11px; font-weight: 400; line-height: 1.5;
+  padding: 8px 11px; border-radius: 8px;
+  z-index: 10001; pointer-events: none;
+  white-space: normal; text-align: left;
+  text-transform: none; letter-spacing: 0;
+  box-shadow: 0 6px 20px rgba(0,0,0,.28);
+}
+.tip::before {
+  content: ''; display: none;
+  position: absolute; bottom: calc(100% + 2px);
+  left: 50%; transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: #1F2937;
+  z-index: 10001;
+}
+.tip:hover::after, .tip:hover::before,
+.tip.open::after, .tip.open::before { display: block; }
+/* right-edge variant */
+.tip-r::after { left: auto; right: -4px; transform: none; }
+.tip-r::before { left: auto; right: 2px; transform: none; }
+
+/* ── Two-column layout ───────────────────────────────────────── */
+.ph-layout {
+  display: grid;
+  grid-template-columns: 1fr 288px;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .ph-layout { grid-template-columns: 1fr; }
+}
+.ph-sidebar { display: flex; flex-direction: column; gap: 14px; }
+.ph-sticky  { position: sticky; top: 16px; }
+
+/* Sidebar card */
+.ph-sc {
+  background: #fff; border: 1.5px solid #E5E7EB; border-radius: 14px;
+  overflow: visible;
+}
+.ph-sc-head {
+  padding: 9px 14px 8px; border-bottom: 1px solid #F3F4F6;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: #9CA3AF;
+  display: flex; align-items: center; gap: 4px;
+}
+
+/* Stat rows in sidebar */
+.ph-stat {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 14px; border-bottom: 1px solid #F9FAFB;
+  cursor: pointer; transition: background .12s;
+}
+.ph-stat:last-child { border-bottom: none; }
+.ph-stat:hover { background: #F9FAFB; }
+.ph-stat-label { font-size: 12px; color: #6B7280; font-weight: 500; display: flex; align-items: center; }
+.ph-stat-value { font-size: 16px; font-weight: 800; }
+
+/* Quick-link rows in sidebar */
+.ph-ql {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 14px; font-size: 13px; font-weight: 500; color: #374151;
+  text-decoration: none; transition: background .12s;
+  border-bottom: 1px solid #F9FAFB;
+}
+.ph-ql:last-child { border-bottom: none; }
+.ph-ql:hover { background: #F9FAFB; color: #111827; }
+.ph-ql-icon {
+  width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+/* Mobile stat chips — hidden on desktop */
+.ph-chips {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+}
+@media (min-width: 901px) { .ph-chips { display: none; } }
+@media (max-width: 560px) {
+  .ph-chips .stat-chip { flex: 1 1 calc(33% - 8px) !important; min-width: calc(33% - 8px) !important; }
+}
+@media (max-width: 380px) {
+  .ph-chips .stat-chip { flex: 1 1 calc(50% - 6px) !important; min-width: calc(50% - 6px) !important; }
+}
+
+/* ── Med row hover ───────────────────────────────────────────── */
 .ph-med-row { transition: background .1s; }
 .ph-med-row:hover { background: #FAFAFA; }
 
-/* Stat chips: wrap to 2×3 on mobile (5 chips) */
-@media (max-width: 560px) {
-  .stat-chip { flex: 1 1 calc(33% - 8px) !important; min-width: calc(33% - 8px) !important; }
-}
-@media (max-width: 380px) {
-  .stat-chip { flex: 1 1 calc(50% - 6px) !important; min-width: calc(50% - 6px) !important; }
-}
-/* Nav buttons: wrap cleanly */
+/* Nav buttons wrap on mobile */
 @media (max-width: 500px) {
   .ph-nav-btns { flex-wrap: wrap !important; }
   .ph-nav-btns .btn { flex: 1 1 calc(50% - 4px); text-align: center; }
 }
-/* Three-dot dropdown — fixed so overflow:hidden on card doesn't clip it */
+
+/* ── Three-dot dropdown ──────────────────────────────────────── */
 .ph-dropdown {
-  display: none;
-  position: fixed;
-  background: #fff;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
-  min-width: 180px;
-  z-index: 9999;
-  overflow: hidden;
+  display: none; position: fixed;
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14); min-width: 180px;
+  z-index: 9999; overflow: hidden;
 }
 .ph-dropdown.open { display: block; }
-.ph-dropdown a,
-.ph-dropdown button {
-  display: block; width: 100%;
-  padding: 10px 14px;
-  font-size: 13px; font-weight: 500;
-  color: #374151; text-align: left;
-  background: none; border: none;
-  cursor: pointer; text-decoration: none;
-  font-family: inherit;
-  transition: background .1s;
-  white-space: nowrap;
+.ph-dropdown a, .ph-dropdown button {
+  display: block; width: 100%; padding: 10px 14px;
+  font-size: 13px; font-weight: 500; color: #374151; text-align: left;
+  background: none; border: none; cursor: pointer; text-decoration: none;
+  font-family: inherit; transition: background .1s; white-space: nowrap;
 }
-.ph-dropdown a:hover,
-.ph-dropdown button:hover { background: #F9FAFB; }
+.ph-dropdown a:hover, .ph-dropdown button:hover { background: #F9FAFB; }
 .ph-dd-danger { color: #DC2626 !important; }
 .ph-dd-danger:hover { background: #FFF1F2 !important; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-container" style="max-width:800px;">
+<div class="page-container" style="max-width:1140px;">
 
-  <!-- ── Page heading ── -->
+  <!-- ── Page heading ─────────────────────────────────────────── -->
   <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
     <div>
       <h1 class="text-lg font-bold text-gray-900 m-0">Pharmacy</h1>
       <p class="text-xs text-gray-500 mt-0.5">Inventory management · <span id="inv-last-updated" style="color:#9CA3AF;">Updated just now</span></p>
     </div>
-    <div class="ph-nav-btns" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-      <a href="/pharmacy/bills/" class="btn btn-secondary" style="font-size:13px;">Bill History</a>
-      {% if request.user.staff_profile.can_view_analytics %}
-      <a href="/pharmacy/analytics/" class="btn btn-secondary" style="font-size:13px;">Analytics</a>
-      <a href="/pharmacy/ledger/" class="btn btn-secondary" style="font-size:13px;">Ledger</a>
-      {% endif %}
-      <a href="/pharmacy/return/" class="btn btn-secondary" style="font-size:13px;">Returns</a>
-      {% if user.all_clinic_memberships|length > 1 %}
-      <a href="/pharmacy/import/" class="btn btn-secondary" style="font-size:13px;">Import Medicines</a>
-      {% endif %}
-      <a href="/pharmacy/inventory-report/" class="btn btn-secondary" style="font-size:13px;">Inventory Report</a>
-      <a href="/pharmacy/add/" class="btn btn-primary" style="font-size:13px;">+ Add Stock</a>
-    </div>
+    <a href="/pharmacy/add/" class="btn btn-primary" style="font-size:13px;">+ Add Stock</a>
   </div>
 
-  <!-- ── Zero-price batch warning (Layer 1) ── -->
+  <!-- ── Zero-price batch warning ─────────────────────────────── -->
   {% if zero_price_batches %}
   <div style="background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:12px; padding:16px 18px; margin-bottom:20px;">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px;">
@@ -123,7 +193,7 @@
   {% endif %}
   {% endif %}
 
-  <!-- ── GST setup nudge (only if GSTIN not set) ── -->
+  <!-- ── GST setup nudge ───────────────────────────────────────── -->
   {% if not clinic.gst_number %}
   <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#6B7280; margin-bottom:16px; padding:10px 14px; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:10px;">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -131,56 +201,8 @@
   </div>
   {% endif %}
 
-  <!-- ── Default discount setting ── -->
-  {% if request.user.staff_profile.can_dispense_bill or request.user.staff_profile.can_manage_staff %}
-  <form method="post" action="/pharmacy/settings/" style="margin-bottom:20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px;">
-    {% csrf_token %}
-    <span style="font-size:13px; font-weight:500; color:#374151;">Default Bill Discount:</span>
-    <div style="display:flex; align-items:center; gap:6px;">
-      <input type="number" name="default_discount" min="0" max="100"
-             value="{{ clinic.default_medicine_discount }}"
-             style="width:70px; padding:6px 10px; border:1px solid #D1D5DB; border-radius:8px; font-size:14px; font-family:inherit; outline:none;">
-      <span style="font-size:14px; color:#6B7280;">%</span>
-    </div>
-    <button type="submit" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;">Save</button>
-    {% if clinic.default_medicine_discount %}
-    <span style="font-size:12px; color:#059669; font-weight:500;">{{ clinic.default_medicine_discount }}% pre-filled on every bill</span>
-    {% else %}
-    <span style="font-size:12px; color:#9CA3AF;">No default discount set</span>
-    {% endif %}
-  </form>
-  {% endif %}
-
-  <!-- ── Pending dispense section ── -->
-  {% if pending_dispense %}
-  <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:16px; margin-bottom:20px;">
-    <div style="font-size:13px; font-weight:700; color:#1E40AF; margin-bottom:12px;">
-      Patients ready for dispensing ({{ pending_dispense|length }})
-    </div>
-    <div style="display:flex; flex-direction:column; gap:8px;">
-      {% for visit in pending_dispense %}
-      <div style="display:flex; align-items:center; justify-content:space-between; background:#fff; border-radius:8px; padding:10px 14px; border:1px solid #DBEAFE; flex-wrap:wrap; gap:8px;">
-        <div>
-          <div style="font-size:14px; font-weight:600; color:#111827;">{{ visit.patient.full_name }}</div>
-          <div style="font-size:12px; color:#6B7280; margin-top:2px;">
-            Token {{ visit.token_number }}
-            {% if visit.prescription and visit.prescription.doctor %}
-             &middot; Dr {{ visit.prescription.doctor.display_name }}
-            {% endif %}
-          </div>
-        </div>
-        <a href="/pharmacy/dispense/{{ visit.id }}/"
-           style="padding:8px 16px; background:#2563EB; color:#fff; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none;">
-          Dispense
-        </a>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- ── Stat chips — clickable filters ── -->
-  <div class="flex gap-3 mb-3 flex-wrap">
+  <!-- ── Stat chips: mobile only ───────────────────────────────── -->
+  <div class="ph-chips" id="ph-chips">
     <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="ok"
          style="background:#F0FDF4; border:1px solid #BBF7D0; min-height:58px; cursor:pointer; user-select:none;">
       <div class="text-xl font-bold" style="color:#059669;">{{ total_in_stock }}</div>
@@ -199,12 +221,12 @@
     <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="exp6m"
          style="background:#FFF7ED; border:1px solid #FED7AA; min-height:58px; cursor:pointer; user-select:none;">
       <div class="text-xl font-bold" style="color:#EA580C;">{{ expiring_6m_count }}</div>
-      <div class="text-xs mt-0.5" style="color:#9A3412;">Exp &lt; 6 Months</div>
+      <div class="text-xs mt-0.5" style="color:#9A3412;">Exp &lt; 6m</div>
     </div>
     <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="exp3m"
          style="background:#FFF1F2; border:1px solid #FECDD3; min-height:58px; cursor:pointer; user-select:none;">
       <div class="text-xl font-bold" style="color:#E11D48;">{{ expiring_3m_count }}</div>
-      <div class="text-xs mt-0.5" style="color:#9F1239;">Exp &lt; 3 Months</div>
+      <div class="text-xs mt-0.5" style="color:#9F1239;">Exp &lt; 3m</div>
     </div>
     <div class="flex-1 rounded-xl text-center py-3 px-2 stat-chip" data-filter="expired"
          style="background:#FEF2F2; border:1.5px solid #FECACA; min-height:58px; cursor:pointer; user-select:none;">
@@ -216,208 +238,379 @@
     Showing filtered results. <button onclick="clearChipFilters()" style="color:#2563EB; background:none; border:none; cursor:pointer; font-size:12px; font-family:inherit; padding:0;">Show all</button>
   </div>
 
-  <!-- ── Low stock alerts ── -->
-  {% if low_stock_items %}
-  <div class="mb-5">
-    <div class="text-xs font-semibold mb-2 flex items-center gap-1.5" style="color:#92400E;">
-      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="#D97706" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      Low Stock Alerts
-    </div>
-    <div class="flex flex-col gap-2">
-      {% for item in low_stock_items %}
-      <div class="flex items-center justify-between flex-wrap gap-2 rounded-xl px-4 py-3" style="background:#FFFBEB; border:1px solid #FDE68A;">
-        <div>
-          <div class="text-sm font-semibold text-gray-800">{{ item.display_name }}</div>
-          {% if item.earliest_expiry %}<div class="text-xs text-gray-500 mt-0.5">Expiry: {{ item.earliest_expiry|date:"M Y" }}</div>{% endif %}
+  <!-- ── Two-column layout ─────────────────────────────────────── -->
+  <div class="ph-layout">
+
+    <!-- ══ LEFT: main content ═══════════════════════════════════ -->
+    <div>
+
+      <!-- Pending dispense -->
+      {% if pending_dispense %}
+      <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:16px; margin-bottom:18px;">
+        <div style="font-size:13px; font-weight:700; color:#1E40AF; margin-bottom:12px;">
+          Patients ready for dispensing ({{ pending_dispense|length }})
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-sm font-bold" style="color:#D97706;">{{ item.total_quantity }} units</span>
-          <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm" style="font-size:12px; background:{% if item.reorder_flagged %}#EF4444{% else %}#F59E0B{% endif %}; color:#fff; border:none;">
-              {% if item.reorder_flagged %}Flagged{% else %}Flag{% endif %}
-            </button>
-          </form>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- ── Inventory card ── -->
-  <div class="bg-white rounded-2xl overflow-hidden" style="border:1px solid #E5E7EB; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-
-    <!-- Card header + search -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-      <span class="text-sm font-semibold text-gray-700">All Inventory</span>
-      <span class="text-xs text-gray-400">Tap to expand batches</span>
-    </div>
-    <div class="px-4 py-2.5 border-b border-gray-100">
-      <div class="relative">
-        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input type="text" placeholder="Search medicines…"
-          class="w-full pl-9 pr-3 py-2 text-sm rounded-xl outline-none"
-          style="background:#F9FAFB; border:1px solid #E5E7EB; font-family:inherit;"
-          oninput="filterInv(this.value)"
-          onfocus="this.style.borderColor='#2563EB'; this.style.background='#fff';"
-          onblur="this.style.borderColor='#E5E7EB'; this.style.background='#F9FAFB';">
-      </div>
-    </div>
-
-    {% if items %}
-    <div id="inv-list">
-      {% for item in items %}
-      {% with fefo=item.use_first_batch %}
-
-      <div class="ph-item"
-           data-name="{{ item.display_name|lower }}"
-           data-generic="{{ item.display_generic|lower }}"
-           data-status="{% if not item.in_stock %}out{% elif item.low_stock %}low{% else %}ok{% endif %}"
-           data-exp3m="{% for b in item.batches.all %}{% if b.is_near_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
-           data-exp6m="{% for b in item.batches.all %}{% if b.is_approaching_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
-           data-expired="{% for b in item.batches.all %}{% if b.is_expired and b.quantity > 0 %}1{% endif %}{% endfor %}"
-           id="med-{{ item.pk }}"
-           style="border-left:3px solid {% if not item.in_stock %}#EF4444{% elif item.low_stock %}#F59E0B{% else %}#10B981{% endif %}; border-bottom:1px solid #F3F4F6;">
-
-        <!-- ── Collapsed row (click to expand) ── -->
-        <div class="ph-med-row flex items-center gap-3 px-4 py-3 cursor-pointer"
-             onclick="toggleExpand({{ item.pk }}, event)">
-
-          <!-- Name + generic -->
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold text-gray-900 truncate">{{ item.display_name }}</div>
-            {% if item.medicine and item.medicine.generic_name %}
-            <div class="text-xs text-gray-400 mt-0.5">{{ item.medicine.generic_name }}</div>
-            {% elif item.custom_generic_name %}
-            <div class="text-xs text-gray-400 mt-0.5">{{ item.custom_generic_name }}</div>
-            {% endif %}
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          {% for visit in pending_dispense %}
+          <div style="display:flex; align-items:center; justify-content:space-between; background:#fff; border-radius:8px; padding:10px 14px; border:1px solid #DBEAFE; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#111827;">{{ visit.patient.full_name }}</div>
+              <div style="font-size:12px; color:#6B7280; margin-top:2px;">
+                Token {{ visit.token_number }}
+                {% if visit.prescription and visit.prescription.doctor %}
+                 &middot; Dr {{ visit.prescription.doctor.display_name }}
+                {% endif %}
+              </div>
+            </div>
+            <a href="/pharmacy/dispense/{{ visit.id }}/"
+               style="padding:8px 16px; background:#2563EB; color:#fff; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none;">
+              Dispense
+            </a>
           </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
 
-          <!-- Count badge -->
-          <span class="text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap"
-            style="{% if not item.in_stock %}background:#FEE2E2;color:#991B1B{% elif item.low_stock %}background:#FEF3C7;color:#92400E{% else %}background:#D1FAE5;color:#065F46{% endif %}">
-            {{ item.total_quantity }} units
-          </span>
+      <!-- Default discount setting -->
+      {% if request.user.staff_profile.can_dispense_bill or request.user.staff_profile.can_manage_staff %}
+      <form method="post" action="/pharmacy/settings/" style="margin-bottom:18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px;">
+        {% csrf_token %}
+        <span style="font-size:13px; font-weight:500; color:#374151; display:flex; align-items:center;">
+          Default Bill Discount
+          <span class="tip" data-tip="Pre-filled on every new bill so your team doesn't have to enter it each time. Can still be adjusted per bill.">ⓘ</span>:
+        </span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input type="number" name="default_discount" min="0" max="100"
+                 value="{{ clinic.default_medicine_discount }}"
+                 style="width:70px; padding:6px 10px; border:1px solid #D1D5DB; border-radius:8px; font-size:14px; font-family:inherit; outline:none;">
+          <span style="font-size:14px; color:#6B7280;">%</span>
+        </div>
+        <button type="submit" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;">Save</button>
+        {% if clinic.default_medicine_discount %}
+        <span style="font-size:12px; color:#059669; font-weight:500;">{{ clinic.default_medicine_discount }}% pre-filled on every bill</span>
+        {% else %}
+        <span style="font-size:12px; color:#9CA3AF;">No default discount set</span>
+        {% endif %}
+      </form>
+      {% endif %}
 
-          <!-- Expiry -->
-          {% if item.earliest_expiry %}
-          <span class="text-xs whitespace-nowrap hidden sm:inline"
-            style="color:{% if item.earliest_expiry|date:'Y-m-d' < today_plus_90 %}#DC2626{% else %}#9CA3AF{% endif %};">
-            {{ item.earliest_expiry|date:"M Y" }}
-          </span>
-          {% endif %}
-
-          <!-- Expand arrow -->
-          <span id="arrow-{{ item.pk }}" class="text-xs text-gray-300 flex-shrink-0">▶</span>
-
-          <!-- ⋮ three-dot menu -->
-          <div class="relative flex-shrink-0" onclick="event.stopPropagation()">
-            <button id="menu-btn-{{ item.pk }}" onclick="toggleMenu({{ item.pk }})"
-              class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 border-none bg-transparent cursor-pointer text-base">⋮</button>
-            <div class="ph-dropdown" id="menu-{{ item.pk }}">
-              <a href="/pharmacy/item/{{ item.pk }}/add-batch/">
-                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="margin-right:8px; vertical-align:-1px; flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Batch
-              </a>
-              <a href="/pharmacy/item/{{ item.pk }}/edit/">
-                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="margin-right:8px; vertical-align:-1px; flex-shrink:0;"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit Medicine
-              </a>
-              <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
+      <!-- Low stock alerts -->
+      {% if low_stock_items %}
+      <div class="mb-4">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#92400E; margin-bottom:8px; display:flex; align-items:center; gap:5px;">
+          <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="#D97706" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Low Stock Alerts
+          <span class="tip" data-tip="Items below their reorder level. Flag them to mark as 'order placed' and track restock.">ⓘ</span>
+        </div>
+        <div class="flex flex-col gap-2">
+          {% for item in low_stock_items %}
+          <div class="flex items-center justify-between flex-wrap gap-2 rounded-xl px-4 py-3" style="background:#FFFBEB; border:1px solid #FDE68A;">
+            <div>
+              <div class="text-sm font-semibold text-gray-800">{{ item.display_name }}</div>
+              {% if item.earliest_expiry %}<div class="text-xs text-gray-500 mt-0.5">Expiry: {{ item.earliest_expiry|date:"M Y" }}</div>{% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-sm font-bold" style="color:#D97706;">{{ item.total_quantity }} units</span>
               <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
                 {% csrf_token %}
-                <button type="submit">{% if item.reorder_flagged %}Remove Flag{% else %}Flag for Reorder{% endif %}</button>
-              </form>
-              <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
-              <form method="post" action="/pharmacy/item/{{ item.pk }}/delete/" style="margin:0;"
-                onsubmit="return confirm('Delete {{ item.display_name }} and all batches?')">
-                {% csrf_token %}
-                <button type="submit" class="ph-dd-danger">Delete Medicine</button>
-              </form>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── Expanded batch panel ── -->
-        <div id="expand-{{ item.pk }}" style="display:none; background:#F8FAFC; border-top:1px solid #F3F4F6;">
-          {% if item.batches.all %}
-          <div class="px-4 py-1.5" style="border-bottom:1px solid #F3F4F6;">
-            <span class="text-xs font-bold text-gray-400 uppercase tracking-wide">Batches · {{ item.batches.count }}</span>
-          </div>
-          {% for batch in item.batches.all %}
-          <div class="flex items-start gap-3 px-4 py-3 flex-wrap"
-               style="border-bottom:1px solid #F3F4F6; {% if forloop.last %}border-bottom:none;{% endif %} background:{% if fefo and batch.pk == fefo.pk %}#F0FDF4{% else %}transparent{% endif %};">
-
-            <!-- Batch info -->
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="text-sm font-semibold text-gray-700">{{ batch.batch_number|default:"No batch #" }}</span>
-                {% if fefo and batch.pk == fefo.pk %}
-                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#D1FAE5;color:#065F46;">Use First</span>
-                {% endif %}
-                {% if batch.is_expired %}
-                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEE2E2;color:#991B1B;">Expired</span>
-                {% elif batch.is_near_expiry %}
-                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEE2E2;color:#BE123C;">Exp &lt;3m 🔴</span>
-                {% elif batch.is_approaching_expiry %}
-                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEF3C7;color:#92400E;">Exp &lt;6m 🟠</span>
-                {% endif %}
-              </div>
-              <div class="flex gap-4 flex-wrap mt-1">
-                <span class="text-xs text-gray-500"><strong class="text-gray-700">{{ batch.quantity }}</strong> units</span>
-                {% if batch.expiry_date %}
-                <span class="text-xs" style="color:{% if batch.is_expired %}#DC2626{% elif batch.is_near_expiry %}#D97706{% else %}#6B7280{% endif %};">
-                  Exp {{ batch.expiry_date|date:"M Y" }}
-                </span>
-                {% endif %}
-                {% if batch.unit_price %}<span class="text-xs text-gray-500">₹{{ batch.unit_price }}/unit</span>{% endif %}
-                <span class="text-xs text-gray-400">Recd {{ batch.received_date|date:"d M Y" }}</span>
-              </div>
-            </div>
-
-            <!-- Batch actions -->
-            <div class="flex gap-2 flex-shrink-0 pt-0.5">
-              <a href="/pharmacy/batch/{{ batch.pk }}/edit/" class="btn btn-sm btn-secondary" style="font-size:12px; padding:5px 12px;">Edit</a>
-              <form method="post" action="/pharmacy/batch/{{ batch.pk }}/delete/" style="margin:0;"
-                onsubmit="return confirm('Delete this batch?')">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm" style="font-size:12px; padding:5px 12px; background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;">Delete</button>
+                <button type="submit" class="btn btn-sm" style="font-size:12px; background:{% if item.reorder_flagged %}#EF4444{% else %}#F59E0B{% endif %}; color:#fff; border:none;">
+                  {% if item.reorder_flagged %}Flagged{% else %}Flag{% endif %}
+                </button>
               </form>
             </div>
           </div>
           {% endfor %}
-          {% else %}
-          <div class="px-4 py-3 text-xs text-gray-400">No batches recorded.</div>
-          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- ── Inventory card ────────────────────────────────────── -->
+      <div class="bg-white rounded-2xl overflow-hidden" style="border:1px solid #E5E7EB; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <span class="text-sm font-semibold text-gray-700">All Inventory</span>
+          <span class="text-xs text-gray-400">Tap row to expand batches</span>
+        </div>
+        <div class="px-4 py-2.5 border-b border-gray-100">
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" placeholder="Search medicines…"
+              class="w-full pl-9 pr-3 py-2 text-sm rounded-xl outline-none"
+              style="background:#F9FAFB; border:1px solid #E5E7EB; font-family:inherit;"
+              oninput="filterInv(this.value)"
+              onfocus="this.style.borderColor='#2563EB'; this.style.background='#fff';"
+              onblur="this.style.borderColor='#E5E7EB'; this.style.background='#F9FAFB';">
+          </div>
         </div>
 
+        {% if items %}
+        <div id="inv-list">
+          {% for item in items %}
+          {% with fefo=item.use_first_batch %}
+
+          <div class="ph-item"
+               data-name="{{ item.display_name|lower }}"
+               data-generic="{{ item.display_generic|lower }}"
+               data-status="{% if not item.in_stock %}out{% elif item.low_stock %}low{% else %}ok{% endif %}"
+               data-exp3m="{% for b in item.batches.all %}{% if b.is_near_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
+               data-exp6m="{% for b in item.batches.all %}{% if b.is_approaching_expiry and b.quantity > 0 %}1{% endif %}{% endfor %}"
+               data-expired="{% for b in item.batches.all %}{% if b.is_expired and b.quantity > 0 %}1{% endif %}{% endfor %}"
+               id="med-{{ item.pk }}"
+               style="border-left:3px solid {% if not item.in_stock %}#EF4444{% elif item.low_stock %}#F59E0B{% else %}#10B981{% endif %}; border-bottom:1px solid #F3F4F6;">
+
+            <!-- Collapsed row -->
+            <div class="ph-med-row flex items-center gap-3 px-4 py-3 cursor-pointer"
+                 onclick="toggleExpand({{ item.pk }}, event)">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-semibold text-gray-900 truncate">{{ item.display_name }}</div>
+                {% if item.medicine and item.medicine.generic_name %}
+                <div class="text-xs text-gray-400 mt-0.5">{{ item.medicine.generic_name }}</div>
+                {% elif item.custom_generic_name %}
+                <div class="text-xs text-gray-400 mt-0.5">{{ item.custom_generic_name }}</div>
+                {% endif %}
+              </div>
+              <span class="text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap"
+                style="{% if not item.in_stock %}background:#FEE2E2;color:#991B1B{% elif item.low_stock %}background:#FEF3C7;color:#92400E{% else %}background:#D1FAE5;color:#065F46{% endif %}">
+                {{ item.total_quantity }} units
+              </span>
+              {% if item.earliest_expiry %}
+              <span class="text-xs whitespace-nowrap hidden sm:inline"
+                style="color:{% if item.earliest_expiry|date:'Y-m-d' < today_plus_90 %}#DC2626{% else %}#9CA3AF{% endif %};">
+                {{ item.earliest_expiry|date:"M Y" }}
+              </span>
+              {% endif %}
+              <span id="arrow-{{ item.pk }}" class="text-xs text-gray-300 flex-shrink-0">▶</span>
+              <div class="relative flex-shrink-0" onclick="event.stopPropagation()">
+                <button id="menu-btn-{{ item.pk }}" onclick="toggleMenu({{ item.pk }})"
+                  class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 border-none bg-transparent cursor-pointer text-base">⋮</button>
+                <div class="ph-dropdown" id="menu-{{ item.pk }}">
+                  <a href="/pharmacy/item/{{ item.pk }}/add-batch/">
+                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="margin-right:8px; vertical-align:-1px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Batch
+                  </a>
+                  <a href="/pharmacy/item/{{ item.pk }}/edit/">
+                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="margin-right:8px; vertical-align:-1px;"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit Medicine
+                  </a>
+                  <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
+                  <form method="post" action="/pharmacy/item/{{ item.pk }}/flag/" style="margin:0;">
+                    {% csrf_token %}
+                    <button type="submit">{% if item.reorder_flagged %}Remove Flag{% else %}Flag for Reorder{% endif %}</button>
+                  </form>
+                  <div style="height:1px; background:#F3F4F6; margin:2px 0;"></div>
+                  <form method="post" action="/pharmacy/item/{{ item.pk }}/delete/" style="margin:0;"
+                    onsubmit="return confirm('Delete {{ item.display_name }} and all batches?')">
+                    {% csrf_token %}
+                    <button type="submit" class="ph-dd-danger">Delete Medicine</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <!-- Expanded batch panel -->
+            <div id="expand-{{ item.pk }}" style="display:none; background:#F8FAFC; border-top:1px solid #F3F4F6;">
+              {% if item.batches.all %}
+              <div class="px-4 py-1.5" style="border-bottom:1px solid #F3F4F6;">
+                <span class="text-xs font-bold text-gray-400 uppercase tracking-wide">Batches · {{ item.batches.count }}</span>
+              </div>
+              {% for batch in item.batches.all %}
+              <div class="flex items-start gap-3 px-4 py-3 flex-wrap"
+                   style="border-bottom:1px solid #F3F4F6; {% if forloop.last %}border-bottom:none;{% endif %} background:{% if fefo and batch.pk == fefo.pk %}#F0FDF4{% else %}transparent{% endif %};">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-sm font-semibold text-gray-700">{{ batch.batch_number|default:"No batch #" }}</span>
+                    {% if fefo and batch.pk == fefo.pk %}
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#D1FAE5;color:#065F46;">Use First</span>
+                    {% endif %}
+                    {% if batch.is_expired %}
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEE2E2;color:#991B1B;">Expired</span>
+                    {% elif batch.is_near_expiry %}
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEE2E2;color:#BE123C;">Exp &lt;3m 🔴</span>
+                    {% elif batch.is_approaching_expiry %}
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#FEF3C7;color:#92400E;">Exp &lt;6m 🟠</span>
+                    {% endif %}
+                  </div>
+                  <div class="flex gap-4 flex-wrap mt-1">
+                    <span class="text-xs text-gray-500"><strong class="text-gray-700">{{ batch.quantity }}</strong> units</span>
+                    {% if batch.expiry_date %}
+                    <span class="text-xs" style="color:{% if batch.is_expired %}#DC2626{% elif batch.is_near_expiry %}#D97706{% else %}#6B7280{% endif %};">
+                      Exp {{ batch.expiry_date|date:"M Y" }}
+                    </span>
+                    {% endif %}
+                    {% if batch.unit_price %}<span class="text-xs text-gray-500">₹{{ batch.unit_price }}/unit</span>{% endif %}
+                    <span class="text-xs text-gray-400">Recd {{ batch.received_date|date:"d M Y" }}</span>
+                  </div>
+                </div>
+                <div class="flex gap-2 flex-shrink-0 pt-0.5">
+                  <a href="/pharmacy/batch/{{ batch.pk }}/edit/" class="btn btn-sm btn-secondary" style="font-size:12px; padding:5px 12px;">Edit</a>
+                  <form method="post" action="/pharmacy/batch/{{ batch.pk }}/delete/" style="margin:0;"
+                    onsubmit="return confirm('Delete this batch?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm" style="font-size:12px; padding:5px 12px; background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;">Delete</button>
+                  </form>
+                </div>
+              </div>
+              {% endfor %}
+              {% else %}
+              <div class="px-4 py-3 text-xs text-gray-400">No batches recorded.</div>
+              {% endif %}
+            </div>
+
+          </div>
+          {% endwith %}
+          {% endfor %}
+        </div>
+
+        {% else %}
+        <div class="text-center py-12 px-4">
+          <div class="text-sm font-medium text-gray-700 mb-1">No medicines in inventory</div>
+          <div class="text-xs text-gray-400 mb-5">Add your first stock item to get started.</div>
+          <a href="/pharmacy/add/" class="btn btn-primary">+ Add Stock</a>
+        </div>
+        {% endif %}
+
+      </div><!-- /inventory card -->
+
+    </div><!-- /left -->
+
+    <!-- ══ RIGHT: sticky sidebar ════════════════════════════════ -->
+    <div class="ph-sidebar ph-sticky">
+
+      <!-- Quick Actions -->
+      <div class="ph-sc">
+        <div class="ph-sc-head">Quick Actions</div>
+        <a href="/pharmacy/add/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#EFF6FF;">
+            <svg width="13" height="13" fill="none" stroke="#2563EB" stroke-width="2.2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          Add Stock
+          <span class="tip" data-tip="Add a new medicine or record a new batch for existing stock.">ⓘ</span>
+        </a>
+        <a href="/pharmacy/walk-in/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#F0FDF4;">
+            <svg width="13" height="13" fill="none" stroke="#059669" stroke-width="2.2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          Walk-in Bill
+          <span class="tip" data-tip="Create a bill for a patient not linked to today's OPD queue.">ⓘ</span>
+        </a>
+        <a href="/pharmacy/return/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#FFF7ED;">
+            <svg width="13" height="13" fill="none" stroke="#D97706" stroke-width="2.2" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.67"/></svg>
+          </div>
+          Returns
+          <span class="tip" data-tip="Process a medicine return from a patient and adjust inventory.">ⓘ</span>
+        </a>
+        <a href="/pharmacy/bills/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#F5F3FF;">
+            <svg width="13" height="13" fill="none" stroke="#7C3AED" stroke-width="2.2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          Bill History
+          <span class="tip" data-tip="View, reprint, or edit past pharmacy bills.">ⓘ</span>
+        </a>
+        <a href="/pharmacy/inventory-report/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#F0FDF4;">
+            <svg width="13" height="13" fill="none" stroke="#059669" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          </div>
+          Inventory Report
+          <span class="tip" data-tip="Printable snapshot of all stock with quantities, expiry dates, and MRP values.">ⓘ</span>
+        </a>
+        {% if request.user.staff_profile.can_view_analytics %}
+        <a href="/pharmacy/analytics/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#EFF6FF;">
+            <svg width="13" height="13" fill="none" stroke="#2563EB" stroke-width="2.2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          Revenue Analytics
+          <span class="tip" data-tip="Charts of daily sales, top medicines by revenue, and dispensing trends.">ⓘ</span>
+        </a>
+        <a href="/pharmacy/inventory-analytics/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#F0FDF4;">
+            <svg width="13" height="13" fill="none" stroke="#059669" stroke-width="2.2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          Cost Analytics
+          <span class="tip tip-r" data-tip="Doctor-only: purchase cost, margins, and P&L statement by period.">ⓘ</span>
+        </a>
+        <a href="/pharmacy/ledger/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#FFF7ED;">
+            <svg width="13" height="13" fill="none" stroke="#D97706" stroke-width="2.2" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          </div>
+          Ledger
+          <span class="tip tip-r" data-tip="Complete transaction log: purchases, sales, and returns in one view.">ⓘ</span>
+        </a>
+        {% endif %}
+        {% if user.all_clinic_memberships|length > 1 %}
+        <a href="/pharmacy/import/" class="ph-ql">
+          <div class="ph-ql-icon" style="background:#F9FAFB;">
+            <svg width="13" height="13" fill="none" stroke="#6B7280" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          Import Medicines
+        </a>
+        {% endif %}
       </div>
-      {% endwith %}
-      {% endfor %}
-    </div>
 
-    {% else %}
-    <div class="text-center py-12 px-4">
-      <div class="text-sm font-medium text-gray-700 mb-1">No medicines in inventory</div>
-      <div class="text-xs text-gray-400 mb-5">Add your first stock item to get started.</div>
-      <a href="/pharmacy/add/" class="btn btn-primary">+ Add Stock</a>
-    </div>
-    {% endif %}
+      <!-- Inventory Status (stats) -->
+      <div class="ph-sc">
+        <div class="ph-sc-head">
+          Inventory Status
+          <span class="tip" data-tip="Click any row to filter the inventory list. Click again to clear.">ⓘ</span>
+        </div>
+        <div class="ph-stat" data-filter="ok" onclick="triggerSidebarFilter('ok', this)">
+          <span class="ph-stat-label">
+            In Stock
+            <span class="tip" data-tip="Items with quantity above their reorder level.">ⓘ</span>
+          </span>
+          <span class="ph-stat-value" style="color:#059669;">{{ total_in_stock }}</span>
+        </div>
+        <div class="ph-stat" data-filter="low" onclick="triggerSidebarFilter('low', this)">
+          <span class="ph-stat-label">
+            Low Stock
+            <span class="tip" data-tip="Items at or below reorder level — order soon.">ⓘ</span>
+          </span>
+          <span class="ph-stat-value" style="color:#D97706;">{{ low_stock_count }}</span>
+        </div>
+        <div class="ph-stat" data-filter="out" onclick="triggerSidebarFilter('out', this)">
+          <span class="ph-stat-label">
+            Out of Stock
+            <span class="tip" data-tip="Items with zero quantity remaining.">ⓘ</span>
+          </span>
+          <span class="ph-stat-value" style="color:#E11D48;">{{ out_of_stock_items|length }}</span>
+        </div>
+        <div class="ph-stat" data-filter="exp6m" onclick="triggerSidebarFilter('exp6m', this)">
+          <span class="ph-stat-label">
+            Exp &lt; 6 Months
+            <span class="tip" data-tip="At least one batch expires within 6 months. Plan to use or return.">ⓘ</span>
+          </span>
+          <span class="ph-stat-value" style="color:#EA580C;">{{ expiring_6m_count }}</span>
+        </div>
+        <div class="ph-stat" data-filter="exp3m" onclick="triggerSidebarFilter('exp3m', this)">
+          <span class="ph-stat-label">
+            Exp &lt; 3 Months
+            <span class="tip" data-tip="Urgent — batch expires within 90 days. Use first or return to supplier.">ⓘ</span>
+          </span>
+          <span class="ph-stat-value" style="color:#E11D48;">{{ expiring_3m_count }}</span>
+        </div>
+        <div class="ph-stat" data-filter="expired" onclick="triggerSidebarFilter('expired', this)">
+          <span class="ph-stat-label">
+            Expired
+            <span class="tip tip-r" data-tip="Batches past expiry. These are excluded from billing automatically.">ⓘ</span>
+          </span>
+          <span class="ph-stat-value" style="color:#DC2626;">{{ expired_items_count }}</span>
+        </div>
+      </div>
 
-  </div><!-- /inventory card -->
+    </div><!-- /sidebar -->
+
+  </div><!-- /ph-layout -->
 
 </div><!-- /page-container -->
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Close menus when clicking outside
+// ── Close menus when clicking outside ──
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.ph-dropdown') && !e.target.closest('[id^="menu-btn-"]')) {
     document.querySelectorAll('.ph-dropdown.open').forEach(d => d.classList.remove('open'));
   }
 });
-
-// Close on scroll (dropdown is fixed so it won't follow the item)
 window.addEventListener('scroll', function() {
   document.querySelectorAll('.ph-dropdown.open').forEach(d => d.classList.remove('open'));
 }, true);
@@ -426,29 +619,17 @@ function toggleMenu(pk) {
   const menu = document.getElementById('menu-' + pk);
   const btn  = document.getElementById('menu-btn-' + pk);
   const wasOpen = menu.classList.contains('open');
-
-  // Close all open menus first
   document.querySelectorAll('.ph-dropdown.open').forEach(d => d.classList.remove('open'));
-
   if (!wasOpen && btn) {
-    // Show to measure size, then position
     menu.classList.add('open');
-    const rect    = btn.getBoundingClientRect();
-    const menuW   = menu.offsetWidth;
-    const menuH   = menu.offsetHeight;
-    const gap     = 4;
-
-    // Default: below the button, right-aligned
+    const rect   = btn.getBoundingClientRect();
+    const menuW  = menu.offsetWidth;
+    const menuH  = menu.offsetHeight;
+    const gap    = 4;
     let top  = rect.bottom + gap;
     let left = rect.right - menuW;
-
-    // Flip above if it would go off the bottom of the viewport
-    if (top + menuH > window.innerHeight - 8) {
-      top = rect.top - menuH - gap;
-    }
-    // Keep within left edge
+    if (top + menuH > window.innerHeight - 8) top = rect.top - menuH - gap;
     if (left < 8) left = 8;
-
     menu.style.top  = top + 'px';
     menu.style.left = left + 'px';
   }
@@ -456,37 +637,48 @@ function toggleMenu(pk) {
 
 function toggleExpand(pk, e) {
   const panel = document.getElementById('expand-' + pk);
-  const arrow  = document.getElementById('arrow-' + pk);
+  const arrow = document.getElementById('arrow-' + pk);
   if (!panel) return;
   const open = panel.style.display === 'block';
   panel.style.display = open ? 'none' : 'block';
   if (arrow) arrow.textContent = open ? '▶' : '▼';
 }
 
-// ── Chip filters ──
+// ── Chip / sidebar stat filters ──
 const activeChips = new Set();
 
-document.querySelectorAll('.stat-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    const f = chip.dataset.filter;
-    if (activeChips.has(f)) {
-      activeChips.delete(f);
-      chip.style.opacity = '1';
-      chip.style.outline = '';
-    } else {
-      activeChips.add(f);
-      chip.style.opacity = '1';
-      chip.style.outline = '2.5px solid #2563EB';
-    }
-    applyChipFilters();
-  });
+// Mobile chips
+document.querySelectorAll('.ph-chips .stat-chip').forEach(chip => {
+  chip.addEventListener('click', () => toggleChip(chip.dataset.filter, chip));
 });
+
+// Sidebar stats
+function triggerSidebarFilter(f, el) {
+  toggleChip(f, el);
+}
+
+function toggleChip(f, el) {
+  if (activeChips.has(f)) {
+    activeChips.delete(f);
+    // reset all matching elements
+    document.querySelectorAll(`[data-filter="${f}"]`).forEach(e => {
+      e.style.outline = '';
+      e.style.background = e.classList.contains('stat-chip') ? '' : '';
+    });
+  } else {
+    activeChips.add(f);
+    document.querySelectorAll(`[data-filter="${f}"]`).forEach(e => {
+      e.style.outline = '2.5px solid #2563EB';
+    });
+  }
+  applyChipFilters();
+}
 
 function applyChipFilters() {
   const label = document.getElementById('active-filter-label');
   const items = document.querySelectorAll('#inv-list .ph-item');
   if (activeChips.size === 0) {
-    items.forEach(row => { if (!row.style.display || row.style.display === 'none') return; row.style.display = ''; });
+    items.forEach(row => { if (row.style.display === 'none') row.style.display = ''; });
     applySearchFilter();
     label.style.display = 'none';
     return;
@@ -510,13 +702,13 @@ function applyChipFilters() {
 
 function clearChipFilters() {
   activeChips.clear();
-  document.querySelectorAll('.stat-chip').forEach(c => { c.style.opacity = '1'; c.style.outline = ''; });
+  document.querySelectorAll('[data-filter]').forEach(e => { e.style.outline = ''; });
   document.querySelectorAll('#inv-list .ph-item').forEach(r => r.style.display = '');
   document.getElementById('active-filter-label').style.display = 'none';
   applySearchFilter();
 }
 
-// ── Text search (respects chip filter) ──
+// ── Text search ──
 let searchQuery = '';
 function _rowMatchesSearch(row) {
   if (!searchQuery) return true;
@@ -525,12 +717,9 @@ function _rowMatchesSearch(row) {
 function applySearchFilter() {
   document.querySelectorAll('#inv-list .ph-item').forEach(row => {
     if (activeChips.size > 0 && row.style.display === 'none') return;
-    if (activeChips.size === 0) {
-      row.style.display = _rowMatchesSearch(row) ? '' : 'none';
-    }
+    row.style.display = _rowMatchesSearch(row) ? '' : 'none';
   });
 }
-
 function filterInv(q) {
   searchQuery = q.toLowerCase().trim();
   if (activeChips.size > 0) {
@@ -546,7 +735,14 @@ function filterInv(q) {
   }
 }
 
-// ── Inventory "last updated" timestamp ──────────────────────────
+// ── Touch: tap tooltip icons to toggle ──
+document.addEventListener('click', function(e) {
+  const tip = e.target.closest('.tip');
+  if (tip) { e.stopPropagation(); tip.classList.toggle('open'); return; }
+  document.querySelectorAll('.tip.open').forEach(t => t.classList.remove('open'));
+});
+
+// ── Inventory "last updated" timestamp ──
 (function() {
   const el = document.getElementById('inv-last-updated');
   if (!el) return;
@@ -562,7 +758,7 @@ function filterInv(q) {
     el.innerHTML = label;
   }
   updateLabel();
-  setInterval(updateLabel, 30000); // update every 30s
+  setInterval(updateLabel, 30000);
 })();
 </script>
 {% endblock %}

@@ -1141,7 +1141,7 @@
 
 <!-- Floating voice dictation bar — persists across all steps -->
 <div class="voice-bar" id="voice-bar" style="display:none;">
-  <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoice()" title="Tap to dictate into focused field">
+  <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoice()" title="Dictate into the active input field">
     <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
       <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V21h-2v-5.07z"/>
     </svg>
@@ -1898,8 +1898,8 @@ function addMedicineRow(m) {
                oninput="scheduleInteractionCheck(); updateRouteVisibility(this)">
         <div class="drug-suggest-dropdown"></div>
       </div>
-      <button type="button" class="med-brand-btn" onclick="pickBrand(this)" title="Browse clinic inventory">📦</button>
-      <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove">×</button>
+      <button type="button" class="med-brand-btn" onclick="pickBrand(this)" title="Pick a branded medicine from the clinic's pharmacy stock">📦</button>
+      <button type="button" class="med-delete-btn" onclick="removeMedicineRow(this)" title="Remove this medicine from the prescription">×</button>
     </div>
 
     <div class="pill-section inj-route-section" style="display:${showInj ? '' : 'none'}; background:#EFF6FF; border-radius:8px; padding:8px 12px;">

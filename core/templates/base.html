@@ -46,6 +46,13 @@
       {% if user.staff_profile.can_view_analytics %}
       <a href="/analytics/" class="nav-link {% block nav_analytics %}{% endblock %}" title="Clinical Analytics">Analytics</a>
       {% endif %}
+      {% if user.staff_profile.is_doctor or user.staff_profile.is_admin %}
+      <a href="/accounts/supervised/" class="nav-link {% block nav_supervised %}{% endblock %}"
+         style="position:relative; display:inline-flex; align-items:center; gap:5px;">
+        Approvals
+        <span id="approval-badge" style="display:none; background:#DC2626; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; line-height:1.5; min-width:18px; text-align:center;"></span>
+      </a>
+      {% endif %}
       {% if user.staff_profile.can_manage_staff %}
       <a href="/accounts/staff/" class="nav-link {% block nav_staff %}{% endblock %}">Staff</a>
       <a href="/accounts/plan/" class="nav-link {% block nav_plan %}{% endblock %}">Plan</a>
@@ -83,10 +90,12 @@
           {% else %}
           <div style="padding:6px;">
           {% endif %}
+            {% if user.staff_profile.is_doctor %}
             <a href="/accounts/add-clinic/"
               style="display:block; padding:8px 12px; font-size:13px; color:#2563EB; font-weight:500; text-decoration:none;">
               Add another clinic
             </a>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -129,7 +138,7 @@
     </form>
     {% endfor %}
     {% endif %}
-    <a href="/accounts/add-clinic/" style="font-size:13px; color:#2563EB; font-weight:500; padding:8px 20px; display:block;">Add another clinic</a>
+    {% if user.staff_profile.is_doctor %}<a href="/accounts/add-clinic/" style="font-size:13px; color:#2563EB; font-weight:500; padding:8px 20px; display:block;">Add another clinic</a>{% endif %}
     <div style="border-bottom:1px solid #F3F4F6; margin:4px 0 8px 0;"></div>
     {% endif %}
     {% if user.staff_profile.can_register_patients %}
@@ -227,5 +236,196 @@
     }
   });
   </script>
+
+  {% if user.is_authenticated and user.staff_profile %}
+  {% if user.staff_profile.is_doctor or user.staff_profile.is_admin %}
+  <script>
+  // ── Approval badge refresh (supervisor only) ───────────────────────────────
+  (function() {
+    function refreshBadge() {
+      fetch('/accounts/supervised/api/count/')
+        .then(r => r.json())
+        .then(data => {
+          const badge = document.getElementById('approval-badge');
+          if (!badge) return;
+          if (data.count > 0) {
+            badge.textContent = data.count;
+            badge.style.display = 'inline-flex';
+          } else {
+            badge.style.display = 'none';
+          }
+        }).catch(() => {});
+    }
+    refreshBadge();
+    setInterval(refreshBadge, 30000);
+  })();
+  </script>
+  {% endif %}
+
+  <script>
+  // ── Shared supervisedRequest() — staff waiting overlay ────────────────────
+  // Call this instead of directly performing a sensitive action.
+  // Options: { actionType, actionPayload, description, patientName, amount, reference, staffNote, detailItems }
+  window.supervisedRequest = async function(opts) {
+    const CSRF = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+
+    // 1. Create the request
+    let requestId;
+    try {
+      const resp = await fetch('/accounts/supervised/api/request/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({
+          action_type:    opts.actionType,
+          action_payload: opts.actionPayload || {},
+          description:    opts.description || '',
+          patient_name:   opts.patientName || '',
+          amount:         opts.amount || null,
+          reference:      opts.reference || '',
+          staff_note:     opts.staffNote || '',
+          detail_items:   opts.detailItems || [],
+        }),
+      });
+      const data = await resp.json();
+      if (!data.ok) { alert('Could not submit request: ' + data.error); return; }
+      requestId = data.request_id;
+    } catch (e) {
+      alert('Network error. Please check your connection and try again.');
+      return;
+    }
+
+    // 2. Show waiting overlay
+    showWaitingOverlay(requestId, opts);
+
+    // 3. Poll for status
+    pollStatus(requestId, opts);
+  };
+
+  function showWaitingOverlay(requestId, opts) {
+    removeOverlay();
+    const overlay = document.createElement('div');
+    overlay.id = 'supervised-overlay';
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:9999',
+      'background:rgba(0,0,0,0.6)', 'display:flex',
+      'align-items:center', 'justify-content:center', 'padding:20px'
+    ].join(';');
+    overlay.innerHTML = `
+      <div style="background:#fff; border-radius:16px; padding:28px 32px; max-width:420px; width:100%; box-shadow:0 24px 60px rgba(0,0,0,.3); text-align:center; position:relative;">
+        <button onclick="removeOverlay()" title="Dismiss — request stays pending"
+          style="position:absolute; top:12px; right:14px; background:none; border:none; font-size:18px; color:#9CA3AF; cursor:pointer; line-height:1;">✕</button>
+        <div id="sv-icon" style="font-size:36px; margin-bottom:12px;">⏳</div>
+        <div id="sv-title" style="font-size:17px; font-weight:700; color:#111827; margin-bottom:8px;">Waiting for approval</div>
+        <div id="sv-body" style="font-size:14px; color:#374151; line-height:1.6; margin-bottom:20px;">
+          <strong>${esc(opts.description)}</strong>
+          ${opts.patientName ? `<br>${esc(opts.patientName)}` : ''}
+          ${opts.amount ? `<br>Amount: ₹${parseFloat(opts.amount).toFixed(2)}` : ''}
+          <br><br>
+          <span style="color:#6B7280; font-size:13px;">
+            Ask the doctor or admin to open <strong>Approvals</strong> on their screen and approve this request.
+          </span>
+        </div>
+        <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+          <button onclick="removeOverlay()"
+            style="background:#F3F4F6; color:#374151; border:none; border-radius:8px; padding:8px 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">
+            Dismiss
+          </button>
+          <button onclick="cancelRequest('${requestId}')"
+            style="background:#FEF2F2; color:#DC2626; border:1.5px solid #FECACA; border-radius:8px; padding:8px 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">
+            Cancel Request
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+
+  function setOverlayState(state, msg, subMsg, redirectUrl) {
+    const icon  = document.getElementById('sv-icon');
+    const title = document.getElementById('sv-title');
+    const body  = document.getElementById('sv-body');
+    if (!icon) return;
+
+    if (state === 'approved') {
+      icon.textContent  = '✅';
+      title.textContent = 'Approved!';
+      body.innerHTML    = 'Action approved. Redirecting…';
+      // hide cancel button
+      const btn = document.querySelector('#supervised-overlay button');
+      if (btn) btn.style.display = 'none';
+      setTimeout(() => { window.location.href = redirectUrl || '/'; }, 1200);
+
+    } else if (state === 'denied') {
+      icon.textContent  = '✗';
+      icon.style.color  = '#DC2626';
+      title.textContent = 'Request Denied';
+      body.innerHTML    = msg ? `Reason: <em>${esc(msg)}</em>` : 'The doctor or admin denied this request.';
+      replaceButtonWithClose();
+
+    } else if (state === 'failed') {
+      icon.textContent  = '⚠️';
+      title.textContent = 'Action Failed';
+      body.innerHTML    = `Approved, but the action could not complete:<br><em style="color:#DC2626;">${esc(msg)}</em>`;
+      replaceButtonWithClose();
+    }
+  }
+
+  function replaceButtonWithClose() {
+    const btn = document.querySelector('#supervised-overlay button');
+    if (btn) {
+      btn.textContent = 'Close';
+      btn.style.cssText = 'background:#F3F4F6; color:#374151; border:none; border-radius:8px; padding:8px 20px; font-size:13px; cursor:pointer; font-family:inherit;';
+      btn.onclick = removeOverlay;
+    }
+  }
+
+  function removeOverlay() {
+    const el = document.getElementById('supervised-overlay');
+    if (el) el.remove();
+  }
+
+  let pollTimer = null;
+  function pollStatus(requestId, opts) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(async function doPoll() {
+      try {
+        const resp = await fetch(`/accounts/supervised/api/poll/${requestId}/`);
+        const data = await resp.json();
+        if (data.status === 'pending') {
+          pollTimer = setTimeout(doPoll, 3000);
+        } else if (data.status === 'approved') {
+          setOverlayState('approved', '', '', data.redirect);
+        } else if (data.status === 'denied') {
+          setOverlayState('denied', data.denial_reason);
+        } else if (data.status === 'failed') {
+          setOverlayState('failed', data.failure_detail);
+        } else if (data.status === 'cancelled') {
+          removeOverlay();
+        } else {
+          // expired or any unknown state — just close the overlay
+          removeOverlay();
+        }
+      } catch (e) {
+        // Network blip — retry in 5s
+        pollTimer = setTimeout(doPoll, 5000);
+      }
+    }, 3000);
+  }
+
+  window.cancelRequest = async function(requestId) {
+    const CSRF = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+    clearTimeout(pollTimer);
+    try {
+      await fetch(`/accounts/supervised/api/cancel/${requestId}/`, {
+        method: 'POST', headers: { 'X-CSRFToken': CSRF }
+      });
+    } catch (e) {}
+    removeOverlay();
+  };
+
+  function esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  </script>
+  {% endif %}
 </body>
 </html>

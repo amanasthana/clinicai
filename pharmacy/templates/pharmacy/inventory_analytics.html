@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+{% block title %}Inventory Analytics — {{ clinic.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Tooltip system ──────────────────────────────────────────── */
+.tip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: rgba(107,114,128,.12); color: #9CA3AF;
+  font-size: 9px; font-weight: 800;
+  cursor: help; position: relative; vertical-align: middle;
+  margin-left: 5px; flex-shrink: 0;
+  border: 1px solid rgba(107,114,128,.18);
+  transition: background .15s, color .15s;
+}
+.tip:hover, .tip.open { background: #374151; color: #fff; border-color: #374151; }
+.tip::after {
+  content: attr(data-tip);
+  display: none; position: absolute;
+  bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+  width: 220px;
+  background: #1F2937; color: #F3F4F6;
+  font-size: 11px; font-weight: 400; line-height: 1.5;
+  padding: 8px 11px; border-radius: 8px;
+  z-index: 10001; pointer-events: none;
+  white-space: normal; text-align: left;
+  text-transform: none; letter-spacing: 0;
+  box-shadow: 0 6px 20px rgba(0,0,0,.28);
+}
+.tip::before {
+  content: ''; display: none;
+  position: absolute; bottom: calc(100% + 2px);
+  left: 50%; transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: #1F2937;
+  z-index: 10001;
+}
+.tip:hover::after, .tip:hover::before,
+.tip.open::after, .tip.open::before { display: block; }
+.tip-r::after { left: auto; right: -4px; transform: none; }
+.tip-r::before { left: auto; right: 2px; transform: none; }
+
+/* ── Summary cards ───────────────────────────────────────────── */
+.ia-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+@media (max-width: 700px) { .ia-cards { grid-template-columns: 1fr 1fr; } }
+
+.ia-card {
+  background: #fff; border: 1.5px solid #E5E7EB; border-radius: 12px;
+  padding: 14px 18px;
+}
+.ia-card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6B7280; margin-bottom: 4px; display: flex; align-items: center; }
+.ia-card-value { font-size: 22px; font-weight: 800; color: #111827; line-height: 1.2; }
+.ia-card-sub   { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
+.ia-card.blue  { border-color: #BFDBFE; background: #EFF6FF; }
+.ia-card.blue .ia-card-value { color: #1E40AF; }
+.ia-card.green { border-color: #A7F3D0; background: #F0FDF4; }
+.ia-card.green .ia-card-value { color: #065F46; }
+.ia-card.amber { border-color: #FDE68A; background: #FFFBEB; }
+.ia-card.amber .ia-card-value { color: #92400E; }
+
+/* ── Two-column layout ───────────────────────────────────────── */
+.ia-body {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .ia-body { grid-template-columns: 1fr; }
+  .ia-pl-card { position: static !important; }
+}
+
+/* ── Inventory cost table ────────────────────────────────────── */
+.ia-table-wrap {
+  background: #fff; border: 1.5px solid #E5E7EB; border-radius: 12px;
+  overflow: hidden;
+}
+.ia-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ia-table th {
+  background: #F9FAFB; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: #6B7280; padding: 10px 14px;
+  border-bottom: 1.5px solid #E5E7EB; white-space: nowrap; text-align: right;
+}
+.ia-table th:first-child { text-align: left; }
+.ia-table td { padding: 11px 14px; border-bottom: 1px solid #F3F4F6; vertical-align: middle; text-align: right; }
+.ia-table td:first-child { text-align: left; }
+.ia-table tr:last-child td { border-bottom: none; }
+.ia-table tr:hover td { background: #F9FAFB; }
+.ia-table tfoot td { background: #F9FAFB; font-weight: 700; border-top: 1.5px solid #E5E7EB; }
+
+/* Hide desktop-only columns on mobile */
+@media (max-width: 600px) { .ia-col-desktop { display: none; } }
+
+/* Margin badge */
+.margin-badge {
+  display: inline-block; font-size: 11px; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px; white-space: nowrap;
+}
+.margin-hi  { background: #D1FAE5; color: #065F46; }
+.margin-mid { background: #FEF3C7; color: #92400E; }
+.margin-lo  { background: #FECACA; color: #991B1B; }
+
+/* ── P&L card (right column, sticky on desktop) ──────────────── */
+.ia-pl-card {
+  background: #fff; border: 1.5px solid #E5E7EB; border-radius: 14px;
+  padding: 20px; position: sticky; top: 16px;
+}
+.ia-pl-title { font-size: 14px; font-weight: 800; color: #111827; margin-bottom: 4px; display: flex; align-items: center; }
+.ia-pl-sub   { font-size: 12px; color: #6B7280; margin-bottom: 16px; }
+
+/* Period tabs */
+.ia-period-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+.ia-period-tab {
+  padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  border: 1.5px solid #E5E7EB; background: #F9FAFB; color: #374151;
+  text-decoration: none; transition: all .15s;
+}
+.ia-period-tab.active { background: #111827; color: #fff; border-color: #111827; }
+
+/* P&L rows */
+.ia-pl-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 0; border-bottom: 1px solid #F3F4F6; font-size: 13px;
+}
+.ia-pl-row:last-child { border-bottom: none; }
+.ia-pl-row-label { color: #6B7280; font-weight: 500; display: flex; align-items: center; }
+.ia-pl-row-value { font-weight: 700; color: #111827; }
+.ia-pl-row.highlight { padding: 12px 14px; margin: 10px -14px 0; border-radius: 10px; border: none; }
+.ia-pl-row.profit   { background: #F0FDF4; }
+.ia-pl-row.profit .ia-pl-row-label { color: #065F46; font-weight: 700; }
+.ia-pl-row.profit .ia-pl-row-value { color: #065F46; font-size: 15px; }
+.ia-pl-row.loss     { background: #FFF5F5; }
+.ia-pl-row.loss .ia-pl-row-label { color: #991B1B; font-weight: 700; }
+.ia-pl-row.loss .ia-pl-row-value { color: #991B1B; font-size: 15px; }
+.ia-pl-divider { border: none; border-top: 1.5px dashed #E5E7EB; margin: 10px 0; }
+
+/* Expiry loss warning */
+.ia-expiry-warn {
+  margin-top: 14px; padding: 10px 12px;
+  background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px;
+  font-size: 12px; color: #92400E; line-height: 1.5;
+}
+
+/* Formula note */
+.ia-formula {
+  margin-top: 12px; padding: 10px 12px;
+  background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px;
+  font-size: 11px; color: #6B7280; line-height: 1.7;
+}
+.ia-formula code {
+  background: #E5E7EB; color: #374151; padding: 1px 5px;
+  border-radius: 4px; font-size: 10px; font-family: monospace;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:1080px;">
+
+  <!-- Page header -->
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+    <div>
+      <h1 class="page-title" style="margin:0;">Inventory Analytics</h1>
+      <p class="page-subtitle" style="margin:4px 0 0;">Cost analysis &amp; P&amp;L · {{ clinic.name }} · {{ today|date:"d F Y" }}</p>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a href="{% url 'pharmacy:inventory_report' %}" class="btn btn-secondary btn-sm">Inventory Report</a>
+      <a href="{% url 'pharmacy:ledger' %}" class="btn btn-secondary btn-sm">Ledger</a>
+      <a href="{% url 'pharmacy:dashboard' %}" class="btn btn-secondary btn-sm">← Pharmacy</a>
+    </div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="ia-cards">
+    <div class="ia-card green">
+      <div class="ia-card-label">
+        Total Cost Value
+        <span class="tip" data-tip="Formula: Σ (purchase_price × (1 + GST%) × qty). If no purchase price recorded, MRP is used as fallback cost.">ⓘ</span>
+      </div>
+      <div class="ia-card-value">₹{{ total_cost_value|floatformat:0 }}</div>
+      <div class="ia-card-sub">Purchase cost of current stock</div>
+    </div>
+    <div class="ia-card blue">
+      <div class="ia-card-label">
+        Total MRP Value
+        <span class="tip" data-tip="Formula: Σ (unit_price × qty) across all batches in current stock.">ⓘ</span>
+      </div>
+      <div class="ia-card-value">₹{{ total_mrp_value|floatformat:0 }}</div>
+      <div class="ia-card-sub">Retail value of current stock</div>
+    </div>
+    <div class="ia-card {% if overall_margin >= 20 %}green{% elif overall_margin >= 10 %}amber{% else %}ia-card{% endif %}">
+      <div class="ia-card-label">
+        Blended Margin
+        <span class="tip" data-tip="Formula: (Total MRP − Total Cost) ÷ Total MRP × 100%. Weighted average across all stocked medicines.">ⓘ</span>
+      </div>
+      <div class="ia-card-value">{{ overall_margin|floatformat:1 }}%</div>
+      <div class="ia-card-sub">Across all stocked medicines</div>
+    </div>
+    <div class="ia-card">
+      <div class="ia-card-label">
+        SKUs in Stock
+        <span class="tip" data-tip="Number of distinct medicine items with at least 1 unit in stock. Out-of-stock items are excluded from this report.">ⓘ</span>
+      </div>
+      <div class="ia-card-value">{{ inv_rows|length }}</div>
+      <div class="ia-card-sub">{{ total_stock_units }} total units</div>
+    </div>
+  </div>
+
+  <!-- Body: table + P&L -->
+  <div class="ia-body">
+
+    <!-- Left: per-item cost table -->
+    <div class="ia-table-wrap">
+      <div style="padding:14px 16px 10px; border-bottom:1.5px solid #E5E7EB;">
+        <div style="font-size:14px; font-weight:700; color:#111827;">Cost Breakdown by Medicine</div>
+        <div style="font-size:12px; color:#9CA3AF; margin-top:2px;">Sorted by total cost value · in-stock items only</div>
+      </div>
+      {% if inv_rows %}
+      <table class="ia-table">
+        <thead>
+          <tr>
+            <th>Medicine</th>
+            <th>
+              Stock
+              <span class="tip" data-tip="Total units across all batches (including near-expiry but not expired).">ⓘ</span>
+            </th>
+            <th class="ia-col-desktop">
+              Unit Cost
+              <span class="tip" data-tip="Weighted avg purchase cost per unit (incl. GST). Falls back to MRP if cost not recorded.">ⓘ</span>
+            </th>
+            <th class="ia-col-desktop">Unit MRP</th>
+            <th>
+              Total Cost
+              <span class="tip" data-tip="Unit Cost × Stock quantity. This is the capital tied up in this medicine.">ⓘ</span>
+            </th>
+            <th class="ia-col-desktop">Total MRP</th>
+            <th>
+              Margin
+              <span class="tip tip-r" data-tip="(Unit MRP − Unit Cost) ÷ Unit MRP × 100%. Green ≥ 20%, Amber ≥ 5%, Red &lt; 5%.">ⓘ</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in inv_rows %}
+          <tr>
+            <td>
+              <div style="font-weight:600; color:#111827; font-size:13px;">{{ row.item.display_name }}</div>
+              {% if row.item.display_generic %}
+              <div style="font-size:11px; color:#9CA3AF;">{{ row.item.display_generic }}</div>
+              {% endif %}
+            </td>
+            <td style="color:#374151;">{{ row.qty }}</td>
+            <td class="ia-col-desktop" style="color:#6B7280; font-size:12px;">₹{{ row.avg_unit_cost|floatformat:2 }}</td>
+            <td class="ia-col-desktop" style="color:#6B7280; font-size:12px;">₹{{ row.avg_unit_mrp|floatformat:2 }}</td>
+            <td style="font-weight:600; color:#111827;">₹{{ row.total_cost|floatformat:0 }}</td>
+            <td class="ia-col-desktop" style="color:#6B7280;">₹{{ row.total_mrp|floatformat:0 }}</td>
+            <td>
+              {% if row.margin_pct >= 20 %}
+                <span class="margin-badge margin-hi">{{ row.margin_pct|floatformat:1 }}%</span>
+              {% elif row.margin_pct >= 5 %}
+                <span class="margin-badge margin-mid">{{ row.margin_pct|floatformat:1 }}%</span>
+              {% else %}
+                <span class="margin-badge margin-lo">{{ row.margin_pct|floatformat:1 }}%</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style="text-align:left; color:#374151;">Total ({{ inv_rows|length }} medicines)</td>
+            <td>{{ total_stock_units }}</td>
+            <td class="ia-col-desktop"></td>
+            <td class="ia-col-desktop"></td>
+            <td style="color:#065F46;">₹{{ total_cost_value|floatformat:0 }}</td>
+            <td class="ia-col-desktop" style="color:#1E40AF;">₹{{ total_mrp_value|floatformat:0 }}</td>
+            <td>
+              <span class="margin-badge {% if overall_margin >= 20 %}margin-hi{% elif overall_margin >= 5 %}margin-mid{% else %}margin-lo{% endif %}">
+                {{ overall_margin|floatformat:1 }}%
+              </span>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <!-- Formula note under table -->
+      <div class="ia-formula" style="margin:12px 14px 14px;">
+        <strong>How margins are calculated:</strong><br>
+        <code>Unit Cost</code> = purchase price × (1 + GST%) · falls back to MRP if no purchase price recorded.<br>
+        <code>Margin %</code> = (MRP − Cost) ÷ MRP × 100 · weighted by stock quantity across all batches.
+      </div>
+
+      {% else %}
+      <div style="text-align:center; padding:40px 20px; color:#9CA3AF;">
+        <div style="font-size:15px; font-weight:600; color:#374151; margin-bottom:6px;">No stock in inventory</div>
+        <div style="font-size:13px;">Add medicines to see cost analysis.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Right: P&L statement -->
+    <div class="ia-pl-card">
+      <div class="ia-pl-title">
+        P&amp;L Statement
+        <span class="tip" data-tip="Profit = Revenue from sales minus what you paid to purchase stock and refund on returns, for the selected period.">ⓘ</span>
+      </div>
+      <div class="ia-pl-sub">Purchase cost vs revenue for the selected period</div>
+
+      <!-- Period tabs -->
+      <div class="ia-period-tabs">
+        {% for val, label in range_choices %}
+        <a href="?range={{ val }}" class="ia-period-tab {% if days == val %}active{% endif %}">{{ label }}</a>
+        {% endfor %}
+      </div>
+      <div style="font-size:11px; color:#9CA3AF; margin-bottom:14px;">{{ since|date:"d M Y" }} – {{ today|date:"d M Y" }}</div>
+
+      <div class="ia-pl-row">
+        <span class="ia-pl-row-label">
+          Revenue (Sales)
+          <span class="tip" data-tip="Sum of final_amount on all pharmacy bills in this period. Includes any discounts already applied.">ⓘ</span>
+        </span>
+        <span class="ia-pl-row-value" style="color:#065F46;">₹{{ sales_total|floatformat:0 }}</span>
+      </div>
+      <hr class="ia-pl-divider">
+      <div class="ia-pl-row">
+        <span class="ia-pl-row-label">
+          Purchases (Cost)
+          <span class="tip" data-tip="Cost of stock received in this period: purchase_price × (1 + GST%) × qty. Uses MRP as fallback if no cost recorded.">ⓘ</span>
+        </span>
+        <span class="ia-pl-row-value" style="color:#DC2626;">−₹{{ purchase_total|floatformat:0 }}</span>
+      </div>
+      <div class="ia-pl-row">
+        <span class="ia-pl-row-label">
+          Returns Issued
+          <span class="tip" data-tip="Total value refunded to patients: quantity_returned × unit_price for returns processed in this period.">ⓘ</span>
+        </span>
+        <span class="ia-pl-row-value" style="color:#D97706;">−₹{{ returns_total|floatformat:0 }}</span>
+      </div>
+      <hr class="ia-pl-divider">
+      <div class="ia-pl-row highlight {% if net >= 0 %}profit{% else %}loss{% endif %}">
+        <span class="ia-pl-row-label">
+          {% if net >= 0 %}Net Surplus{% else %}Net Deficit{% endif %}
+          <span class="tip" data-tip="Formula: Revenue − Purchases − Returns. A surplus means sales exceeded stock cost in this period.">ⓘ</span>
+        </span>
+        <span class="ia-pl-row-value">{% if net >= 0 %}₹{{ net|floatformat:0 }}{% else %}−₹{{ net|floatformat:0 }}{% endif %}</span>
+      </div>
+
+      {% if expiry_loss_total > 0 %}
+      <div class="ia-expiry-warn">
+        <strong>⚠ Expiry Exposure:</strong> ₹{{ expiry_loss_total|floatformat:0 }} of stock is expired and unsellable.
+        <a href="{% url 'pharmacy:inventory_report' %}" style="color:#92400E; font-weight:600;">View report →</a>
+      </div>
+      {% endif %}
+
+      <!-- P&L formula note -->
+      <div class="ia-formula">
+        <code>Net</code> = Revenue − Purchases − Returns<br>
+        Based on purchase cost at time of entry; MRP used as fallback if cost not recorded.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Touch: tap .tip to toggle
+document.addEventListener('click', function(e) {
+  const tip = e.target.closest('.tip');
+  if (tip) { e.stopPropagation(); tip.classList.toggle('open'); return; }
+  document.querySelectorAll('.tip.open').forEach(t => t.classList.remove('open'));
+});
+</script>
+{% endblock %}

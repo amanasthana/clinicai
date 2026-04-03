@@ -141,15 +141,29 @@
        title="Patient returned some medicines? Use this to enter returned quantities and restore inventory.">
       ↩ Return Medicines
     </a>
-    <form method="post" action="/pharmacy/bill/{{ bill.pk }}/edit/"
-          onsubmit="return confirm('This will reverse the ENTIRE bill and restore all stock. Use this only if you need to re-do the bill from scratch.\n\nFor partial returns (1–2 medicines), use the Return Medicines button instead.\n\nContinue with full reversal?');"
-          style="margin:0; display:inline;">
-      {% csrf_token %}
-      <button type="submit" class="tb-btn" style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;"
-              title="Reverses the entire bill. Stock is restored. Use this to fix a billing mistake — you can re-dispense after.">
-        Edit / Re-dispense
-      </button>
-    </form>
+    <button type="button" class="tb-btn" onclick="requestBillReversal()"
+            style="background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;"
+            title="Reverses the entire bill and restores stock — supervisor approval required.">
+      Edit / Re-dispense
+    </button>
+    <script>
+    function requestBillReversal() {
+      if (!confirm('This will reverse the ENTIRE bill and restore all stock.\n\nA supervisor (doctor or admin) must approve this action.\n\nContinue?')) return;
+      const detailItems = [
+        {% for item in dispensed_items %}'{{ item.pharmacy_item.display_name|escapejs }} × {{ item.quantity_dispensed }} @ ₹{{ item.unit_price }}',
+        {% endfor %}
+      ];
+      supervisedRequest({
+        actionType:    'bill_reversal',
+        actionPayload: { bill_id: {{ bill.pk }} },
+        description:   'Reverse Bill {{ bill.bill_number|escapejs }}',
+        patientName:   '{{ bill.visit.patient.full_name|escapejs }}',
+        amount:        {{ bill.final_amount }},
+        reference:     '{{ bill.bill_number|escapejs }}',
+        detailItems,
+      });
+    }
+    </script>
     <a href="/" class="tb-btn tb-back">Reception</a>
   </div>
 

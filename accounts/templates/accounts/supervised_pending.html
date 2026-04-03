@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}Approvals — ClinicAI{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Page layout */
+.ap-page { max-width: 1100px; margin: 0 auto; padding: 20px 20px 60px; }
+.ap-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+.ap-title { font-size: 20px; font-weight: 700; color: #111827; }
+.ap-subtitle { font-size: 13px; color: #6B7280; margin-top: 2px; }
+.ap-refresh-btn { background: none; border: 1px solid #E5E7EB; border-radius: 8px; padding: 6px 14px; font-size: 13px; color: #374151; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; }
+.ap-refresh-btn:hover { background: #F9FAFB; }
+
+/* Two-column grid on desktop */
+#ap-content .ap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 700px) {
+  #ap-content .ap-grid { grid-template-columns: 1fr; gap: 12px; }
+  .ap-page { padding: 16px 12px 60px; }
+}
+
+/* Group card */
+.ap-group { background: #fff; border: 1.5px solid #E5E7EB; border-radius: 14px; overflow: hidden; transition: border-color .2s; }
+.ap-group.has-items { border-color: #FCA5A5; }
+.ap-group-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; cursor: pointer; user-select: none; }
+.ap-group-head:hover { background: #F9FAFB; }
+.ap-group-icon { font-size: 16px; flex-shrink: 0; }
+.ap-group-label { font-size: 14px; font-weight: 600; color: #111827; flex: 1; }
+.ap-group-badge { background: #DC2626; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 20px; }
+.ap-group-chevron { font-size: 12px; color: #9CA3AF; transition: transform .2s; }
+.ap-group-chevron.open { transform: rotate(90deg); }
+
+/* Group bulk actions bar */
+.ap-bulk-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #F9FAFB; border-bottom: 1px solid #F3F4F6; flex-wrap: wrap; }
+.ap-bulk-label { font-size: 12px; color: #6B7280; flex: 1; }
+
+/* Individual item */
+.ap-item { padding: 12px 16px; border-bottom: 1px solid #F3F4F6; }
+.ap-item:last-child { border-bottom: none; }
+.ap-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ap-item-desc { font-size: 13px; font-weight: 600; color: #111827; }
+.ap-item-meta { font-size: 12px; color: #6B7280; margin-top: 3px; }
+.ap-item-note { font-size: 12px; color: #92400E; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 6px; padding: 4px 10px; margin-top: 8px; display: inline-block; }
+.ap-item-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-top: 2px; }
+
+/* Denial reason input */
+.ap-deny-row { display: none; margin-top: 10px; gap: 8px; }
+.ap-deny-row.open { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ap-deny-input { flex: 1; min-width: 160px; padding: 6px 10px; border: 1.5px solid #FCA5A5; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; }
+.ap-deny-input:focus { border-color: #DC2626; }
+
+/* Status badges on items */
+.ap-status-approved { color: #059669; font-size: 12px; font-weight: 600; }
+.ap-status-denied   { color: #DC2626; font-size: 12px; font-weight: 600; }
+.ap-status-failed   { color: #D97706; font-size: 12px; font-weight: 600; }
+
+/* Buttons */
+.btn-approve { background: #059669; color: #fff; border: none; border-radius: 8px; padding: 6px 13px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.btn-approve:hover { background: #047857; }
+.btn-deny    { background: #FEF2F2; color: #DC2626; border: 1.5px solid #FECACA; border-radius: 8px; padding: 5px 13px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.btn-deny:hover { background: #FEE2E2; }
+.btn-sm-secondary { background: #F3F4F6; color: #374151; border: none; border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.btn-sm-secondary:hover { background: #E5E7EB; }
+
+/* Empty state */
+.ap-empty { text-align: center; padding: 56px 20px; }
+.ap-empty-icon { font-size: 40px; margin-bottom: 12px; }
+.ap-empty-title { font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.ap-empty-sub { font-size: 13px; color: #9CA3AF; }
+
+/* Loading state */
+.ap-loading { text-align: center; padding: 40px; color: #9CA3AF; font-size: 14px; }
+
+/* Log link */
+.ap-log-link { text-align: center; margin-top: 32px; font-size: 13px; color: #9CA3AF; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ap-page">
+
+  <div class="ap-header">
+    <div>
+      <div class="ap-title">Approvals</div>
+      <div class="ap-subtitle">Staff actions awaiting your approval. Auto-refreshes every 15 seconds.</div>
+    </div>
+    <button class="ap-refresh-btn" onclick="loadPending()">
+      <svg id="refresh-icon" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+
+  <div id="ap-content">
+    <div class="ap-loading">Loading approvals…</div>
+  </div>
+
+  <div class="ap-log-link">
+    <a href="/accounts/supervised/log/" style="color:#6B7280; text-decoration:none;">View 30-day audit log →</a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+
+// Track expanded groups
+const expandedGroups = new Set();
+// Track items that have been resolved in this session (for smooth disappear animation)
+const resolvedItems = new Set();
+
+let autoRefreshTimer = null;
+
+async function loadPending() {
+  const icon = document.getElementById('refresh-icon');
+  if (icon) icon.style.opacity = '0.4';
+  try {
+    const resp = await fetch('/accounts/supervised/api/pending/');
+    const data = await resp.json();
+    if (!data.ok) { renderError(data.error); return; }
+    renderGroups(data.groups, data.total);
+  } catch (e) {
+    renderError('Could not reach server. Check your connection.');
+  } finally {
+    if (icon) icon.style.opacity = '1';
+  }
+}
+
+function renderError(msg) {
+  document.getElementById('ap-content').innerHTML =
+    `<div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:12px; padding:16px 20px; color:#B91C1C; font-size:14px;">${msg}</div>`;
+}
+
+function renderGroups(groups, total) {
+  const container = document.getElementById('ap-content');
+  if (!groups.length) {
+    container.innerHTML = `
+      <div class="ap-empty">
+        <div class="ap-empty-icon">✅</div>
+        <div class="ap-empty-title">No pending approvals</div>
+        <div class="ap-empty-sub">When staff request bill reversals, medicine returns, or queue deletions, they will appear here.</div>
+      </div>`;
+    updateNavBadge(0);
+    return;
+  }
+  updateNavBadge(total);
+
+  container.innerHTML = `<div class="ap-grid">${groups.map(group => renderGroup(group)).join('')}</div>`;
+}
+
+function renderGroup(group) {
+  const isOpen = expandedGroups.has(group.action_type);
+  const allIds = group.items.map(i => `'${i.id}'`).join(',');
+
+  return `
+  <div class="ap-group has-items" id="grp-${group.action_type}">
+    <div class="ap-group-head" onclick="toggleGroup('${group.action_type}')">
+      <span class="ap-group-icon">${group.icon}</span>
+      <span class="ap-group-label">${group.label}</span>
+      <span class="ap-group-badge">${group.count}</span>
+      <span class="ap-group-chevron${isOpen ? ' open' : ''}" id="chev-${group.action_type}">▶</span>
+    </div>
+    ${!isOpen ? renderGroupSummary(group) : ''}
+    <div id="body-${group.action_type}" style="${isOpen ? '' : 'display:none'}">
+      <div class="ap-bulk-bar">
+        <span class="ap-bulk-label">${group.count} request${group.count > 1 ? 's' : ''}</span>
+        <button class="btn-approve" style="font-size:12px; padding:5px 12px;"
+          onclick="bulkResolve([${allIds}], 'approve', '${group.action_type}')">
+          ✓ Approve All ${group.count}
+        </button>
+        <button class="btn-deny" style="font-size:12px; padding:4px 12px;"
+          onclick="promptBulkDeny([${allIds}], '${group.action_type}')">
+          ✗ Deny All ${group.count}
+        </button>
+      </div>
+      ${group.items.map(item => renderItem(item)).join('')}
+    </div>
+  </div>`;
+}
+
+function renderGroupSummary(group) {
+  // Collapsed preview: show latest item info
+  const latest = group.items[0];
+  const extra = group.count > 1 ? ` <span style="color:#9CA3AF;">+ ${group.count - 1} more</span>` : '';
+  return `
+  <div style="padding:8px 18px 14px; font-size:13px; color:#6B7280; cursor:pointer;"
+       onclick="toggleGroup('${group.action_type}')">
+    ${escHtml(latest.description)}${latest.patient_name ? ` · ${escHtml(latest.patient_name)}` : ''}${latest.amount ? ` · ₹${parseFloat(latest.amount).toFixed(0)}` : ''} · ${latest.time_ago}${extra}
+  </div>`;
+}
+
+function renderItem(item) {
+  const detailHtml = item.detail_items && item.detail_items.length
+    ? `<div style="margin-top:8px; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:7px 12px;">
+        ${item.detail_items.map(d =>
+          `<div style="font-size:12px; color:#374151; line-height:1.7;">${escHtml(d)}</div>`
+        ).join('')}
+       </div>`
+    : '';
+  return `
+  <div class="ap-item" id="item-${item.id}">
+    <div class="ap-item-top">
+      <div style="flex:1; min-width:0;">
+        <div class="ap-item-desc">${escHtml(item.description)}</div>
+        <div class="ap-item-meta">
+          By <strong>${escHtml(item.requester_name)}</strong> · ${item.time_ago}
+          ${item.reference ? ` · ${escHtml(item.reference)}` : ''}
+          ${item.amount ? ` · <strong>₹${parseFloat(item.amount).toFixed(2)}</strong>` : ''}
+        </div>
+        ${detailHtml}
+        ${item.staff_note ? `<div class="ap-item-note" style="margin-top:8px;">📝 "${escHtml(item.staff_note)}"</div>` : ''}
+      </div>
+      <div class="ap-item-actions">
+        <button class="btn-approve" onclick="resolveOne('${item.id}', 'approve')">✓ Approve</button>
+        <button class="btn-deny"    onclick="showDenyInput('${item.id}')">✗ Deny</button>
+      </div>
+    </div>
+    <div class="ap-deny-row" id="deny-row-${item.id}">
+      <input class="ap-deny-input" id="deny-reason-${item.id}"
+             placeholder="Reason for denial (optional)" maxlength="300">
+      <button class="btn-deny" onclick="resolveOne('${item.id}', 'deny')">Confirm Deny</button>
+      <button class="btn-sm-secondary" onclick="hideDenyInput('${item.id}')">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function toggleGroup(actionType) {
+  const body  = document.getElementById('body-' + actionType);
+  const chev  = document.getElementById('chev-' + actionType);
+  const grp   = document.getElementById('grp-'  + actionType);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  if (isOpen) {
+    expandedGroups.delete(actionType);
+    body.style.display = 'none';
+    chev.classList.remove('open');
+  } else {
+    expandedGroups.add(actionType);
+    body.style.display = 'block';
+    chev.classList.add('open');
+    // Re-render group to remove summary row
+    loadPending();
+  }
+}
+
+function showDenyInput(id) {
+  document.getElementById('deny-row-' + id).classList.add('open');
+  document.getElementById('deny-reason-' + id).focus();
+}
+function hideDenyInput(id) {
+  document.getElementById('deny-row-' + id).classList.remove('open');
+}
+
+async function resolveOne(id, decision) {
+  const denialReason = decision === 'deny'
+    ? (document.getElementById('deny-reason-' + id)?.value || '')
+    : '';
+
+  setItemLoading(id, decision === 'approve' ? 'Approving…' : 'Denying…');
+
+  try {
+    const resp = await fetch(`/accounts/supervised/api/resolve/${id}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ decision, denial_reason: denialReason }),
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      setItemError(id, data.error);
+      return;
+    }
+    if (data.status === 'failed') {
+      setItemError(id, `Action failed: ${data.failure_detail || 'Unknown error'}`);
+      return;
+    }
+    resolvedItems.add(id);
+    animateRemoveItem(id, () => loadPending());
+  } catch (e) {
+    setItemError(id, 'Network error. Please try again.');
+  }
+}
+
+async function bulkResolve(ids, decision, actionType) {
+  // For bulk approve, proceed immediately
+  // For bulk deny, check if there's a reason in the deny input area (if open)
+  const label = decision === 'approve' ? 'Approving all…' : 'Denying all…';
+  const body  = document.getElementById('body-' + actionType);
+  if (body) body.style.opacity = '0.5';
+
+  try {
+    const resp = await fetch('/accounts/supervised/api/bulk-resolve/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ request_ids: ids, decision, denial_reason: '' }),
+    });
+    const data = await resp.json();
+    if (!data.ok) { alert(data.error); return; }
+    // Check for failures
+    const failed = (data.results || []).filter(r => r.status === 'failed');
+    if (failed.length) {
+      alert(`${failed.length} action(s) failed. Details:\n` +
+        failed.map(r => r.failure_detail || 'Unknown error').join('\n'));
+    }
+    loadPending();
+  } catch (e) {
+    alert('Network error. Please try again.');
+    if (body) body.style.opacity = '1';
+  }
+}
+
+function promptBulkDeny(ids, actionType) {
+  const reason = prompt('Reason for denying all requests in this group (optional):') ?? null;
+  if (reason === null) return;  // user cancelled the prompt
+  bulkResolveWithReason(ids, reason, actionType);
+}
+
+async function bulkResolveWithReason(ids, denial_reason, actionType) {
+  const body = document.getElementById('body-' + actionType);
+  if (body) body.style.opacity = '0.5';
+  try {
+    const resp = await fetch('/accounts/supervised/api/bulk-resolve/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ request_ids: ids, decision: 'deny', denial_reason }),
+    });
+    const data = await resp.json();
+    if (!data.ok) { alert(data.error); return; }
+    loadPending();
+  } catch (e) {
+    alert('Network error. Please try again.');
+    if (body) body.style.opacity = '1';
+  }
+}
+
+function setItemLoading(id, msg) {
+  const el = document.getElementById('item-' + id);
+  if (!el) return;
+  const actions = el.querySelector('.ap-item-actions');
+  if (actions) actions.innerHTML = `<span style="font-size:13px; color:#9CA3AF;">${msg}</span>`;
+  const denyRow = el.querySelector('.ap-deny-row');
+  if (denyRow) denyRow.classList.remove('open');
+}
+
+function setItemError(id, msg) {
+  const el = document.getElementById('item-' + id);
+  if (!el) return;
+  const actions = el.querySelector('.ap-item-actions');
+  if (actions) actions.innerHTML =
+    `<span style="font-size:12px; color:#DC2626;">${escHtml(msg)}</span>
+     <button class="btn-sm-secondary" onclick="loadPending()">Refresh</button>`;
+}
+
+function animateRemoveItem(id, callback) {
+  const el = document.getElementById('item-' + id);
+  if (!el) { callback(); return; }
+  el.style.transition = 'opacity .3s, max-height .3s';
+  el.style.overflow = 'hidden';
+  el.style.opacity = '0';
+  el.style.maxHeight = el.offsetHeight + 'px';
+  setTimeout(() => {
+    el.style.maxHeight = '0';
+    el.style.padding = '0';
+    el.style.margin = '0';
+  }, 50);
+  setTimeout(callback, 380);
+}
+
+function updateNavBadge(count) {
+  const badge = document.getElementById('approval-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Auto-refresh every 15 seconds
+function startAutoRefresh() {
+  clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(loadPending, 15000);
+}
+
+loadPending();
+startAutoRefresh();
+
+// Pause auto-refresh when tab is hidden
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) clearInterval(autoRefreshTimer);
+  else { loadPending(); startAutoRefresh(); }
+});
+</script>
+{% endblock %}

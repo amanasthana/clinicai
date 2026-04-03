@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Approval Audit Log — ClinicAI{% endblock %}
+
+{% block extra_head %}
+<style>
+.log-page { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+.log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.log-title { font-size: 20px; font-weight: 700; color: #111827; }
+.log-sub { font-size: 13px; color: #6B7280; margin-top: 2px; }
+
+/* Filters */
+.log-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.log-filters select { padding: 7px 10px; border: 1.5px solid #E5E7EB; border-radius: 8px; font-size: 13px; font-family: inherit; background: #fff; color: #374151; cursor: pointer; }
+.log-filters select:focus { outline: none; border-color: #6B7280; }
+.log-filter-btn { padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; font-family: inherit; border: none; background: #111827; color: #fff; cursor: pointer; }
+
+/* Log rows */
+.log-row { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; margin-bottom: 10px; padding: 14px 18px; }
+.log-row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.log-row-desc { font-size: 14px; font-weight: 600; color: #111827; }
+.log-row-meta { font-size: 12px; color: #6B7280; margin-top: 3px; line-height: 1.6; }
+.log-detail { margin-top: 8px; background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 6px; padding: 7px 12px; }
+.log-detail-line { font-size: 12px; color: #374151; line-height: 1.7; }
+.log-staff-note { font-size: 12px; color: #92400E; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 6px; padding: 4px 10px; margin-top: 6px; display: inline-block; }
+.log-denial { font-size: 12px; color: #DC2626; margin-top: 4px; }
+.log-failure { font-size: 12px; color: #D97706; margin-top: 4px; }
+
+/* Status badges */
+.badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.badge-approved  { background: #D1FAE5; color: #065F46; }
+.badge-denied    { background: #FEE2E2; color: #991B1B; }
+.badge-cancelled { background: #F3F4F6; color: #6B7280; }
+.badge-failed    { background: #FEF3C7; color: #92400E; }
+.badge-expired   { background: #F3F4F6; color: #9CA3AF; }
+
+/* Empty state */
+.log-empty { text-align: center; padding: 56px 20px; }
+.log-empty-icon { font-size: 40px; margin-bottom: 12px; }
+.log-empty-title { font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.log-empty-sub { font-size: 13px; color: #9CA3AF; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="log-page">
+
+  <div class="log-header">
+    <div>
+      <div class="log-title">Approval Audit Log</div>
+      <div class="log-sub">All supervised actions from the last 30 days · {{ clinic.name }}</div>
+    </div>
+    <a href="/accounts/supervised/" style="font-size:13px; color:#6B7280; text-decoration:none;">← Back to Approvals</a>
+  </div>
+
+  <!-- Filters -->
+  <form method="get" class="log-filters">
+    <select name="action_type">
+      <option value="">All action types</option>
+      {% for val, label in action_choices %}
+      <option value="{{ val }}"{% if current_action == val %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="status">
+      <option value="">All statuses</option>
+      {% for val, label in status_choices %}
+      {% if val != 'pending' %}
+      <option value="{{ val }}"{% if current_status == val %} selected{% endif %}>{{ label }}</option>
+      {% endif %}
+      {% endfor %}
+    </select>
+    <button type="submit" class="log-filter-btn">Filter</button>
+    {% if current_action or current_status %}
+    <a href="/accounts/supervised/log/" style="font-size:13px; color:#9CA3AF; align-self:center; text-decoration:none;">Clear</a>
+    {% endif %}
+  </form>
+
+  {% if requests %}
+  {% for req in requests %}
+  <div class="log-row">
+    <div class="log-row-top">
+      <div style="flex:1; min-width:0;">
+        <div class="log-row-desc">{{ req.description }}</div>
+        <div class="log-row-meta">
+          By <strong>{{ req.requester_name }}</strong>
+          {% if req.patient_name %} · {{ req.patient_name }}{% endif %}
+          {% if req.reference %} · {{ req.reference }}{% endif %}
+          {% if req.amount %} · <strong>₹{{ req.amount }}</strong>{% endif %}
+          <br>
+          {{ req.created_at|date:"d M Y, g:i A" }}
+          {% if req.resolved_by %} · Resolved by <strong>{{ req.resolver_display|default:req.resolved_by.username }}</strong>{% endif %}
+          {% if req.resolved_at %} at {{ req.resolved_at|date:"g:i A" }}{% endif %}
+        </div>
+        {% if req.action_payload.detail_lines %}
+        <div class="log-detail">
+          {% for line in req.action_payload.detail_lines %}
+          <div class="log-detail-line">{{ line }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if req.staff_note %}<div class="log-staff-note">📝 "{{ req.staff_note }}"</div>{% endif %}
+        {% if req.denial_reason %}<div class="log-denial">Denial reason: {{ req.denial_reason }}</div>{% endif %}
+        {% if req.failure_detail %}<div class="log-failure">Error: {{ req.failure_detail }}</div>{% endif %}
+      </div>
+      <div style="flex-shrink:0; text-align:right;">
+        <span class="badge badge-{{ req.status }}">{{ req.get_status_display }}</span>
+        <div style="font-size:11px; color:#9CA3AF; margin-top:4px;">{{ req.get_action_type_display }}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="log-empty">
+    <div class="log-empty-icon">🗂</div>
+    <div class="log-empty-title">No resolved actions found</div>
+    <div class="log-empty-sub">Approved, denied, and cancelled requests from the last 30 days will appear here.</div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

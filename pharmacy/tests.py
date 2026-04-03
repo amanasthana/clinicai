@@ -3241,3 +3241,525 @@ class ImportMedicinesViewTest(TestCase):
         self.client.login(username='singleclinic', password='testpass123')
         resp = self.client.get('/pharmacy/')
         self.assertNotContains(resp, 'Import Medicines')
+
+
+# ---------------------------------------------------------------------------
+# Inventory Analytics + Cost Visibility Tests
+# Tests for:
+#   1. Permission gates — staff cannot access inventory_analytics or ledger
+#   2. Inventory report — cost column hidden for staff, shown for doctor
+#   3. Inventory analytics — correct cost/P&L calculations
+#   4. Edge cases — zero cost, zero stock, all-expired inventory
+# ---------------------------------------------------------------------------
+
+def _make_pharmacist(clinic, username, password='pass12345'):
+    """Helper: create a pharmacist user with can_view_pharmacy but NOT can_view_analytics."""
+    u = User.objects.create_user(username=username, password=password)
+    sm = StaffMember.objects.create(
+        clinic=clinic, user=u, role='pharmacist', display_name='Pharmacist'
+    )
+    set_permissions_from_role(sm)
+    sm.save()
+    return u, sm
+
+
+def _make_item_with_batch(clinic, name='Paracetamol 500mg', unit_price=10, purchase_price=6,
+                          purchase_gst=0, quantity=100, expiry_days=365):
+    """Helper: create PharmacyItem + PharmacyBatch and return (item, batch)."""
+    item = PharmacyItem.objects.create(clinic=clinic, custom_name=name)
+    exp = today() + datetime.timedelta(days=expiry_days) if expiry_days > 0 else today() - datetime.timedelta(days=1)
+    batch = PharmacyBatch.objects.create(
+        item=item,
+        unit_price=unit_price,
+        purchase_price=purchase_price,
+        purchase_gst_percent=purchase_gst,
+        quantity=quantity,
+        expiry_date=exp,
+    )
+    return item, batch
+
+
+class InventoryReportCostVisibilityTest(TestCase):
+    """Staff sees MRP only; doctor/admin sees cost column."""
+
+    def setUp(self):
+        self.clinic, self.doctor_user, self.doctor_sm = make_clinic_and_user(
+            username='inv_doc1', clinic_name='Cost Visibility Clinic'
+        )
+        self.pharmacist_user, self.pharmacist_sm = _make_pharmacist(self.clinic, 'inv_pharm1')
+        _make_item_with_batch(self.clinic, name='Amoxicillin', unit_price=20, purchase_price=12, quantity=50)
+
+    def test_doctor_sees_cost_column(self):
+        c = Client()
+        c.login(username='inv_doc1', password='testpass123')
+        resp = c.get('/pharmacy/inventory-report/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.context['show_cost'])
+        self.assertContains(resp, 'Cost (₹)')
+
+    def test_pharmacist_does_not_see_cost_column(self):
+        c = Client()
+        c.login(username='inv_pharm1', password='pass12345')
+        resp = c.get('/pharmacy/inventory-report/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.context['show_cost'])
+        self.assertNotContains(resp, 'Cost (₹)')
+
+    def test_pharmacist_does_not_see_cost_value_card(self):
+        c = Client()
+        c.login(username='inv_pharm1', password='pass12345')
+        resp = c.get('/pharmacy/inventory-report/')
+        self.assertNotContains(resp, 'Cost Value')
+
+    def test_doctor_sees_cost_analytics_button(self):
+        c = Client()
+        c.login(username='inv_doc1', password='testpass123')
+        resp = c.get('/pharmacy/inventory-report/')
+        self.assertContains(resp, 'Cost Analytics')
+
+    def test_pharmacist_does_not_see_cost_analytics_button(self):
+        c = Client()
+        c.login(username='inv_pharm1', password='pass12345')
+        resp = c.get('/pharmacy/inventory-report/')
+        self.assertNotContains(resp, 'Cost Analytics')
+
+
+class InventoryAnalyticsPermissionTest(TestCase):
+    """Only can_view_analytics users can access inventory analytics and ledger."""
+
+    def setUp(self):
+        self.clinic, self.doctor_user, _ = make_clinic_and_user(
+            username='ia_doc', clinic_name='Perm Test Clinic'
+        )
+        self.pharmacist_user, _ = _make_pharmacist(self.clinic, 'ia_pharm')
+
+    def test_doctor_can_access_inventory_analytics(self):
+        c = Client()
+        c.login(username='ia_doc', password='testpass123')
+        resp = c.get('/pharmacy/inventory-analytics/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_pharmacist_cannot_access_inventory_analytics(self):
+        c = Client()
+        c.login(username='ia_pharm', password='pass12345')
+        resp = c.get('/pharmacy/inventory-analytics/')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_unauthenticated_cannot_access_inventory_analytics(self):
+        c = Client()
+        resp = c.get('/pharmacy/inventory-analytics/')
+        self.assertEqual(resp.status_code, 302)  # redirect to login
+
+    def test_doctor_can_access_ledger(self):
+        c = Client()
+        c.login(username='ia_doc', password='testpass123')
+        resp = c.get('/pharmacy/ledger/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_pharmacist_cannot_access_ledger_directly(self):
+        """Pharmacist should be blocked even if they know the URL."""
+        c = Client()
+        c.login(username='ia_pharm', password='pass12345')
+        resp = c.get('/pharmacy/ledger/')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_cost_analytics_button_shown_on_dashboard_for_doctor(self):
+        c = Client()
+        c.login(username='ia_doc', password='testpass123')
+        resp = c.get('/pharmacy/')
+        self.assertContains(resp, 'Cost Analytics')
+
+    def test_cost_analytics_button_hidden_on_dashboard_for_pharmacist(self):
+        c = Client()
+        c.login(username='ia_pharm', password='pass12345')
+        resp = c.get('/pharmacy/')
+        self.assertNotContains(resp, 'Cost Analytics')
+
+
+class InventoryAnalyticsDataTest(TestCase):
+    """Correct cost calculations on the inventory analytics page."""
+
+    def setUp(self):
+        self.clinic, self.doctor_user, _ = make_clinic_and_user(
+            username='ia_data_doc', clinic_name='Data Test Clinic'
+        )
+        self.client = Client()
+        self.client.login(username='ia_data_doc', password='testpass123')
+
+    def test_page_loads_with_no_stock(self):
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['inv_rows'], [])
+        self.assertEqual(resp.context['total_stock_units'], 0)
+
+    def test_total_cost_value_calculated_correctly(self):
+        """100 units @ purchase ₹6 = cost ₹600; MRP ₹10 × 100 = ₹1000."""
+        _make_item_with_batch(self.clinic, name='Drug A', unit_price=10,
+                              purchase_price=6, quantity=100)
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        self.assertEqual(resp.status_code, 200)
+        from decimal import Decimal
+        self.assertEqual(resp.context['total_cost_value'], Decimal('600.00'))
+        self.assertEqual(resp.context['total_mrp_value'], Decimal('1000.00'))
+
+    def test_margin_calculated_correctly(self):
+        """MRP=10, cost=6 → margin = (10-6)/10 * 100 = 40%."""
+        _make_item_with_batch(self.clinic, name='Drug B', unit_price=10,
+                              purchase_price=6, quantity=50)
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        row = resp.context['inv_rows'][0]
+        from decimal import Decimal
+        self.assertAlmostEqual(float(row['margin_pct']), 40.0, places=1)
+
+    def test_cost_falls_back_to_mrp_when_purchase_price_zero(self):
+        """If purchase_price=0, cost is computed from unit_price (MRP) as fallback."""
+        _make_item_with_batch(self.clinic, name='Drug C', unit_price=15,
+                              purchase_price=0, quantity=10)
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        row = resp.context['inv_rows'][0]
+        from decimal import Decimal
+        # cost == MRP when no purchase price recorded → margin = 0%
+        self.assertEqual(row['total_cost'], Decimal('150.00'))
+        self.assertAlmostEqual(float(row['margin_pct']), 0.0, places=1)
+
+    def test_gst_included_in_cost_calculation(self):
+        """purchase_price=10, GST=18%, qty=10 → cost = 10*1.18*10 = 118."""
+        _make_item_with_batch(self.clinic, name='Drug D', unit_price=20,
+                              purchase_price=10, purchase_gst=18, quantity=10)
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        row = resp.context['inv_rows'][0]
+        from decimal import Decimal
+        self.assertEqual(row['total_cost'], Decimal('118.00'))
+
+    def test_out_of_stock_items_excluded_from_analytics(self):
+        """Items with 0 stock are excluded from the cost breakdown."""
+        item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='Empty Drug')
+        PharmacyBatch.objects.create(
+            item=item, unit_price=10, purchase_price=6, quantity=0,
+            expiry_date=today() + datetime.timedelta(days=365),
+        )
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        names = [r['item'].display_name for r in resp.context['inv_rows']]
+        self.assertNotIn('Empty Drug', names)
+
+    def test_rows_sorted_by_total_cost_descending(self):
+        """Most expensive item (highest total cost) appears first."""
+        _make_item_with_batch(self.clinic, name='Cheap Drug', unit_price=5, purchase_price=2, quantity=10)   # cost=20
+        _make_item_with_batch(self.clinic, name='Expensive Drug', unit_price=50, purchase_price=30, quantity=100)  # cost=3000
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        rows = resp.context['inv_rows']
+        self.assertEqual(rows[0]['item'].display_name, 'Expensive Drug')
+        self.assertEqual(rows[1]['item'].display_name, 'Cheap Drug')
+
+    def test_period_range_param_accepted(self):
+        for r in (30, 90, 365):
+            resp = self.client.get(f'/pharmacy/inventory-analytics/?range={r}')
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.context['days'], r)
+
+    def test_invalid_range_defaults_to_30(self):
+        resp = self.client.get('/pharmacy/inventory-analytics/?range=999')
+        self.assertEqual(resp.context['days'], 30)
+
+    def test_expiry_loss_shows_only_expired_batches(self):
+        """Only truly expired batches (expiry_date < today) count as expiry loss."""
+        # Valid batch — should NOT count as expiry loss
+        _make_item_with_batch(self.clinic, name='Valid Drug', unit_price=10,
+                              purchase_price=8, quantity=20, expiry_days=30)
+        # Expired batch — SHOULD count
+        _make_item_with_batch(self.clinic, name='Expired Drug', unit_price=10,
+                              purchase_price=8, quantity=5, expiry_days=-1)
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        from decimal import Decimal
+        self.assertEqual(resp.context['expiry_loss_total'], Decimal('40.00'))  # 8 * 5
+
+    def test_multiple_batches_same_item_aggregated(self):
+        """Two batches of the same item are summed correctly."""
+        item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='Multi Drug')
+        PharmacyBatch.objects.create(item=item, unit_price=10, purchase_price=6,
+                                     quantity=50, expiry_date=today() + datetime.timedelta(days=200))
+        PharmacyBatch.objects.create(item=item, unit_price=12, purchase_price=7,
+                                     quantity=30, expiry_date=today() + datetime.timedelta(days=300))
+        resp = self.client.get('/pharmacy/inventory-analytics/')
+        row = resp.context['inv_rows'][0]
+        from decimal import Decimal
+        # total cost = 6*50 + 7*30 = 300 + 210 = 510
+        self.assertEqual(row['total_cost'], Decimal('510.00'))
+        self.assertEqual(row['qty'], 80)
+
+
+class InventoryAnalyticsIsolationTest(TestCase):
+    """Clinic isolation — doctor from clinic A cannot see clinic B data."""
+
+    def setUp(self):
+        self.clinic_a, self.user_a, _ = make_clinic_and_user(
+            username='doc_clinic_a', clinic_name='Clinic A'
+        )
+        self.clinic_b, _, _ = make_clinic_and_user(
+            username='doc_clinic_b', clinic_name='Clinic B'
+        )
+        # Add stock only to clinic B
+        _make_item_with_batch(self.clinic_b, name='Clinic B Drug', unit_price=20,
+                              purchase_price=15, quantity=100)
+
+    def test_doctor_a_sees_only_clinic_a_data(self):
+        c = Client()
+        c.login(username='doc_clinic_a', password='testpass123')
+        resp = c.get('/pharmacy/inventory-analytics/')
+        self.assertEqual(resp.status_code, 200)
+        # Clinic A has no stock — rows should be empty
+        self.assertEqual(resp.context['inv_rows'], [])
+        self.assertNotContains(resp, 'Clinic B Drug')
+
+
+# ---------------------------------------------------------------------------
+# Mathematical correctness tests for Inventory Analytics
+# ---------------------------------------------------------------------------
+
+class InventoryAnalyticsMathTest(TestCase):
+    """
+    Verify every calculation in inventory_analytics_view is mathematically correct.
+    Each test isolates one formula so failures pinpoint the exact broken calculation.
+    """
+
+    def setUp(self):
+        self.clinic, self.user, _ = make_clinic_and_user(
+            username='math_doc', clinic_name='Math Clinic'
+        )
+        self.client = Client()
+        self.client.login(username='math_doc', password='testpass123')
+        self.url = '/pharmacy/inventory-analytics/'
+
+    # ── 1. Margin: basic case ─────────────────────────────────────────────────
+    def test_margin_basic(self):
+        """cost=80, MRP=100, qty=1 → margin = (100-80)/100*100 = 20.0%"""
+        _make_item_with_batch(self.clinic, name='Drug A', unit_price=100,
+                              purchase_price=80, purchase_gst=0, quantity=1)
+        resp = self.client.get(self.url)
+        row = resp.context['inv_rows'][0]
+        self.assertAlmostEqual(float(row['margin_pct']), 20.0, places=1)
+
+    # ── 2. Margin: GST included in cost ──────────────────────────────────────
+    def test_margin_with_gst(self):
+        """
+        purchase_price=80, GST=18%, MRP=120, qty=1
+        effective_cost = 80 * 1.18 = 94.4
+        margin = (120 - 94.4) / 120 * 100 = 21.33%
+        """
+        _make_item_with_batch(self.clinic, name='GST Drug', unit_price=120,
+                              purchase_price=80, purchase_gst=18, quantity=1)
+        resp = self.client.get(self.url)
+        row = resp.context['inv_rows'][0]
+        expected_cost = 80 * 1.18
+        expected_margin = (120 - expected_cost) / 120 * 100
+        self.assertAlmostEqual(float(row['avg_unit_cost']), expected_cost, places=2)
+        self.assertAlmostEqual(float(row['margin_pct']), expected_margin, places=1)
+
+    # ── 3. Margin: fallback to MRP when no purchase price ────────────────────
+    def test_margin_fallback_when_no_purchase_price(self):
+        """purchase_price=0 → cost = MRP → margin = 0%"""
+        _make_item_with_batch(self.clinic, name='No Cost Drug', unit_price=50,
+                              purchase_price=0, purchase_gst=0, quantity=5)
+        resp = self.client.get(self.url)
+        row = resp.context['inv_rows'][0]
+        # Cost fallback = MRP = 50, margin = (50-50)/50*100 = 0
+        self.assertAlmostEqual(float(row['avg_unit_cost']), 50.0, places=2)
+        self.assertAlmostEqual(float(row['margin_pct']), 0.0, places=1)
+
+    # ── 4. Blended margin across two items ───────────────────────────────────
+    def test_blended_margin_two_items(self):
+        """
+        Item1: cost=80, MRP=100, qty=10 → total_cost=800, total_mrp=1000
+        Item2: cost=60, MRP=100, qty=5  → total_cost=300, total_mrp=500
+        Blended = (1500 - 1100) / 1500 * 100 = 26.67%
+        """
+        _make_item_with_batch(self.clinic, name='Item1', unit_price=100,
+                              purchase_price=80, purchase_gst=0, quantity=10)
+        _make_item_with_batch(self.clinic, name='Item2', unit_price=100,
+                              purchase_price=60, purchase_gst=0, quantity=5)
+        resp = self.client.get(self.url)
+        ctx = resp.context
+        self.assertAlmostEqual(float(ctx['total_mrp_value']), 1500.0, places=0)
+        self.assertAlmostEqual(float(ctx['total_cost_value']), 1100.0, places=0)
+        expected_blended = (1500 - 1100) / 1500 * 100
+        self.assertAlmostEqual(float(ctx['overall_margin']), expected_blended, places=1)
+
+    # ── 5. Total cost aggregation ─────────────────────────────────────────────
+    def test_total_cost_aggregation(self):
+        """
+        Item1: cost=50, qty=10 → 500
+        Item2: cost=30, qty=20 → 600
+        Total cost = 1100
+        """
+        _make_item_with_batch(self.clinic, name='Agg1', unit_price=60,
+                              purchase_price=50, purchase_gst=0, quantity=10)
+        _make_item_with_batch(self.clinic, name='Agg2', unit_price=40,
+                              purchase_price=30, purchase_gst=0, quantity=20)
+        resp = self.client.get(self.url)
+        self.assertAlmostEqual(float(resp.context['total_cost_value']), 1100.0, places=0)
+        self.assertAlmostEqual(float(resp.context['total_mrp_value']), 1400.0, places=0)
+
+    # ── 6. Multi-batch weighted avg cost ─────────────────────────────────────
+    def test_multi_batch_weighted_avg(self):
+        """
+        Batch1: cost=80, qty=4  → contribution = 320
+        Batch2: cost=100, qty=6 → contribution = 600
+        Total cost = 920, total qty = 10
+        avg_unit_cost = 92.0
+        """
+        item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='Multi Batch')
+        exp = today() + datetime.timedelta(days=365)
+        PharmacyBatch.objects.create(item=item, unit_price=110, purchase_price=80,
+                                     purchase_gst_percent=0, quantity=4, expiry_date=exp)
+        PharmacyBatch.objects.create(item=item, unit_price=110, purchase_price=100,
+                                     purchase_gst_percent=0, quantity=6, expiry_date=exp)
+        resp = self.client.get(self.url)
+        row = resp.context['inv_rows'][0]
+        self.assertAlmostEqual(float(row['avg_unit_cost']), 92.0, places=1)
+        self.assertEqual(row['qty'], 10)
+
+    # ── 7. Items sorted by total cost descending ─────────────────────────────
+    def test_sorted_by_total_cost_descending(self):
+        """Most capital-intensive medicine appears first."""
+        _make_item_with_batch(self.clinic, name='Cheap Drug', unit_price=10,
+                              purchase_price=5, purchase_gst=0, quantity=10)   # cost=50
+        _make_item_with_batch(self.clinic, name='Expensive Drug', unit_price=100,
+                              purchase_price=80, purchase_gst=0, quantity=100) # cost=8000
+        resp = self.client.get(self.url)
+        rows = resp.context['inv_rows']
+        self.assertEqual(rows[0]['item'].custom_name, 'Expensive Drug')
+        self.assertEqual(rows[1]['item'].custom_name, 'Cheap Drug')
+
+    # ── 8. Out-of-stock items excluded from table ─────────────────────────────
+    def test_out_of_stock_excluded(self):
+        """Items with qty=0 must not appear in inv_rows."""
+        _make_item_with_batch(self.clinic, name='Zero Stock', unit_price=10,
+                              purchase_price=5, purchase_gst=0, quantity=0)
+        _make_item_with_batch(self.clinic, name='Has Stock', unit_price=10,
+                              purchase_price=5, purchase_gst=0, quantity=5)
+        resp = self.client.get(self.url)
+        names = [r['item'].custom_name for r in resp.context['inv_rows']]
+        self.assertNotIn('Zero Stock', names)
+        self.assertIn('Has Stock', names)
+
+    # ── 9. P&L — basic net calculation ───────────────────────────────────────
+    def test_pl_net_equals_revenue_minus_purchases_minus_returns(self):
+        """Net = Revenue - Purchases - Returns"""
+        from pharmacy.models import PharmacyBill, DispensedItem
+        from reception.models import Patient, Visit
+
+        # Create a batch (purchase cost for the period); received_date = today by default
+        item, batch = _make_item_with_batch(
+            self.clinic, name='PL Drug', unit_price=100,
+            purchase_price=60, purchase_gst=0, quantity=50
+        )
+
+        # Create a patient + visit for the bill
+        patient = Patient.objects.create(
+            clinic=self.clinic, full_name='Test Patient',
+            phone='9000000099', age=30, gender='M',
+        )
+        visit = Visit.objects.create(
+            clinic=self.clinic, patient=patient, token_number=1, status='dispensed'
+        )
+
+        # Create a bill with final_amount=5000
+        bill = PharmacyBill.objects.create(
+            clinic=self.clinic, visit=visit,
+            bill_number=PharmacyBill.generate_bill_number(self.clinic.pk),
+            subtotal=5000, discount_amount=0, final_amount=5000,
+        )
+        # Create a return: 2 units at ₹100 = ₹200
+        # dispensed_at is auto_now_add — use update() to set it explicitly if needed
+        di = DispensedItem.objects.create(
+            visit=visit, pharmacy_item=item, batch=batch,
+            quantity_dispensed=10, quantity_returned=2,
+            unit_price=100,
+        )
+
+        resp = self.client.get(self.url + '?range=30')
+        ctx = resp.context
+        # purchase_total = 60 * 50 = 3000 (batch received today, within 30-day window)
+        self.assertAlmostEqual(float(ctx['purchase_total']), 3000.0, places=0)
+        # sales_total = 5000
+        self.assertAlmostEqual(float(ctx['sales_total']), 5000.0, places=0)
+        # returns_total = 2 * 100 = 200
+        self.assertAlmostEqual(float(ctx['returns_total']), 200.0, places=0)
+        # net = 5000 - 3000 - 200 = 1800
+        self.assertAlmostEqual(float(ctx['net']), 1800.0, places=0)
+
+    # ── 10. P&L — period filtering (outside period not counted) ──────────────
+    def test_pl_old_batch_excluded_from_period(self):
+        """A batch received 60 days ago should NOT appear in the 30-day P&L."""
+        item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='Old Stock')
+        # Create batch then backdate received_date via update() to bypass auto_now_add
+        batch = PharmacyBatch.objects.create(
+            item=item, unit_price=100, purchase_price=70,
+            purchase_gst_percent=0, quantity=20,
+            expiry_date=today() + datetime.timedelta(days=300),
+        )
+        old_date = today() - datetime.timedelta(days=60)
+        PharmacyBatch.objects.filter(pk=batch.pk).update(received_date=old_date)
+
+        resp = self.client.get(self.url + '?range=30')
+        # purchase_total should be 0 (batch outside 30-day window)
+        self.assertAlmostEqual(float(resp.context['purchase_total']), 0.0, places=0)
+
+    # ── 11. Expiry exposure calculation ──────────────────────────────────────
+    def test_expiry_loss_uses_purchase_cost(self):
+        """
+        Expired batch: purchase_price=40, MRP=60, qty=10
+        expiry_loss_total should = 40 * 10 = 400 (not MRP)
+        """
+        item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='Expired Drug')
+        PharmacyBatch.objects.create(
+            item=item, unit_price=60, purchase_price=40,
+            purchase_gst_percent=0, quantity=10,
+            expiry_date=today() - datetime.timedelta(days=1),  # expired yesterday
+        )
+        resp = self.client.get(self.url)
+        self.assertAlmostEqual(float(resp.context['expiry_loss_total']), 400.0, places=0)
+
+    # ── 12. GST included in purchase_total in P&L ────────────────────────────
+    def test_pl_purchase_total_includes_gst(self):
+        """
+        Batch: purchase_price=100, GST=18%, qty=10
+        purchase_total = 100 * 1.18 * 10 = 1180
+        """
+        item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='GST Batch')
+        PharmacyBatch.objects.create(
+            item=item, unit_price=130, purchase_price=100,
+            purchase_gst_percent=18, quantity=10,
+            expiry_date=today() + datetime.timedelta(days=365),
+        )
+        resp = self.client.get(self.url + '?range=30')
+        self.assertAlmostEqual(float(resp.context['purchase_total']), 1180.0, places=0)
+
+    # ── 13. Summary card values match table totals ────────────────────────────
+    def test_summary_cards_match_table_aggregates(self):
+        """total_cost_value and total_mrp_value in context must equal sum of row values."""
+        _make_item_with_batch(self.clinic, name='X', unit_price=100,
+                              purchase_price=70, purchase_gst=0, quantity=10)
+        _make_item_with_batch(self.clinic, name='Y', unit_price=50,
+                              purchase_price=30, purchase_gst=0, quantity=20)
+        resp = self.client.get(self.url)
+        ctx = resp.context
+        summed_cost = sum(float(r['total_cost']) for r in ctx['inv_rows'])
+        summed_mrp  = sum(float(r['total_mrp'])  for r in ctx['inv_rows'])
+        self.assertAlmostEqual(float(ctx['total_cost_value']), summed_cost, places=0)
+        self.assertAlmostEqual(float(ctx['total_mrp_value']),  summed_mrp,  places=0)
+
+    # ── 14. Margin badge thresholds ───────────────────────────────────────────
+    def test_margin_badge_high_at_20_percent(self):
+        """margin ≥ 20% → margin-hi badge in template."""
+        _make_item_with_batch(self.clinic, name='HiMargin', unit_price=100,
+                              purchase_price=78, purchase_gst=0, quantity=1)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, 'margin-hi')
+
+    def test_margin_badge_low_below_5_percent(self):
+        """margin < 5% → margin-lo badge in template."""
+        _make_item_with_batch(self.clinic, name='LoMargin', unit_price=100,
+                              purchase_price=97, purchase_gst=0, quantity=1)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, 'margin-lo')

@@ -274,11 +274,11 @@
         aria-label="Ask ClinicAI"
       >
 
-      <button id="help-clear-btn" class="help-icon-btn" title="Clear" aria-label="Clear" style="display:none; background:none; color:#9CA3AF;" onclick="helpClear()">
+      <button id="help-clear-btn" class="help-icon-btn" title="Clear and start a new question" aria-label="Clear" style="display:none; background:none; color:#9CA3AF;" onclick="helpClear()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
 
-      <button id="help-mic-btn" class="help-icon-btn" title="Ask by voice" tabindex="0" aria-label="Voice input">
+      <button id="help-mic-btn" class="help-icon-btn" title="Ask your question by voice" tabindex="0" aria-label="Voice input">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="9" y="2" width="6" height="12" rx="3"/>
           <path d="M5 10a7 7 0 0 0 14 0"/>
@@ -287,7 +287,7 @@
         </svg>
       </button>
 
-      <button id="help-send-btn" class="help-icon-btn" title="Send" tabindex="0" aria-label="Send question">
+      <button id="help-send-btn" class="help-icon-btn" title="Send your question to the assistant" tabindex="0" aria-label="Send question">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"/>
           <polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -333,22 +333,22 @@
     <!-- Today's stats — click to filter queue -->
     <div class="stat-cards">
       <div class="stat-card" id="filter-all" style="background: #fff; border: 1px solid var(--color-border);"
-           onclick="setFilter('all', this)" title="Show all today">
+           onclick="setFilter('all', this)" title="Show all patients registered today">
         <div style="font-size: 22px; font-weight: 700; color: #111827;">{{ stats.total }}</div>
         <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Total Today</div>
       </div>
       <div class="stat-card" id="filter-waiting" style="background: #F3F4F6;"
-           onclick="setFilter('waiting', this)" title="Show waiting only">
+           onclick="setFilter('waiting', this)" title="Show patients still waiting to be seen">
         <div style="font-size: 22px; font-weight: 700; color: #374151;">{{ stats.waiting }}</div>
         <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Waiting</div>
       </div>
       <div class="stat-card" id="filter-in_consultation" style="background: #EFF6FF;"
-           onclick="setFilter('in_consultation', this)" title="Show in consultation only">
+           onclick="setFilter('in_consultation', this)" title="Show patients currently with the doctor">
         <div style="font-size: 22px; font-weight: 700; color: #1D4ED8;">{{ stats.in_consult }}</div>
         <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">In Consult</div>
       </div>
       <div class="stat-card" id="filter-done" style="background: #ECFDF5;"
-           onclick="setFilter('done', this)" title="Show completed only">
+           onclick="setFilter('done', this)" title="Show patients whose consultation is complete">
         <div style="font-size: 22px; font-weight: 700; color: #065F46;">{{ stats.done }}</div>
         <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Done</div>
       </div>
@@ -372,7 +372,7 @@
           View Analytics →
         </a>
       </div>
-      <button onclick="dismissFeatureBanner()" style="background:none; border:none; cursor:pointer; font-size:18px; color:#9CA3AF; padding:0; line-height:1;" title="Dismiss">×</button>
+      <button onclick="dismissFeatureBanner()" style="background:none; border:none; cursor:pointer; font-size:18px; color:#9CA3AF; padding:0; line-height:1;" title="Dismiss this banner">×</button>
     </div>
   </div>
 
@@ -443,7 +443,7 @@
 <a href="/patient/new/"
    class="btn btn-primary btn-lg fab-walkin"
    style="position: fixed; bottom: 28px; right: 28px; z-index: 50; text-align:center;"
-   title="Add walk-in patient">
+   title="Register a new patient who's come in without an appointment">
   + Walk-in
 </a>
 
@@ -962,6 +962,7 @@ async function refreshQueue() {
     const resp = await fetch(url);
     const data = await resp.json();
     if (data.queue !== undefined) {
+      window._queueData = data.queue;
       renderQueue(data.queue, queueList);
     }
   } catch (e) {
@@ -986,9 +987,9 @@ function renderQueue(queue, container) {
       v.status === 'in_consultation' ? `<a href="/rx/consult/${v.id}/" class="btn btn-primary btn-sm">Prescribe</a>` : '',
       v.status === 'in_consultation' ? `<a href="/visit/${v.id}/collect-fee/" class="btn btn-sm" style="background:#EEF2FF;color:#4F46E5;border:1.5px solid #C7D2FE;font-weight:600;">₹ Fee</a>` : '',
       v.status === 'done' ? (v.fee_receipt_number ? `<a href="/visit/${v.id}/opd-receipt/" class="btn btn-sm" style="background:#ECFDF5;color:#065F46;border:1.5px solid #A7F3D0;font-weight:600;">✓ Receipt</a>` : `<a href="/visit/${v.id}/collect-fee/" class="btn btn-sm" style="background:#EEF2FF;color:#4F46E5;border:1.5px solid #C7D2FE;font-weight:600;">₹ Collect Fee</a>`) : '',
-      isActive ? `<button onclick="updateStatus('${v.id}','no_show')" class="btn btn-secondary btn-sm" style="color:#EF4444;" title="Patient did not show up">No Show</button>` : '',
-      isActive ? `<button onclick="openCancelModal('${v.id}','${v.name.replace(/'/g,"\\'")}') " class="btn btn-secondary btn-sm" style="color:#6B7280;" title="Cancel with reason">Cancel</button>` : '',
-      `<button onclick="openDeleteModal('${v.id}','${v.name.replace(/'/g,"\\'")}') " class="btn btn-secondary btn-sm" style="color:#EF4444; padding:5px 8px;" title="Remove this entry from the queue"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>`,
+      isActive ? `<button onclick="updateStatus('${v.id}','no_show')" class="btn btn-secondary btn-sm" style="color:#EF4444;" title="Mark as no-show — patient arrived but wasn't seen">No Show</button>` : '',
+      isActive ? `<button onclick="openCancelModal('${v.id}','${v.name.replace(/'/g,"\\'")}') " class="btn btn-secondary btn-sm" style="color:#6B7280;" title="Cancel this visit and record a reason">Cancel</button>` : '',
+      `<button onclick="openDeleteModal('${v.id}','${v.name.replace(/'/g,"\\'")}') " class="btn btn-secondary btn-sm" style="color:#EF4444; padding:5px 8px;" title="Permanently remove this entry from today's queue"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>`,
     ].join('');
     return `
       <div class="card queue-card" style="margin-bottom:10px; cursor:pointer;"
@@ -1065,17 +1066,23 @@ function closeDeleteModal() {
 
 async function submitDelete() {
   if (!_deleteVisitId) return;
-  try {
-    const resp = await fetch(`/api/visit/${_deleteVisitId}/delete/`, {
-      method: 'POST',
-      headers: { 'X-CSRFToken': getCsrfToken() },
-    });
-    const data = await resp.json();
-    if (data.ok) { closeDeleteModal(); refreshQueue(); }
-    else alert(data.error || 'Could not remove visit.');
-  } catch(e) {
-    alert('Network error. Please try again.');
-  }
+  const visitId    = _deleteVisitId;
+  const patientName = document.getElementById('delete-patient-name').textContent;
+  // find token from queue data
+  const visit = (window._queueData || []).find(v => v.id === visitId) || {};
+  closeDeleteModal();
+  const detailItems = [`Patient: ${patientName}`];
+  if (visit.token) detailItems.push(`Token: #${visit.token}`);
+  if (visit.chief_complaint) detailItems.push(`Complaint: ${visit.chief_complaint}`);
+  // Route through supervisor approval
+  supervisedRequest({
+    actionType:    'queue_delete',
+    actionPayload: { visit_id: visitId },
+    description:   `Remove ${patientName} from today's queue`,
+    patientName:   patientName,
+    reference:     visit.token ? `Token #${visit.token}` : '',
+    detailItems,
+  });
 }
 
 document.getElementById('delete-modal').addEventListener('click', function(e) {

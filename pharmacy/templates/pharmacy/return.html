@@ -73,7 +73,8 @@
     <div id="return-items">
       {% for item in dispensed_items %}
       <div class="return-row" style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #F3F4F6;"
-           data-di-id="{{ item.pk }}" data-max="{{ item.quantity_dispensed }}" data-unit-price="{{ item.unit_price }}">
+           data-di-id="{{ item.pk }}" data-max="{{ item.quantity_dispensed }}" data-unit-price="{{ item.unit_price }}"
+           data-name="{{ item.pharmacy_item.display_name|escapejs }}">
         <div style="flex:1; min-width:0;">
           <div style="font-size:14px; font-weight:600; color:#111827;">{{ item.pharmacy_item.display_name }}</div>
           <div style="font-size:12px; color:#6B7280; margin-top:2px;">
@@ -132,43 +133,29 @@ function updateReturnTotal() {
 
 async function submitReturn() {
   const returns = [];
+  const detailItems = [];
+  let totalRefund = 0;
   rows.forEach(row => {
     const qty = parseInt(row.querySelector('.return-qty').value) || 0;
     if (qty > 0) {
-      returns.push({
-        dispensed_item_id: parseInt(row.dataset.diId),
-        return_qty: qty,
-      });
+      returns.push({ dispensed_item_id: parseInt(row.dataset.diId), return_qty: qty });
+      const unitPrice = parseFloat(row.dataset.unitPrice) || 0;
+      totalRefund += qty * unitPrice;
+      detailItems.push(`${row.dataset.name || 'Medicine'} × ${qty} returned @ ₹${unitPrice.toFixed(2)}`);
     }
   });
   if (!returns.length) return;
 
-  const btn = document.getElementById('return-btn');
-  btn.disabled = true;
-  btn.textContent = 'Processing...';
-
-  try {
-    const resp = await fetch('/pharmacy/return/' + BILL_ID + '/process/', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-      body: JSON.stringify({returns}),
-    });
-    const data = await resp.json();
-    if (data.ok) {
-      alert('Return processed successfully. Total refund: Rs ' + data.total_returned);
-      window.location.href = data.redirect;
-    } else {
-      document.getElementById('return-error').textContent = data.error;
-      document.getElementById('return-error').style.display = 'block';
-      btn.disabled = false;
-      btn.textContent = 'Process Return';
-    }
-  } catch(e) {
-    document.getElementById('return-error').textContent = 'Network error. Please try again.';
-    document.getElementById('return-error').style.display = 'block';
-    btn.disabled = false;
-    btn.textContent = 'Process Return';
-  }
+  // Route through supervised approval instead of direct execution
+  supervisedRequest({
+    actionType:    'medicine_return',
+    actionPayload: { bill_id: BILL_ID, returns },
+    description:   'Return medicines from {{ bill.bill_number|escapejs }}',
+    patientName:   '{{ bill.visit.patient.full_name|escapejs }}',
+    amount:        totalRefund,
+    reference:     '{{ bill.bill_number|escapejs }}',
+    detailItems,
+  });
 }
 </script>
 {% endif %}

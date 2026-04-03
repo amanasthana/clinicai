@@ -1250,9 +1250,9 @@ def pharmacy_analytics_view(request):
 # Pharmacy Ledger — 30-day combined timeline of purchases, sales, returns
 # ---------------------------------------------------------------------------
 
-@require_permission('can_view_pharmacy')
+@require_permission('can_view_analytics')
 def ledger_view(request):
-    """30-day combined ledger: purchases (stock in), sales (bills), returns."""
+    """30-day combined ledger: purchases (stock in), sales (bills), returns. Doctor/admin only."""
     import json as _json
     import datetime as dt
     from django.utils import timezone as tz
@@ -1506,6 +1506,141 @@ def import_medicines_view(request):
         'source_items': source_items,
         'source_id': source_id or '',
         'new_count': new_count,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Inventory Analytics — doctor/admin only cost analysis + P&L statement
+# ---------------------------------------------------------------------------
+
+@require_permission('can_view_analytics')
+def inventory_analytics_view(request):
+    """Doctor/admin only. Per-item cost breakdown and P&L statement."""
+    import datetime as dt
+    from django.db.models import Sum
+
+    clinic = _get_clinic(request)
+    today = timezone.localdate()
+
+    # Period picker for the P&L section
+    range_param = request.GET.get('range', '30')
+    try:
+        days = int(range_param)
+        if days not in (30, 90, 365):
+            days = 30
+    except ValueError:
+        days = 30
+    since = today - dt.timedelta(days=days - 1)
+
+    # ── Section 1: Inventory Valuation (current snapshot) ──────────────────
+    items = (
+        PharmacyItem.objects
+        .filter(clinic=clinic)
+        .select_related('medicine')
+        .prefetch_related('batches')
+        .order_by('medicine__name', 'custom_name')
+    )
+
+    def _item_cost(batches):
+        total = decimal.Decimal('0')
+        for b in batches:
+            if b.purchase_price > 0:
+                total += b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100')) * b.quantity
+            else:
+                total += b.unit_price * b.quantity
+        return total
+
+    inv_rows = []
+    total_stock_units = 0
+    total_mrp_value = decimal.Decimal('0')
+    total_cost_value = decimal.Decimal('0')
+
+    for item in items:
+        batches = list(item.batches.all())
+        item_qty = sum(b.quantity for b in batches)
+        if item_qty == 0:
+            continue
+        item_mrp = sum(b.unit_price * b.quantity for b in batches)
+        item_cost = _item_cost(batches)
+        avg_unit_mrp = item_mrp / item_qty
+        avg_unit_cost = item_cost / item_qty
+        margin_pct = (
+            (avg_unit_mrp - avg_unit_cost) / avg_unit_mrp * 100
+            if avg_unit_mrp > 0 else decimal.Decimal('0')
+        )
+        inv_rows.append({
+            'item': item,
+            'qty': item_qty,
+            'avg_unit_mrp': avg_unit_mrp,
+            'avg_unit_cost': avg_unit_cost,
+            'total_mrp': item_mrp,
+            'total_cost': item_cost,
+            'margin_pct': margin_pct,
+        })
+        total_stock_units += item_qty
+        total_mrp_value += item_mrp
+        total_cost_value += item_cost
+
+    # Sort by total cost value descending (most capital-intensive items first)
+    inv_rows.sort(key=lambda r: r['total_cost'], reverse=True)
+
+    overall_margin = (
+        (total_mrp_value - total_cost_value) / total_mrp_value * 100
+        if total_mrp_value > 0 else decimal.Decimal('0')
+    )
+
+    # ── Section 2: P&L Statement (period) ──────────────────────────────────
+    period_batches = (
+        PharmacyBatch.objects
+        .filter(item__clinic=clinic, received_date__gte=since)
+    )
+    purchase_total = sum(
+        (b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100')) * b.quantity)
+        if b.purchase_price > 0 else (b.unit_price * b.quantity)
+        for b in period_batches
+    )
+
+    sales_total = (
+        PharmacyBill.objects
+        .filter(clinic=clinic, created_at__date__gte=since)
+        .aggregate(t=Sum('final_amount'))['t'] or decimal.Decimal('0')
+    )
+
+    returns_total = sum(
+        r.quantity_returned * r.unit_price
+        for r in DispensedItem.objects.filter(
+            visit__clinic=clinic, quantity_returned__gt=0,
+            dispensed_at__date__gte=since,
+        )
+    )
+
+    # Expiry losses — all expired batches with remaining stock (all-time write-off exposure)
+    expiry_loss_total = sum(
+        (b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100')) * b.quantity)
+        if b.purchase_price > 0 else (b.unit_price * b.quantity)
+        for b in PharmacyBatch.objects.filter(
+            item__clinic=clinic, expiry_date__lt=today, quantity__gt=0
+        )
+    )
+
+    net = decimal.Decimal(str(sales_total)) - purchase_total - decimal.Decimal(str(returns_total))
+
+    return render(request, 'pharmacy/inventory_analytics.html', {
+        'clinic': clinic,
+        'today': today,
+        'since': since,
+        'days': days,
+        'range_choices': [(30, '30 Days'), (90, '3 Months'), (365, '1 Year')],
+        'inv_rows': inv_rows,
+        'total_stock_units': total_stock_units,
+        'total_mrp_value': total_mrp_value,
+        'total_cost_value': total_cost_value,
+        'overall_margin': overall_margin,
+        'purchase_total': purchase_total,
+        'sales_total': sales_total,
+        'returns_total': returns_total,
+        'expiry_loss_total': expiry_loss_total,
+        'net': net,
     })
 
 

@@ -1,5 +1,8 @@
+import uuid
+from datetime import timedelta
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 
 class Clinic(models.Model):
@@ -95,6 +98,10 @@ class StaffMember(models.Model):
         return self.role == 'doctor'
 
     @property
+    def is_admin(self):
+        return self.role == 'admin'
+
+    @property
     def login_username(self):
         """Returns the username staff use to log in.
         New-format accounts: username is the full ID (e.g. 9876543210_prakash).
@@ -104,6 +111,122 @@ class StaffMember(models.Model):
         if '__' in u:
             return u.split('__', 1)[1]
         return u
+
+
+class SupervisedActionRequest(models.Model):
+    """
+    Maker-checker system: staff initiates a sensitive action, doctor/admin approves,
+    server executes automatically. No verbal codes — live approval on the supervisor's screen.
+    """
+    ACTION_BILL_REVERSAL   = 'bill_reversal'
+    ACTION_MEDICINE_RETURN = 'medicine_return'
+    ACTION_QUEUE_DELETE    = 'queue_delete'
+
+    ACTION_CHOICES = [
+        ('bill_reversal',   'Bill Reversal'),
+        ('medicine_return', 'Medicine Return'),
+        ('queue_delete',    'Queue Deletion'),
+    ]
+    ACTION_GROUP_LABELS = {
+        'bill_reversal':   'Bill Reversals',
+        'medicine_return': 'Medicine Returns',
+        'queue_delete':    'Queue Deletions',
+    }
+    ACTION_ICONS = {
+        'bill_reversal':   '↩',
+        'medicine_return': '🔄',
+        'queue_delete':    '🗑',
+    }
+
+    STATUS_PENDING   = 'pending'
+    STATUS_APPROVED  = 'approved'
+    STATUS_DENIED    = 'denied'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_EXPIRED   = 'expired'
+    STATUS_FAILED    = 'failed'
+
+    STATUS_CHOICES = [
+        ('pending',   'Pending'),
+        ('approved',  'Approved'),
+        ('denied',    'Denied'),
+        ('cancelled', 'Cancelled'),
+        ('expired',   'Expired'),
+        ('failed',    'Failed'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    clinic = models.ForeignKey(
+        'Clinic', on_delete=models.CASCADE, related_name='supervised_requests')
+    action_type = models.CharField(max_length=30, choices=ACTION_CHOICES, db_index=True)
+
+    requested_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='supervised_requests_made')
+    requester_name = models.CharField(max_length=120)  # snapshot at creation time
+    resolved_by   = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='supervised_requests_resolved')
+
+    # Human-readable context shown in the doctor's approval UI
+    description  = models.CharField(max_length=300)
+    patient_name = models.CharField(max_length=120, blank=True)
+    amount       = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    reference    = models.CharField(max_length=100, blank=True)  # bill number, token, etc.
+    staff_note   = models.CharField(max_length=300, blank=True)
+
+    # Full payload executed server-side on approval
+    action_payload = models.JSONField(default=dict)
+
+    status         = models.CharField(max_length=20, choices=STATUS_CHOICES,
+                                       default='pending', db_index=True)
+    denial_reason  = models.CharField(max_length=300, blank=True)
+    failure_detail = models.CharField(max_length=500, blank=True)
+    result_data    = models.JSONField(default=dict)  # {'redirect': '/pharmacy/...'}
+
+    created_at  = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    # expires_at is nullable — None means the request never auto-expires.
+    expires_at  = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    @property
+    def is_pending_expired(self):
+        # Requests don't expire — stays pending until a supervisor resolves it.
+        return False
+
+    def to_dict(self):
+        now = timezone.now()
+        delta_secs = int((now - self.created_at).total_seconds())
+        if delta_secs < 60:
+            time_ago = 'just now'
+        elif delta_secs < 3600:
+            time_ago = f'{delta_secs // 60} min ago'
+        else:
+            time_ago = f'{delta_secs // 3600}h ago'
+        return {
+            'id': str(self.id),
+            'action_type': self.action_type,
+            'action_label': dict(self.ACTION_CHOICES).get(self.action_type, self.action_type),
+            'description': self.description,
+            'patient_name': self.patient_name,
+            'amount': str(self.amount) if self.amount else None,
+            'reference': self.reference,
+            'requester_name': self.requester_name,
+            'staff_note': self.staff_note,
+            # Human-readable change lines stored at request creation time
+            'detail_items': self.action_payload.get('detail_lines', []),
+            'status': self.status,
+            'denial_reason': self.denial_reason,
+            'failure_detail': self.failure_detail,
+            'result_data': self.result_data,
+            'time_ago': time_ago,
+            'created_at': self.created_at.strftime('%-d %b %Y, %-I:%M %p'),
+        }
+
+    def __str__(self):
+        return f"{self.get_action_type_display()} by {self.requester_name} [{self.status}]"
 
 
 class ClinicRegistrationRequest(models.Model):

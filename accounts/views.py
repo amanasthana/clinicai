@@ -728,7 +728,14 @@ def switch_clinic_view(request):
 
 @login_required
 def add_clinic_view(request):
-    """Self-serve: create a new clinic and add the current user as a staff member."""
+    """Self-serve: create a new clinic and add the current user as a staff member. Doctor-only."""
+    if not request.user.is_superuser:
+        profile = getattr(request.user, 'staff_profile', None)
+        if not profile or not profile.is_doctor:
+            return render(request, 'accounts/403.html', {
+                'required_permission': 'doctor role',
+            }, status=403)
+
     if request.method == 'POST':
         clinic_name = request.POST.get('clinic_name', '').strip()
         city = request.POST.get('city', '').strip()
@@ -946,7 +953,11 @@ def clinic_delete_view(request, pk):
 @require_permission('can_manage_staff')
 @require_POST
 def request_clinic_deletion_view(request):
-    """Doctor/admin submits a deletion request for their clinic."""
+    """Clinic admin only — submits a deletion request for their clinic."""
+    if not request.user.is_superuser and not request.user.staff_profile.is_admin:
+        return render(request, 'accounts/403.html', {
+            'required_permission': 'clinic admin role',
+        }, status=403)
     from .models import ClinicDeletionRequest
     clinic = request.user.staff_profile.clinic
     reason = request.POST.get('reason', '').strip()

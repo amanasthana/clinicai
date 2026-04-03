@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, supervised_views
 
 app_name = 'accounts'
 
@@ -40,4 +40,15 @@ urlpatterns = [
     path('executives/register/', views.executive_register_view, name='executive_register'),
     path('executives/register/success/', views.executive_register_success_view, name='executive_register_success'),
     path('executives/<int:pk>/mobile/', views.executive_mobile_view, name='executive_mobile'),
+
+    # Supervised actions
+    path('supervised/', supervised_views.supervised_pending_view, name='supervised_pending'),
+    path('supervised/api/request/', supervised_views.request_action_api, name='supervised_request'),
+    path('supervised/api/poll/<uuid:request_id>/', supervised_views.poll_action_api, name='supervised_poll'),
+    path('supervised/api/cancel/<uuid:request_id>/', supervised_views.cancel_action_api, name='supervised_cancel'),
+    path('supervised/api/count/', supervised_views.pending_count_api, name='supervised_count'),
+    path('supervised/api/pending/', supervised_views.pending_actions_api, name='supervised_pending_api'),
+    path('supervised/api/resolve/<uuid:request_id>/', supervised_views.resolve_action_api, name='supervised_resolve'),
+    path('supervised/api/bulk-resolve/', supervised_views.bulk_resolve_api, name='supervised_bulk_resolve'),
+    path('supervised/log/', supervised_views.supervised_log_view, name='supervised_log'),
 ]
