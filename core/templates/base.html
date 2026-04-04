@@ -157,6 +157,12 @@
     {% if user.staff_profile.can_view_analytics %}
     <a href="/analytics/">Analytics</a>
     {% endif %}
+    {% if user.staff_profile.is_doctor or user.staff_profile.is_admin %}
+    <a href="/accounts/supervised/" style="display:flex; align-items:center; justify-content:space-between;">
+      Approvals
+      <span id="approval-badge-mobile" style="display:none; background:#DC2626; color:#fff; font-size:10px; font-weight:700; padding:1px 7px; border-radius:10px; line-height:1.5;"></span>
+    </a>
+    {% endif %}
     {% if user.staff_profile.can_manage_staff %}
     <a href="/accounts/staff/">Staff</a>
     <a href="/accounts/plan/">Plan &amp; Usage</a>
@@ -246,14 +252,15 @@
       fetch('/accounts/supervised/api/count/')
         .then(r => r.json())
         .then(data => {
-          const badge = document.getElementById('approval-badge');
-          if (!badge) return;
-          if (data.count > 0) {
-            badge.textContent = data.count;
-            badge.style.display = 'inline-flex';
-          } else {
-            badge.style.display = 'none';
-          }
+          [document.getElementById('approval-badge'), document.getElementById('approval-badge-mobile')].forEach(badge => {
+            if (!badge) return;
+            if (data.count > 0) {
+              badge.textContent = data.count;
+              badge.style.display = 'inline-flex';
+            } else {
+              badge.style.display = 'none';
+            }
+          });
         }).catch(() => {});
     }
     refreshBadge();
@@ -289,6 +296,16 @@
       const data = await resp.json();
       if (!data.ok) { alert('Could not submit request: ' + data.error); return; }
       requestId = data.request_id;
+
+      // Supervisors (doctor/admin) get instant execution — skip overlay and polling.
+      if (data.auto_approved) {
+        if (data.status === 'approved') {
+          window.location.href = data.redirect || '/';
+        } else {
+          alert('Action failed: ' + (data.failure_detail || 'Unknown error.'));
+        }
+        return;
+      }
     } catch (e) {
       alert('Network error. Please check your connection and try again.');
       return;

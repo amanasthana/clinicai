@@ -186,6 +186,19 @@ def request_action_api(request):
         staff_note=str(data.get('staff_note', ''))[:300],
         action_payload=action_payload,
     )
+
+    # Supervisors (doctor/admin) auto-execute immediately — no approval queue needed.
+    if _is_supervisor(request.user):
+        req.resolved_by = request.user
+        _run_executor(req)
+        redirect_url = (req.result_data or {}).get('redirect', '/')
+        if req.status == SupervisedActionRequest.STATUS_APPROVED:
+            return JsonResponse({'ok': True, 'request_id': str(req.id), 'auto_approved': True,
+                                 'status': 'approved', 'redirect': redirect_url})
+        else:
+            return JsonResponse({'ok': True, 'request_id': str(req.id), 'auto_approved': True,
+                                 'status': 'failed', 'failure_detail': req.failure_detail or 'Action failed.'})
+
     return JsonResponse({'ok': True, 'request_id': str(req.id)})
 
 

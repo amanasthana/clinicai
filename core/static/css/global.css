@@ -324,6 +324,9 @@ body {
   box-shadow: 0 8px 24px rgba(0,0,0,0.10);
   z-index: 99;
   padding: 4px 0 8px;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .nav-mobile-panel.open { display: block; }
 .nav-mobile-panel .nm-user {

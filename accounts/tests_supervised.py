@@ -1081,3 +1081,227 @@ class TestIsSupervisorHelper(SupervisedBase):
         from accounts.supervised_views import _is_supervisor
         su = User.objects.create_superuser('su', password='x')
         self.assertTrue(_is_supervisor(su))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 9. Supervisor bypass — admin/doctor auto-execute without approval queue
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSupervisorBypass(SupervisedBase):
+    """
+    Doctors and admins should auto-execute supervised actions immediately
+    when they raise them — no approval queue, no overlay polling.
+    The response must include auto_approved=True and the action outcome.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.patient = make_patient(self.clinic)
+        self.item = make_pharmacy_item(self.clinic)
+        self.batch = make_batch(self.item, qty=50)
+
+    def _post_request(self, user, payload):
+        self.login(user)
+        return self.post_json(reverse('accounts:supervised_request'), payload)
+
+    # ── doctor bypasses for queue_delete ───────────────────────────────────
+
+    def test_doctor_queue_delete_auto_executes(self):
+        """Doctor deleting a visit should succeed immediately (auto_approved=True)."""
+        visit = make_visit(self.patient, self.clinic)
+        resp = self._post_request(self.doc_user, {
+            'action_type': 'queue_delete',
+            'action_payload': {'visit_id': str(visit.id)},
+            'description': 'Delete test visit',
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.assertTrue(data.get('auto_approved'))
+        self.assertEqual(data['status'], 'approved')
+        self.assertIn('redirect', data)
+        # Visit should be deleted from DB
+        from reception.models import Visit
+        self.assertFalse(Visit.objects.filter(id=visit.id).exists())
+
+    def test_admin_queue_delete_auto_executes(self):
+        """Admin deleting a visit should also auto-execute."""
+        visit = make_visit(self.patient, self.clinic)
+        resp = self._post_request(self.admin_user, {
+            'action_type': 'queue_delete',
+            'action_payload': {'visit_id': str(visit.id)},
+            'description': 'Delete test visit',
+        })
+        data = resp.json()
+        self.assertTrue(data.get('auto_approved'))
+        self.assertEqual(data['status'], 'approved')
+        from reception.models import Visit
+        self.assertFalse(Visit.objects.filter(id=visit.id).exists())
+
+    def test_doctor_bill_reversal_auto_executes(self):
+        """Doctor reversing a bill should auto-execute."""
+        visit = make_visit(self.patient, self.clinic)
+        bill, di = make_bill(visit, self.clinic, self.item, self.batch, qty=5)
+        resp = self._post_request(self.doc_user, {
+            'action_type': 'bill_reversal',
+            'action_payload': {'bill_id': bill.pk},
+            'description': 'Reverse bill',
+        })
+        data = resp.json()
+        self.assertTrue(data.get('auto_approved'))
+        self.assertEqual(data['status'], 'approved')
+        # Bill deleted, dispensed units restored to batch (50 + 5 = 55)
+        self.assertFalse(PharmacyBill.objects.filter(pk=bill.pk).exists())
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.quantity, 55)
+
+    def test_doctor_medicine_return_auto_executes(self):
+        """Doctor processing a return should auto-execute."""
+        visit = make_visit(self.patient, self.clinic)
+        bill, di = make_bill(visit, self.clinic, self.item, self.batch, qty=10)
+        resp = self._post_request(self.doc_user, {
+            'action_type': 'medicine_return',
+            'action_payload': {
+                'bill_id': bill.pk,
+                'returns': [{'dispensed_item_id': di.pk, 'return_qty': 3}],
+            },
+            'description': 'Return 3 units',
+        })
+        data = resp.json()
+        self.assertTrue(data.get('auto_approved'))
+        self.assertEqual(data['status'], 'approved')
+        di.refresh_from_db()
+        self.assertEqual(di.quantity_returned, 3)
+
+    def test_staff_does_not_bypass(self):
+        """Receptionist's request must stay pending and go through the normal flow."""
+        visit = make_visit(self.patient, self.clinic)
+        resp = self._post_request(self.rec_user, {
+            'action_type': 'queue_delete',
+            'action_payload': {'visit_id': str(visit.id)},
+            'description': 'Delete visit',
+        })
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.assertNotIn('auto_approved', data)
+        self.assertIn('request_id', data)
+        # Visit must still exist
+        from reception.models import Visit
+        self.assertTrue(Visit.objects.filter(id=visit.id).exists())
+
+    def test_pharmacist_does_not_bypass(self):
+        """Pharmacist's bill reversal must go through approval queue."""
+        visit = make_visit(self.patient, self.clinic)
+        bill, di = make_bill(visit, self.clinic, self.item, self.batch)
+        resp = self._post_request(self.ph_user, {
+            'action_type': 'bill_reversal',
+            'action_payload': {'bill_id': bill.pk},
+            'description': 'Reverse bill',
+        })
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.assertNotIn('auto_approved', data)
+        # Bill must still exist
+        self.assertTrue(PharmacyBill.objects.filter(pk=bill.pk).exists())
+
+    def test_supervisor_bypass_auto_approved_is_logged(self):
+        """Auto-approved requests are saved as STATUS_APPROVED in the DB (audit trail)."""
+        visit = make_visit(self.patient, self.clinic)
+        resp = self._post_request(self.doc_user, {
+            'action_type': 'queue_delete',
+            'action_payload': {'visit_id': str(visit.id)},
+            'description': 'Delete visit',
+        })
+        data = resp.json()
+        self.assertTrue(data.get('auto_approved'))
+        req = SupervisedActionRequest.objects.get(id=data['request_id'])
+        self.assertEqual(req.status, SupervisedActionRequest.STATUS_APPROVED)
+        self.assertEqual(req.resolved_by, self.doc_user)
+        self.assertIsNotNone(req.resolved_at)
+
+    def test_supervisor_bypass_failure_returns_failed_status(self):
+        """If the auto-execute action fails, response has status=failed."""
+        # queue_delete with a non-existent visit_id → ValueError in executor
+        resp = self._post_request(self.doc_user, {
+            'action_type': 'queue_delete',
+            'action_payload': {'visit_id': str(uuid.uuid4())},
+            'description': 'Delete non-existent visit',
+        })
+        data = resp.json()
+        self.assertTrue(data.get('auto_approved'))
+        self.assertEqual(data['status'], 'failed')
+        self.assertIn('failure_detail', data)
+
+    def test_supervisor_bypass_delete_visit_with_prescription_fails(self):
+        """Deleting a visit that has a prescription should return status=failed."""
+        from prescription.models import Prescription
+        visit = make_visit(self.patient, self.clinic)
+        Prescription.objects.create(
+            visit=visit,
+            doctor=self.doc_sm,
+            raw_clinical_note='Fever for 3 days',
+            diagnosis='Viral fever',
+        )
+        resp = self._post_request(self.doc_user, {
+            'action_type': 'queue_delete',
+            'action_payload': {'visit_id': str(visit.id)},
+            'description': 'Delete visit with rx',
+        })
+        data = resp.json()
+        self.assertTrue(data.get('auto_approved'))
+        self.assertEqual(data['status'], 'failed')
+        # Visit must still exist
+        from reception.models import Visit
+        self.assertTrue(Visit.objects.filter(id=visit.id).exists())
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 10. Inventory Report — MRP visibility gating
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestInventoryReportMRPGating(SupervisedBase):
+    """
+    Staff (non-analytics) should NOT see MRP column or MRP summary card.
+    Supervisors with can_view_analytics=True should see MRP.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Add can_view_pharmacy to pharmacist so they can access the report
+        self.ph_sm.can_view_pharmacy = True
+        self.ph_sm.save()
+
+    def _get_report(self, user):
+        self.client.force_login(user)
+        return self.client.get(reverse('pharmacy:inventory_report'))
+
+    def _make_inventory(self):
+        """Add one item+batch so table headers are rendered."""
+        item = make_pharmacy_item(self.clinic, 'Amoxicillin 250mg')
+        make_batch(item, qty=20)
+
+    def test_analytics_staff_sees_mrp_summary_card(self):
+        """Doctor (can_view_analytics=True) sees MRP Value summary card."""
+        resp = self._get_report(self.doc_user)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'MRP Value')
+
+    def test_analytics_staff_sees_mrp_column_header(self):
+        """Doctor sees MRP (₹) column header when there are inventory items."""
+        self._make_inventory()
+        resp = self._get_report(self.doc_user)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'MRP (₹)')
+
+    def test_non_analytics_staff_no_mrp_summary_card(self):
+        """Pharmacist must not see MRP Value summary card."""
+        resp = self._get_report(self.ph_user)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'MRP Value')
+
+    def test_non_analytics_staff_no_mrp_column(self):
+        """Pharmacist must NOT see MRP column header even with inventory items."""
+        self._make_inventory()
+        resp = self._get_report(self.ph_user)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'MRP (₹)')
