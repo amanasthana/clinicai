@@ -423,8 +423,35 @@ def admin_panel_view(request):
 
     # All clinics (regardless of registration source)
     from .models import ClinicDeletionRequest
+    from django.db.models import Count
     all_clinics = Clinic.objects.all().order_by('name').prefetch_related('staff')
     pending_deletions = ClinicDeletionRequest.objects.filter(status='pending').select_related('clinic', 'requested_by')
+
+    # ── Executive earnings: count approved referrals per executive ──
+    PAYOUT_PER_CLINIC = 500
+    referral_counts = dict(
+        ClinicRegistrationRequest.objects.filter(
+            status='approved',
+        ).exclude(referred_by_mobile='').values('referred_by_mobile')
+         .annotate(n=Count('id')).values_list('referred_by_mobile', 'n')
+    )
+    # Load referred clinics for each executive so we can show their names
+    referred_clinic_names = {}  # mobile → [clinic names]
+    for reg in ClinicRegistrationRequest.objects.filter(
+        status='approved'
+    ).exclude(referred_by_mobile='').only('referred_by_mobile', 'clinic_name'):
+        referred_clinic_names.setdefault(reg.referred_by_mobile, []).append(reg.clinic_name)
+
+    exec_earnings = []
+    for ex in ClinicAIExecutive.objects.filter(status='approved').order_by('name'):
+        count = referral_counts.get(ex.mobile, 0)
+        ex.clinics_referred = count
+        ex.earnings = count * PAYOUT_PER_CLINIC
+        ex.referred_clinic_names = referred_clinic_names.get(ex.mobile, [])
+        exec_earnings.append(ex)
+
+    exec_earnings.sort(key=lambda e: -e.clinics_referred)  # highest earners first
+    total_payable = sum(e.earnings for e in exec_earnings)
 
     return render(request, 'accounts/admin_panel.html', {
         'pending': pending,
@@ -438,6 +465,9 @@ def admin_panel_view(request):
         'wa_reset_name': wa_reset_name,
         'all_clinics': all_clinics,
         'pending_deletions': pending_deletions,
+        'exec_earnings': exec_earnings,
+        'total_payable': total_payable,
+        'payout_per_clinic': PAYOUT_PER_CLINIC,
     })
 
 

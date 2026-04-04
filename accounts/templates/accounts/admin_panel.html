@@ -282,6 +282,85 @@
   {% endfor %}
   {% endif %}
 
+  <!-- ── Executive Payables ── -->
+  <div style="margin-top:40px; padding-top:32px; border-top:2px solid var(--color-border);">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:6px;">
+      <div style="font-size:16px; font-weight:600; color:#111827; display:flex; align-items:center; gap:10px;">
+        Executive Payables
+        {% if exec_earnings %}
+        <span style="background:#7C3AED; color:#fff; font-size:12px; font-weight:700; padding:2px 9px; border-radius:20px;">{{ exec_earnings|length }}</span>
+        {% endif %}
+      </div>
+      {% if total_payable %}
+      <div style="background:#F5F3FF; border:1.5px solid #DDD6FE; border-radius:10px; padding:8px 18px; display:flex; align-items:center; gap:10px;">
+        <span style="font-size:12px; color:#7C3AED; font-weight:600;">Total Payable</span>
+        <span style="font-size:20px; font-weight:800; color:#5B21B6;">₹{{ total_payable }}</span>
+      </div>
+      {% endif %}
+    </div>
+    <p style="font-size:13px; color:#6B7280; margin-bottom:16px;">
+      ₹{{ payout_per_clinic }} per approved clinic referral. Counts approved registrations only.
+    </p>
+    {% if exec_earnings %}
+    <div class="card" style="padding:0; overflow:hidden;">
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="background:#F9FAFB; border-bottom:1.5px solid #E5E7EB;">
+            <th style="text-align:left; padding:10px 16px; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.05em;">Executive</th>
+            <th style="text-align:left; padding:10px 12px; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;">Location</th>
+            <th style="text-align:left; padding:10px 12px; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;">Mobile</th>
+            <th style="text-align:center; padding:10px 12px; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;">Clinics Referred</th>
+            <th style="text-align:right; padding:10px 16px; font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;">Earnings</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ex in exec_earnings %}
+          <tr style="border-bottom:1px solid #F3F4F6; {% if ex.clinics_referred == 0 %}opacity:0.4;{% endif %}">
+            <td style="padding:12px 16px;">
+              <div style="font-weight:600; color:#111827;">{{ ex.name }}</div>
+              {% if ex.referred_clinic_names %}
+              <div style="margin-top:5px; display:flex; flex-wrap:wrap; gap:4px;">
+                {% for cn in ex.referred_clinic_names %}
+                <span style="font-size:11px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; border-radius:4px; padding:1px 7px; white-space:nowrap;">{{ cn }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </td>
+            <td style="padding:12px; color:#6B7280; white-space:nowrap;">{{ ex.city }}{% if ex.city and ex.state %}, {% endif %}{{ ex.state }}</td>
+            <td style="padding:12px; font-family:monospace; font-size:12px; color:#374151; white-space:nowrap;">{{ ex.mobile }}</td>
+            <td style="padding:12px; text-align:center;">
+              {% if ex.clinics_referred > 0 %}
+              <span style="background:#D1FAE5; color:#065F46; font-weight:700; font-size:13px; padding:3px 12px; border-radius:20px;">{{ ex.clinics_referred }}</span>
+              {% else %}
+              <span style="color:#D1D5DB;">—</span>
+              {% endif %}
+            </td>
+            <td style="padding:12px 16px; text-align:right;">
+              {% if ex.earnings > 0 %}
+              <span style="font-size:15px; font-weight:700; color:#5B21B6;">₹{{ ex.earnings }}</span>
+              {% else %}
+              <span style="color:#D1D5DB;">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:#F9FAFB; border-top:1.5px solid #E5E7EB;">
+            <td style="padding:10px 16px; font-weight:700; color:#374151;" colspan="3">Total payable</td>
+            <td style="padding:10px 12px; text-align:center; font-weight:700; color:#065F46;">
+              {% with earners=exec_earnings %}{{ earners|length }} exec{{ earners|length|pluralize:"utive,utives" }}{% endwith %}
+            </td>
+            <td style="padding:10px 16px; text-align:right; font-size:16px; font-weight:800; color:#5B21B6;">₹{{ total_payable }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    {% else %}
+    <div class="card" style="text-align:center; color:#9CA3AF; padding:28px;">No approved executives yet.</div>
+    {% endif %}
+  </div>
+
   <!-- ── All Clinics ── -->
   <div style="margin-top:40px; padding-top:32px; border-top:2px solid var(--color-border);">
     <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:4px; display:flex; align-items:center; gap:10px;">
