@@ -11,6 +11,7 @@ echo "--- Seeding reference data (skips if already loaded) ---"
 python manage.py seed_medicine_catalog
 python manage.py seed_medical_terms
 python manage.py seed_drug_interactions
+python manage.py seed_demo_doctor
 
 echo "--- Starting gunicorn ---"
 gunicorn --bind=0.0.0.0:8000 --timeout=120 --workers=2 clinicai.wsgi
