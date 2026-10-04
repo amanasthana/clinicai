@@ -75,6 +75,8 @@ class StaffMember(models.Model):
     )
     # Hindi versions for Hindi-only prescriptions (blank = auto-transliterated at print time)
     display_name_hi = models.CharField(max_length=120, blank=True, default='')
+    # Guided product tour shown on first login (new clinics); existing staff migrated as done
+    tour_completed = models.BooleanField(default=False)
     qualification_hi = models.CharField(max_length=200, blank=True, default='')
 
     # Permission flags — set automatically from role preset, can be overridden per staff member

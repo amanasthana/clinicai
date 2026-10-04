@@ -1,42 +1,107 @@
 {% extends "base.html" %}
-{% block title %}Application Received — ClinicAI{% endblock %}
+{% block title %}Your clinic is live — ClinicAI{% endblock %}
+
+{% block extra_head %}
+<style>
+.rs-wrap { min-height: calc(100vh - 52px); display: flex; align-items: center; justify-content: center; padding: 32px 20px; }
+.rs-inner { max-width: 460px; width: 100%; text-align: center; }
+
+/* Animated success badge */
+.rs-badge { position: relative; width: 92px; height: 92px; margin: 0 auto 26px; }
+.rs-badge-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, rgba(16,185,129,.22) 0%, rgba(16,185,129,0) 70%);
+  animation: rs-pulse 2.4s ease-out infinite;
+}
+.rs-badge-core {
+  position: absolute; inset: 10px; border-radius: 50%;
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  box-shadow: 0 12px 30px rgba(5,150,105,.35);
+  display: flex; align-items: center; justify-content: center;
+  animation: rs-pop .55s cubic-bezier(.34,1.56,.64,1) both;
+}
+.rs-badge-core svg path {
+  stroke-dasharray: 40; stroke-dashoffset: 40;
+  animation: rs-draw .45s .4s ease-out forwards;
+}
+@keyframes rs-pop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes rs-draw { to { stroke-dashoffset: 0; } }
+@keyframes rs-pulse { 0% { transform: scale(.85); opacity: 1; } 100% { transform: scale(1.45); opacity: 0; } }
+
+.rs-rise { opacity: 0; transform: translateY(12px); animation: rs-rise .5s ease-out forwards; }
+.rs-d1 { animation-delay: .25s; } .rs-d2 { animation-delay: .38s; } .rs-d3 { animation-delay: .5s; } .rs-d4 { animation-delay: .62s; }
+@keyframes rs-rise { to { opacity: 1; transform: none; } }
+
+.rs-title { font-size: 28px; font-weight: 800; color: #111827; letter-spacing: -.6px; margin-bottom: 10px; }
+.rs-sub { font-size: 15.5px; color: #6B7280; line-height: 1.65; margin-bottom: 26px; }
+
+.rs-login-card {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 16px; padding: 18px 20px;
+  text-align: left; box-shadow: 0 4px 18px rgba(17,24,39,.06); margin-bottom: 20px;
+}
+.rs-login-label { font-size: 11px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }
+.rs-login-id { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: #F9FAFB; border: 1px dashed #D1D5DB; border-radius: 10px; padding: 10px 14px; }
+.rs-login-id span { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 18px; font-weight: 700; color: #111827; letter-spacing: .5px; }
+.rs-login-hint { font-size: 13px; color: #6B7280; margin-top: 10px; line-height: 1.55; }
+
+.rs-cta {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  padding: 15px 20px; border-radius: 12px; font-size: 16px; font-weight: 700; color: #fff; text-decoration: none;
+  background: linear-gradient(135deg, #2563EB 0%, #4F46E5 100%);
+  box-shadow: 0 10px 24px rgba(37,99,235,.28); transition: transform .15s, box-shadow .15s;
+}
+.rs-cta:hover { transform: translateY(-1px); box-shadow: 0 14px 30px rgba(37,99,235,.34); }
+.rs-cta:active { transform: translateY(0); }
+.rs-cta svg { transition: transform .2s; }
+.rs-cta:hover svg { transform: translateX(3px); }
+
+.rs-next { display: flex; gap: 10px; align-items: flex-start; text-align: left; margin-top: 22px;
+  background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 12px; padding: 12px 14px; }
+.rs-next-icon { font-size: 18px; line-height: 1.2; }
+.rs-next-text { font-size: 13px; color: #5B21B6; line-height: 1.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rs-badge-ring, .rs-badge-core, .rs-badge-core svg path, .rs-rise { animation: none !important; opacity: 1 !important; transform: none !important; stroke-dashoffset: 0 !important; }
+}
+</style>
+{% endblock %}
 
 {% block content %}
-<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
-  <div style="max-width:480px; width:100%; text-align:center;">
+<div class="rs-wrap">
+  <div class="rs-inner">
 
-    <div style="font-size:64px; line-height:1; margin-bottom:20px;">🎉</div>
-
-    <h1 style="font-size:28px; font-weight:700; color:#111827; letter-spacing:-0.5px; margin-bottom:12px;">
-      Application received!
-    </h1>
-    <p style="font-size:16px; color:#6B7280; line-height:1.7; margin-bottom:32px;">
-      Thank you for registering with ClinicAI. Our team will review your application and activate your clinic within <strong>24 hours</strong>.
-    </p>
-
-    <div class="card" style="text-align:left; margin-bottom:24px;">
-      <div style="font-size:13px; font-weight:600; color:#374151; margin-bottom:12px;">What happens next</div>
-      <div style="display:flex; flex-direction:column; gap:12px;">
-        <div style="display:flex; gap:12px; align-items:flex-start;">
-          <div style="width:24px; height:24px; background:#DBEAFE; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#1D4ED8; flex-shrink:0; margin-top:1px;">1</div>
-          <div style="font-size:14px; color:#374151;">Our team reviews your clinic details (usually within a few hours)</div>
-        </div>
-        <div style="display:flex; gap:12px; align-items:flex-start;">
-          <div style="width:24px; height:24px; background:#DBEAFE; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#1D4ED8; flex-shrink:0; margin-top:1px;">2</div>
-          <div style="font-size:14px; color:#374151;">Our team will reach out to you with your login details once approved</div>
-        </div>
-        <div style="display:flex; gap:12px; align-items:flex-start;">
-          <div style="width:24px; height:24px; background:#DBEAFE; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#1D4ED8; flex-shrink:0; margin-top:1px;">3</div>
-          <div style="font-size:14px; color:#374151;">Sign in with your mobile number and password — your clinic goes live instantly</div>
-        </div>
+    <div class="rs-badge" aria-hidden="true">
+      <div class="rs-badge-ring"></div>
+      <div class="rs-badge-core">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
       </div>
     </div>
 
-    <a href="/accounts/login/" class="btn btn-secondary" style="width:100%;">Back to login page</a>
+    <h1 class="rs-title rs-rise rs-d1">Your clinic is live!</h1>
+    <p class="rs-sub rs-rise rs-d2">
+      {% if registered %}Welcome aboard, {{ registered.doctor_name }}. <strong>{{ registered.clinic_name }}</strong> is ready to use right now.{% else %}Your clinic is ready to use right now.{% endif %}
+    </p>
 
-    <div style="margin-top:20px; font-size:13px; color:#9CA3AF;">
-      Questions? Use the <a href="/accounts/contact/" style="color:#2563EB; text-decoration:none; font-weight:500;">contact form</a> and we'll get back to you.
+    {% if registered %}
+    <div class="rs-login-card rs-rise rs-d3">
+      <div class="rs-login-label">Your login ID</div>
+      <div class="rs-login-id"><span id="rs-login-id">{{ registered.phone }}</span><span style="font-family:inherit; font-size:12px; font-weight:500; color:#9CA3AF; letter-spacing:0;">mobile number</span></div>
+      <div class="rs-login-hint">Use this mobile number (or your email) with the password you just created.</div>
     </div>
+    {% endif %}
+
+    <div class="rs-rise rs-d4">
+      <a href="/accounts/login/{% if registered %}?u={{ registered.phone }}{% endif %}" class="rs-cta" id="rs-login-btn">
+        Log in to continue
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <div class="rs-next">
+        <div class="rs-next-icon">🧭</div>
+        <div class="rs-next-text">After you log in, a quick 1-minute tour will show you where everything is — and how to ask the built-in AI assistant anything.</div>
+      </div>
+    </div>
+
   </div>
 </div>
 {% endblock %}

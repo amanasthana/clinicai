@@ -54,7 +54,11 @@ def dashboard_view(request):
         clinic=clinic, created_at__date__gte=week_ago
     ).count()
 
+    staff = request.user.staff_profile
     return render(request, 'reception/dashboard.html', {
+        # First-login guided tour for the clinic's doctor/admin (replayable via "Take the tour")
+        'show_tour': not staff.tour_completed and staff.role in ('admin', 'doctor'),
+        'tour_name': staff.display_name,
         'clinic': clinic,
         'queue': queue,
         'today': today,

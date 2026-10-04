@@ -1,0 +1,428 @@
+{# First-login guided tour of the home screen. Auto-starts when show_tour; replay via ClinicTour.start(). #}
+{{ tour_name|json_script:"ct-name" }}
+<style>
+#ct-root { position: fixed; inset: 0; z-index: 10000; pointer-events: none; }
+#ct-root.ct-on { pointer-events: auto; }
+#ct-blocker { position: fixed; inset: 0; background: transparent; }
+
+/* Spotlight: a hole in a dim layer, animated between targets */
+#ct-spot {
+  position: fixed; border-radius: 16px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0), 0 0 0 0 rgba(99,102,241,0);
+  transition: top .5s cubic-bezier(.4,0,.2,1), left .5s cubic-bezier(.4,0,.2,1),
+              width .5s cubic-bezier(.4,0,.2,1), height .5s cubic-bezier(.4,0,.2,1),
+              border-radius .5s, box-shadow .45s ease;
+}
+#ct-root.ct-on #ct-spot { box-shadow: 0 0 0 9999px rgba(15, 23, 42, .64), 0 0 0 3px rgba(129,140,248,.9); }
+#ct-root.ct-modal #ct-spot { box-shadow: 0 0 0 9999px rgba(15, 23, 42, .72), 0 0 0 0 rgba(129,140,248,0); }
+#ct-spot::after {
+  content: ''; position: absolute; inset: -3px; border-radius: inherit;
+  border: 2px solid rgba(165,180,252,.9); opacity: 0;
+  animation: ct-ring 1.8s ease-out infinite;
+}
+#ct-root.ct-modal #ct-spot::after { display: none; }
+@keyframes ct-ring { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); } }
+
+/* Popover */
+#ct-pop {
+  position: fixed; width: min(360px, calc(100vw - 32px)); background: #fff; border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(15,23,42,.28), 0 2px 8px rgba(15,23,42,.08);
+  padding: 18px 20px 16px; color: #111827; font-family: inherit;
+  opacity: 0; transform: translateY(8px) scale(.97);
+  transition: opacity .28s ease, transform .32s cubic-bezier(.34,1.4,.64,1);
+}
+#ct-pop.ct-show { opacity: 1; transform: none; }
+#ct-arrow {
+  position: absolute; width: 14px; height: 14px; background: #fff; transform: rotate(45deg);
+  border-radius: 3px; box-shadow: -2px -2px 4px rgba(15,23,42,.04);
+}
+#ct-pop[data-place="bottom"] #ct-arrow { top: -6px; }
+#ct-pop[data-place="top"] #ct-arrow { bottom: -6px; box-shadow: 2px 2px 4px rgba(15,23,42,.06); }
+#ct-pop[data-place="center"] #ct-arrow { display: none; }
+
+.ct-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.ct-step { font-size: 11.5px; font-weight: 700; color: #6366F1; letter-spacing: .4px; text-transform: uppercase; }
+.ct-close { background: none; border: none; color: #9CA3AF; font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 6px; font-family: inherit; }
+.ct-close:hover { color: #374151; background: #F3F4F6; }
+.ct-progress { height: 4px; background: #EEF2FF; border-radius: 4px; overflow: hidden; margin-bottom: 14px; }
+.ct-progress > div { height: 100%; background: linear-gradient(90deg, #6366F1, #2563EB); border-radius: 4px; transition: width .45s cubic-bezier(.4,0,.2,1); }
+.ct-icon { font-size: 26px; line-height: 1; margin-bottom: 8px; }
+.ct-title { font-size: 17px; font-weight: 700; letter-spacing: -.2px; margin-bottom: 6px; line-height: 1.3; }
+.ct-body { font-size: 14px; color: #4B5563; line-height: 1.6; }
+.ct-body b { color: #111827; }
+.ct-tip { margin-top: 10px; background: #F5F3FF; border: 1px solid #E0E7FF; border-radius: 10px; padding: 8px 11px; font-size: 13px; color: #4338CA; line-height: 1.5; }
+.ct-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.ct-dots { display: flex; gap: 5px; }
+.ct-dot { width: 6px; height: 6px; border-radius: 6px; background: #E5E7EB; transition: all .3s; }
+.ct-dot.on { width: 18px; background: #6366F1; }
+.ct-btns { display: flex; gap: 8px; }
+.ct-btn { border: none; border-radius: 10px; padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: transform .12s, background .15s, box-shadow .15s; }
+.ct-btn:active { transform: scale(.97); }
+.ct-back { background: #F3F4F6; color: #374151; }
+.ct-back:hover { background: #E5E7EB; }
+.ct-next { background: linear-gradient(135deg, #4F46E5, #2563EB); color: #fff; box-shadow: 0 6px 16px rgba(79,70,229,.3); }
+.ct-next:hover { box-shadow: 0 8px 20px rgba(79,70,229,.38); }
+.ct-btn:focus-visible, .ct-close:focus-visible, .ct-ask:focus-visible { outline: 3px solid #A5B4FC; outline-offset: 2px; }
+
+/* Welcome / finale (centered) */
+#ct-pop[data-place="center"] { width: min(420px, calc(100vw - 32px)); padding: 0; overflow: hidden; text-align: center; }
+.ct-hero { background: linear-gradient(135deg, #4F46E5 0%, #2563EB 55%, #0EA5E9 100%); padding: 28px 24px 22px; color: #fff; position: relative; overflow: hidden; }
+.ct-hero::before, .ct-hero::after { content: ''; position: absolute; border-radius: 50%; background: rgba(255,255,255,.12); }
+.ct-hero::before { width: 160px; height: 160px; top: -60px; right: -40px; }
+.ct-hero::after { width: 110px; height: 110px; bottom: -50px; left: -30px; }
+.ct-hero-emoji { font-size: 44px; line-height: 1; display: inline-block; margin-bottom: 10px; position: relative; z-index: 1; }
+.ct-wave { animation: ct-wave 1.6s ease-in-out .3s 2; transform-origin: 70% 70%; }
+@keyframes ct-wave { 0%,100% { transform: rotate(0); } 15% { transform: rotate(16deg); } 30% { transform: rotate(-8deg); } 45% { transform: rotate(14deg); } 60% { transform: rotate(-4deg); } }
+.ct-hero-title { font-size: 21px; font-weight: 800; letter-spacing: -.4px; position: relative; z-index: 1; }
+.ct-hero-sub { font-size: 14px; opacity: .9; margin-top: 4px; position: relative; z-index: 1; }
+.ct-center-body { padding: 18px 24px 22px; }
+.ct-center-body .ct-body { font-size: 14.5px; }
+.ct-center-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.ct-center-btns .ct-btn { width: 100%; padding: 12px 16px; font-size: 15px; }
+.ct-skip-link { background: none; border: none; color: #6B7280; font-size: 13px; cursor: pointer; padding: 6px; font-family: inherit; }
+.ct-skip-link:hover { color: #111827; text-decoration: underline; }
+.ct-asks { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; text-align: left; }
+.ct-ask {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer; font-family: inherit;
+  background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 11px; padding: 10px 12px; font-size: 13.5px; color: #1F2937;
+  transition: border-color .15s, background .15s, transform .12s;
+}
+.ct-ask:hover { border-color: #A5B4FC; background: #EEF2FF; transform: translateX(2px); }
+.ct-ask span { color: #6366F1; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+
+/* Assistant glow while it is the focus */
+#help-wrap.ct-glow { animation: ct-glow 1.6s ease-in-out infinite; }
+@keyframes ct-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(129,140,248,.0); } 50% { box-shadow: 0 0 28px 4px rgba(129,140,248,.55); } }
+
+/* Confetti */
+.ct-confetti { position: fixed; top: -12px; width: 8px; height: 14px; border-radius: 2px; pointer-events: none;
+  animation: ct-fall linear forwards; }
+@keyframes ct-fall { to { transform: translate3d(var(--dx), 105vh, 0) rotate(var(--rot)); opacity: .9; } }
+
+@media (max-width: 640px) {
+  #ct-pop:not([data-place="center"]) { left: 16px !important; width: calc(100vw - 32px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ct-spot, #ct-pop, .ct-progress > div, .ct-dot { transition: none !important; }
+  #ct-spot::after, .ct-wave, #help-wrap.ct-glow { animation: none !important; }
+}
+</style>
+
+<div id="ct-root" aria-hidden="true">
+  <div id="ct-blocker"></div>
+  <div id="ct-spot"></div>
+  <div id="ct-pop" role="dialog" aria-modal="true" aria-labelledby="ct-title" tabindex="-1">
+    <div id="ct-arrow"></div>
+    <div id="ct-content"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const AUTO = {{ show_tour|yesno:"true,false" }};
+  const NAME = JSON.parse(document.getElementById('ct-name').textContent || '""') || '';
+  const root = document.getElementById('ct-root');
+  const spot = document.getElementById('ct-spot');
+  const pop = document.getElementById('ct-pop');
+  const arrow = document.getElementById('ct-arrow');
+  const content = document.getElementById('ct-content');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ASKS = [
+    'How do I add a receptionist to my clinic?',
+    'How do I write and print a prescription?',
+    'How do I add medicines to my pharmacy stock?',
+  ];
+
+  // Each step points at an element; steps whose element is not on screen are skipped
+  // (e.g. nav links a role cannot see, or desktop-only nav on phones).
+  const STEPS = [
+    { kind: 'welcome' },
+    { target: '#help-wrap', icon: '✨', title: 'Ask the AI assistant anything',
+      body: 'This is your built-in helper. Type or <b>speak</b> any question — <b>"How do I add a receptionist?"</b>, <b>"How do I print a prescription?"</b> — and get step-by-step answers instantly.',
+      tip: '💡 Whenever you are unsure how to do something, ask here first.', glow: true },
+    { target: '[data-tour="patients"]', icon: '🔎', title: 'Find or register patients',
+      body: 'Search any patient by <b>name or mobile number</b>. New patient? Click <b>+ New Patient</b> to register them and add them to today\'s queue.' },
+    { target: '[data-tour="stats"]', icon: '📊', title: "Today at a glance",
+      body: 'Live counts of patients waiting, in consultation and done. <b>Tap a card</b> to filter the queue below.' },
+    { target: '[data-tour="queue"]', icon: '🩺', title: "Today's queue",
+      body: 'Everyone checked in today, in token order. Call the next patient, start their consultation, or mark a no-show from here.' },
+    { target: '[data-tour="walkin"]', icon: '⚡', title: 'Quick walk-in',
+      body: 'Someone just walked in? This button is always here — register them in seconds.' },
+    { target: '[data-tour="nav-doctor"]', icon: '💊', title: 'Doctor screen',
+      body: 'Your consultation queue. Write notes in English or Hindi and let AI draft the <b>prescription</b> — then edit, print or send it on WhatsApp.' },
+    { target: '[data-tour="nav-pharmacy"]', icon: '🏥', title: 'Pharmacy',
+      body: 'Track medicine <b>stock and expiry</b>, add purchases, and bill patients for medicines.' },
+    { target: '[data-tour="nav-analytics"]', icon: '📈', title: 'Analytics',
+      body: 'Patient trends, top diagnoses and most-prescribed medicines for your clinic.' },
+    { target: '[data-tour="nav-staff"]', icon: '👥', title: 'Add your team',
+      body: 'Create logins for your <b>receptionist, pharmacist or other doctors</b> — each sees only what their role needs. Clinic details and settings live here too.' },
+    { target: '#nav-hamburger', icon: '☰', title: 'Everything else is in the menu',
+      body: 'Doctor screen, Pharmacy, Staff, Settings — tap here to open any section.' },
+    { kind: 'finale' },
+  ];
+
+  let steps = [], idx = 0, active = false, curTarget = null, rafPending = false;
+
+  function visible(el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return false;
+    const cs = getComputedStyle(el);
+    return cs.visibility !== 'hidden' && cs.display !== 'none' && el.offsetParent !== null || cs.position === 'fixed';
+  }
+
+  function buildSteps() {
+    return STEPS.filter(s => s.kind || visible(document.querySelector(s.target)));
+  }
+
+  function csrf() {
+    return (document.cookie.split('; ').find(r => r.startsWith('csrftoken=')) || '').split('=')[1] || '';
+  }
+
+  function markDone() {
+    fetch('/accounts/api/tour/complete/', { method: 'POST', headers: { 'X-CSRFToken': csrf() } }).catch(() => {});
+  }
+
+  // ── Rendering ────────────────────────────────────────────────
+  const tourSteps = () => steps.filter(s => !s.kind);
+
+  function header(stepNo, total) {
+    const pct = Math.round(stepNo / total * 100);
+    return `<div class="ct-head"><span class="ct-step">Step ${stepNo} of ${total}</span>
+              <button class="ct-close" data-act="skip" aria-label="Skip the tour">Skip tour</button></div>
+            <div class="ct-progress"><div style="width:${pct}%"></div></div>`;
+  }
+
+  function dots(stepNo, total) {
+    let h = '<div class="ct-dots" aria-hidden="true">';
+    for (let i = 1; i <= total; i++) h += `<span class="ct-dot${i === stepNo ? ' on' : ''}"></span>`;
+    return h + '</div>';
+  }
+
+  function render(s) {
+    if (s.kind === 'welcome') {
+      const first = NAME ? `, ${escapeHtml(NAME)}` : '';
+      return `<div class="ct-hero"><div class="ct-hero-emoji ct-wave">👋</div>
+                <div class="ct-hero-title" id="ct-title">Welcome to ClinicAI${first}!</div>
+                <div class="ct-hero-sub">Your clinic is live and ready.</div></div>
+              <div class="ct-center-body">
+                <div class="ct-body">Take a quick <b>1-minute tour</b> to see where everything is — and meet the AI assistant that can answer any "how do I…?" question.</div>
+                <div class="ct-center-btns">
+                  <button class="ct-btn ct-next" data-act="next">Show me around →</button>
+                  <button class="ct-skip-link" data-act="skip">Skip, I'll explore on my own</button>
+                </div></div>`;
+    }
+    if (s.kind === 'finale') {
+      const asks = ASKS.map((q, i) => `<button class="ct-ask" data-ask="${i}"><span>Ask →</span>${escapeHtml(q)}</button>`).join('');
+      return `<div class="ct-hero"><div class="ct-hero-emoji">🎉</div>
+                <div class="ct-hero-title" id="ct-title">You're all set!</div>
+                <div class="ct-hero-sub">Remember: the assistant is always one question away.</div></div>
+              <div class="ct-center-body">
+                <div class="ct-body">Try it right now — tap a question and watch it answer:</div>
+                <div class="ct-asks">${asks}</div>
+                <div class="ct-center-btns">
+                  <button class="ct-btn ct-next" data-act="finish">Start using ClinicAI</button>
+                  <button class="ct-skip-link" data-act="back">← Back</button>
+                </div></div>`;
+    }
+    const ts = tourSteps(), n = ts.indexOf(s) + 1, total = ts.length;
+    return `${header(n, total)}
+            <div class="ct-icon" aria-hidden="true">${s.icon}</div>
+            <div class="ct-title" id="ct-title">${s.title}</div>
+            <div class="ct-body">${s.body}</div>
+            ${s.tip ? `<div class="ct-tip">${s.tip}</div>` : ''}
+            <div class="ct-foot">${dots(n, total)}
+              <div class="ct-btns">
+                <button class="ct-btn ct-back" data-act="back">Back</button>
+                <button class="ct-btn ct-next" data-act="next">${n === total ? 'Finish' : 'Next'}</button>
+              </div></div>`;
+  }
+
+  function escapeHtml(t) {
+    return String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ── Geometry ─────────────────────────────────────────────────
+  function targetRect(el) {
+    const r = el.getBoundingClientRect(), pad = 8, vh = window.innerHeight;
+    let h = r.height + pad * 2;
+    const maxH = Math.max(160, vh * 0.5);
+    if (h > maxH) h = maxH;  // very tall sections: highlight the top part
+    return { top: r.top - pad, left: r.left - pad, width: r.width + pad * 2, height: h };
+  }
+
+  function placeSpot(rect) {
+    spot.style.top = rect.top + 'px'; spot.style.left = rect.left + 'px';
+    spot.style.width = rect.width + 'px'; spot.style.height = rect.height + 'px';
+  }
+
+  function placePop(rect) {
+    const vw = window.innerWidth, vh = window.innerHeight, m = 16, gap = 14;
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let place, top;
+    if (rect.top + rect.height + gap + ph + m <= vh) { place = 'bottom'; top = rect.top + rect.height + gap; }
+    else if (rect.top - gap - ph >= m) { place = 'top'; top = rect.top - gap - ph; }
+    else { place = 'bottom'; top = Math.max(m, vh - ph - m); }   // no room: dock to bottom of screen
+    let left = rect.left + rect.width / 2 - pw / 2;
+    left = Math.min(Math.max(m, left), vw - pw - m);
+    pop.dataset.place = place;
+    pop.style.top = top + 'px'; pop.style.left = left + 'px';
+    const ax = Math.min(Math.max(18, rect.left + rect.width / 2 - left - 7), pw - 32);
+    arrow.style.left = ax + 'px';
+    // Hide the arrow when the popover had to overlap the target
+    const overlaps = top < rect.top + rect.height && top + ph > rect.top;
+    arrow.style.display = overlaps ? 'none' : '';
+  }
+
+  function placeCenter() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    placeSpot({ top: vh / 2, left: vw / 2, width: 0, height: 0 });
+    pop.dataset.place = 'center';
+    pop.style.top = Math.max(16, (vh - pop.offsetHeight) / 2) + 'px';
+    pop.style.left = Math.max(16, (vw - pop.offsetWidth) / 2) + 'px';
+  }
+
+  function reposition() {
+    if (!active) return;
+    const s = steps[idx];
+    if (s.kind) placeCenter();
+    else if (curTarget) { const r = targetRect(curTarget); placeSpot(r); placePop(r); }
+  }
+
+  function onViewportChange() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => { rafPending = false; reposition(); });
+  }
+
+  function isFixed(el) {
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      const p = getComputedStyle(n).position;
+      if (p === 'fixed' || p === 'sticky') return true;
+    }
+    return false;
+  }
+
+  function scrollIntoViewThen(el, cb) {
+    const r = el.getBoundingClientRect(), vh = window.innerHeight;
+    const comfy = r.top >= 70 && r.top + Math.min(r.height, vh * 0.5) + 240 <= vh;
+    if (isFixed(el) || comfy) { cb(); return; }
+    const y = window.scrollY + r.top - Math.max(80, vh * 0.18);
+    window.scrollTo({ top: Math.max(0, y), behavior: reduced ? 'auto' : 'smooth' });
+    // wait for the scroll to settle
+    let last = -1, still = 0, t0 = performance.now();
+    (function wait() {
+      const cur = window.scrollY;
+      still = cur === last ? still + 1 : 0; last = cur;
+      if (still >= 4 || performance.now() - t0 > 1000) cb(); else requestAnimationFrame(wait);
+    })();
+  }
+
+  // ── Flow ─────────────────────────────────────────────────────
+  function show(i) {
+    idx = Math.max(0, Math.min(i, steps.length - 1));
+    const s = steps[idx];
+    document.querySelectorAll('.ct-glow').forEach(e => e.classList.remove('ct-glow'));
+    pop.classList.remove('ct-show');
+    const draw = () => {
+      content.innerHTML = render(s);
+      root.classList.toggle('ct-modal', !!s.kind);
+      if (s.kind) { curTarget = null; placeCenter(); }
+      else {
+        curTarget = document.querySelector(s.target);
+        if (s.glow) curTarget.classList.add('ct-glow');
+        const r = targetRect(curTarget); placeSpot(r); placePop(r);
+      }
+      requestAnimationFrame(() => {
+        pop.classList.add('ct-show');
+        const primary = pop.querySelector('.ct-next');
+        if (primary) primary.focus({ preventScroll: true });
+      });
+      if (s.kind === 'finale') confetti();
+    };
+    if (s.kind) setTimeout(draw, active ? 120 : 0);
+    else scrollIntoViewThen(document.querySelector(s.target), () => setTimeout(draw, 90));
+  }
+
+  function start() {
+    steps = buildSteps();
+    if (!steps.length) return;
+    active = true;
+    root.classList.add('ct-on');
+    root.setAttribute('aria-hidden', 'false');
+    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('scroll', onViewportChange, { passive: true });
+    show(0);
+  }
+
+  function end() {
+    active = false;
+    markDone();
+    pop.classList.remove('ct-show');
+    root.classList.remove('ct-on', 'ct-modal');
+    root.setAttribute('aria-hidden', 'true');
+    document.querySelectorAll('.ct-glow').forEach(e => e.classList.remove('ct-glow'));
+    document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('resize', onViewportChange);
+    window.removeEventListener('scroll', onViewportChange);
+    window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+  }
+
+  function onKey(e) {
+    if (!active) return;
+    if (e.key === 'Escape') { e.preventDefault(); end(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); if (idx > 0) show(idx - 1); }
+    else if (e.key === 'Tab') {   // keep focus inside the dialog
+      const f = [...pop.querySelectorAll('button')];
+      if (!f.length) return;
+      const i = f.indexOf(document.activeElement);
+      e.preventDefault();
+      f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    }
+  }
+
+  function next() { if (idx < steps.length - 1) show(idx + 1); else end(); }
+
+  pop.addEventListener('click', function (e) {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.ask !== undefined) {
+      const q = ASKS[+b.dataset.ask];
+      end();
+      setTimeout(() => { if (window.helpChipClick) window.helpChipClick(q); }, reduced ? 0 : 450);
+      return;
+    }
+    const act = b.dataset.act;
+    if (act === 'next') next();
+    else if (act === 'back') show(idx - 1);
+    else if (act === 'skip' || act === 'finish') end();
+  });
+
+  function confetti() {
+    if (reduced) return;
+    const colors = ['#6366F1', '#2563EB', '#0EA5E9', '#10B981', '#F59E0B', '#EC4899'];
+    for (let i = 0; i < 70; i++) {
+      const c = document.createElement('div');
+      c.className = 'ct-confetti';
+      c.style.left = Math.random() * 100 + 'vw';
+      c.style.background = colors[i % colors.length];
+      c.style.setProperty('--dx', (Math.random() * 160 - 80) + 'px');
+      c.style.setProperty('--rot', (Math.random() * 900 - 450) + 'deg');
+      c.style.animationDuration = (1.6 + Math.random() * 1.4) + 's';
+      c.style.animationDelay = (Math.random() * 0.35) + 's';
+      root.insertBefore(c, pop);   // behind the card, above the dimmed page
+      setTimeout(() => c.remove(), 3600);
+    }
+  }
+
+  window.ClinicTour = { start, end, get active() { return active; } };
+
+  const replay = new URLSearchParams(location.search).get('tour') === '1';
+  if (AUTO || replay) {
+    window.addEventListener('load', () => setTimeout(start, 500));
+  }
+})();
+</script>

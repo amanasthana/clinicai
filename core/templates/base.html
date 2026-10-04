@@ -34,17 +34,17 @@
       <a href="/" class="nav-link {% block nav_reception %}{% endblock %}">Reception</a>
       {% endif %}
       {% if user.staff_profile.can_prescribe %}
-      <a href="/rx/doctor/" class="nav-link {% block nav_doctor %}{% endblock %}">Doctor</a>
+      <a href="/rx/doctor/" class="nav-link {% block nav_doctor %}{% endblock %}" data-tour="nav-doctor">Doctor</a>
       <a href="/rx/favorites/" class="nav-link {% block nav_favorites %}{% endblock %}">My Medicines</a>
       {% endif %}
       {% if user.staff_profile.can_view_pharmacy %}
-      <a href="/pharmacy/" class="nav-link {% block nav_pharmacy %}{% endblock %}">Pharmacy</a>
+      <a href="/pharmacy/" class="nav-link {% block nav_pharmacy %}{% endblock %}" data-tour="nav-pharmacy">Pharmacy</a>
       {% endif %}
       {% if user.staff_profile.can_dispense_bill %}
       <a href="/pharmacy/walk-in/" class="nav-link {% block nav_walkin %}{% endblock %}">Dispense</a>
       {% endif %}
       {% if user.staff_profile.can_view_analytics %}
-      <a href="/analytics/" class="nav-link {% block nav_analytics %}{% endblock %}" title="Clinical Analytics">Analytics</a>
+      <a href="/analytics/" class="nav-link {% block nav_analytics %}{% endblock %}" title="Clinical Analytics" data-tour="nav-analytics">Analytics</a>
       {% endif %}
       {% if user.staff_profile.is_doctor or user.staff_profile.is_admin %}
       <a href="/accounts/supervised/" class="nav-link {% block nav_supervised %}{% endblock %}"
@@ -54,7 +54,7 @@
       </a>
       {% endif %}
       {% if user.staff_profile.can_manage_staff %}
-      <a href="/accounts/staff/" class="nav-link {% block nav_staff %}{% endblock %}">Staff</a>
+      <a href="/accounts/staff/" class="nav-link {% block nav_staff %}{% endblock %}" data-tour="nav-staff">Staff</a>
       <a href="/accounts/plan/" class="nav-link {% block nav_plan %}{% endblock %}">Plan</a>
       <a href="/accounts/letterhead/" class="nav-link {% block nav_letterhead %}{% endblock %}">Letterhead</a>
       {% endif %}

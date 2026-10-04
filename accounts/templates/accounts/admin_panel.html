@@ -52,7 +52,7 @@
       <p style="font-size:14px; color:#6B7280;">Review registrations and messages from clinics.</p>
     </div>
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
-      <a href="#registrations" class="btn btn-secondary btn-sm">Registrations{% if pending %} <span style="background:#EF4444;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">{{ pending|length }}</span>{% endif %}</a>
+      <a href="#registrations" class="btn btn-secondary btn-sm">Registrations</a>
       <a href="#messages" class="btn btn-secondary btn-sm">Messages{% if unread_count %} <span style="background:#EF4444;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">{{ unread_count }}</span>{% endif %}</a>
     </div>
   </div>
@@ -110,99 +110,12 @@
   </div>
   {% endif %}
 
-  <!-- Pending -->
-  <div id="registrations" style="font-size:16px; font-weight:600; color:#111827; margin-bottom:16px; display:flex; align-items:center; gap:10px;">
-    Pending Review
-    {% if pending %}<span style="background:#EF4444; color:#fff; font-size:12px; font-weight:700; padding:2px 9px; border-radius:20px;">{{ pending|length }}</span>{% endif %}
+  <!-- Registered clinics (auto-activated on sign-up — no approval needed) -->
+  <div id="registrations" style="font-size:16px; font-weight:600; color:#111827; margin-bottom:4px; display:flex; align-items:center; gap:10px;">
+    Registered Clinics
   </div>
-
-  {% if pending %}
-    {% for reg in pending %}
-    <div class="card reg-card">
-      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
-        <div>
-          <div style="font-size:18px; font-weight:700; color:#111827;">{{ reg.clinic_name }}</div>
-          <div style="font-size:13px; color:#6B7280; margin-top:2px;">{{ reg.get_clinic_type_display }} · {{ reg.city }}, {{ reg.state }}</div>
-          {% if reg.referred_by_mobile %}
-          <div style="margin-top:6px;">
-            <span style="display:inline-flex;align-items:center;gap:5px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;color:#1D4ED8;">
-              <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-              MR: {{ reg.referred_exec_name|default:reg.referred_by_mobile }}
-            </span>
-          </div>
-          {% endif %}
-        </div>
-        <div style="font-size:12px; color:#9CA3AF; white-space:nowrap;">{{ reg.created_at|date:"j M Y, H:i" }}</div>
-      </div>
-
-      <div class="reg-card-grid">
-        <div>
-          <div class="reg-field-label">Doctor</div>
-          <div class="reg-field-value">{{ reg.doctor_name }}</div>
-        </div>
-        <div>
-          <div class="reg-field-label">Qualification</div>
-          <div class="reg-field-value">{{ reg.qualification|default:"—" }}</div>
-        </div>
-        <div>
-          <div class="reg-field-label">Reg. Number</div>
-          <div class="reg-field-value">{{ reg.registration_number|default:"—" }}</div>
-        </div>
-        <div>
-          <div class="reg-field-label">Clinic Phone</div>
-          <div class="reg-field-value">{{ reg.clinic_phone }}</div>
-        </div>
-        <div>
-          <div class="reg-field-label">Doctor Mobile (login)</div>
-          <div class="reg-field-value" style="font-family:monospace; font-size:15px;">{{ reg.phone }}</div>
-        </div>
-        <div>
-          <div class="reg-field-label">Email</div>
-          <div class="reg-field-value">{{ reg.email|default:"—" }}</div>
-        </div>
-      </div>
-
-      <div class="reg-card-actions">
-        <!-- Approve -->
-        <form method="post" action="{% url 'accounts:approve_registration' reg.pk %}" style="display:inline;">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-success" onclick="return confirm('Approve {{ reg.clinic_name }}? This will create their account.')">
-            ✓ Approve &amp; Activate
-          </button>
-        </form>
-
-        <!-- WhatsApp notify (pre-filled message) -->
-        {% with wa_msg="Hello Dr. "|add:reg.doctor_name|add:"! Your clinic "|add:reg.clinic_name|add:" has been approved on ClinicAI. Login at clinicai.in with your mobile number "|add:reg.phone|add:" and the password you set during registration." %}
-        <a href="https://wa.me/91{{ reg.phone }}?text={{ wa_msg|urlencode }}" target="_blank" class="wa-notify-btn">
-          <span style="font-size:18px;">📲</span> WhatsApp Doctor
-        </a>
-        {% endwith %}
-
-        <!-- Reject (expandable) -->
-        <details class="reject-form">
-          <summary class="btn btn-secondary btn-sm" style="color:#EF4444;">Reject</summary>
-          <div style="margin-top:10px; background:#FFF5F5; border:1px solid #FCA5A5; border-radius:8px; padding:14px;">
-            <form method="post" action="{% url 'accounts:reject_registration' reg.pk %}">
-              {% csrf_token %}
-              <textarea name="notes" class="input-field" rows="2" placeholder="Reason for rejection (optional)..." style="margin-bottom:10px; font-size:13px;"></textarea>
-              <button type="submit" class="btn btn-sm" style="background:#EF4444; color:#fff;">Confirm Reject</button>
-            </form>
-          </div>
-        </details>
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-  <div class="card" style="text-align:center; padding:40px; color:#6B7280; margin-bottom:24px;">
-    No pending applications right now.
-  </div>
-  {% endif %}
-
-  <!-- Approved -->
+  <div style="font-size:13px; color:#6B7280; margin-bottom:14px;">New clinics are activated instantly when they register. This list is for reference only.</div>
   {% if approved_with_clinic %}
-  <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:12px; margin-top:32px;">
-    Recently Approved
-  </div>
   {% for reg, clinic_pk in approved_with_clinic %}
   <div class="card" style="margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 18px;">
     <div>
@@ -211,7 +124,7 @@
       {% if reg.referred_by_mobile %}<div style="margin-top:4px;"><span style="display:inline-flex;align-items:center;gap:4px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:600;color:#1D4ED8;">MR: {{ reg.referred_exec_name|default:reg.referred_by_mobile }}</span></div>{% endif %}
     </div>
     <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-      <span style="font-size:12px; color:#059669; font-weight:600; background:#ECFDF5; padding:3px 10px; border-radius:20px;">✓ Approved {{ reg.reviewed_at|date:"j M"|default:"–" }}</span>
+      <span style="font-size:12px; color:#059669; font-weight:600; background:#ECFDF5; padding:3px 10px; border-radius:20px;">✓ Live since {{ reg.reviewed_at|date:"j M"|default:"–" }}</span>
       <span style="font-size:12px; color:#6B7280; font-family:monospace; background:#F3F4F6; padding:3px 8px; border-radius:6px;">{{ reg.phone }}</span>
       <a href="{% url 'accounts:check_user' reg.phone %}" target="_blank" class="btn btn-secondary btn-sm">🔍 Check</a>
       <form method="post" action="{% url 'accounts:reset_clinic_password' reg.pk %}" style="display:inline;" onsubmit="return confirm('Create/fix account for {{ reg.phone }}?');">
@@ -229,9 +142,11 @@
     </div>
   </div>
   {% endfor %}
+  {% else %}
+  <div class="card" style="text-align:center; padding:32px; color:#6B7280; margin-bottom:24px;">No clinics have registered yet.</div>
   {% endif %}
 
-  <!-- Rejected -->
+  <!-- Rejected (historical, from the old manual-approval process) -->
   {% if rejected %}
   <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:12px; margin-top:32px;">
     Rejected

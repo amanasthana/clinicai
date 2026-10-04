@@ -200,10 +200,17 @@ class ClinicRegistrationForm(forms.Form):
         if not phone.isdigit() or len(phone) != 10:
             raise forms.ValidationError('Enter a valid 10-digit mobile number.')
         if User.objects.filter(username=phone).exists():
-            raise forms.ValidationError('A clinic with this mobile number is already registered.')
+            raise forms.ValidationError('This mobile number is already registered — please log in instead.')
         if ClinicRegistrationRequest.objects.filter(phone=phone, status='pending').exists():
-            raise forms.ValidationError('A registration request with this number is already pending review.')
+            raise forms.ValidationError('This mobile number is already registered — please log in instead.')
         return phone
+
+    def clean_email(self):
+        # Email is a login ID too (EmailOrUsernameBackend), so it must be unique
+        email = self.cleaned_data['email'].strip()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError('This email is already used by another account — please log in instead.')
+        return email
 
     def clean(self):
         cd = super().clean()

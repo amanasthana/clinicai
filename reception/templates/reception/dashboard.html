@@ -301,6 +301,7 @@
       <span class="help-chip" role="listitem" onclick="helpChipClick('Add stock to pharmacy')">Add stock</span>
       <span class="help-chip" role="listitem" onclick="helpChipClick('Change staff member roles and permissions')">Change roles</span>
       <span class="help-chip" role="listitem" onclick="helpChipClick('How do I set up clinic letterhead?')">Letterhead setup</span>
+      <span class="help-chip" role="listitem" id="tour-replay-chip" onclick="window.ClinicTour && ClinicTour.start()" title="Replay the guided tour of ClinicAI">🧭 Take the tour</span>
     </div>
 
     <!-- Loading dots -->
@@ -331,7 +332,7 @@
     <p class="page-subtitle" style="margin-bottom: 16px;">{{ today|date:"l, j F Y" }}</p>
 
     <!-- Today's stats — click to filter queue -->
-    <div class="stat-cards">
+    <div class="stat-cards" data-tour="stats">
       <div class="stat-card" id="filter-all" style="background: #fff; border: 1px solid var(--color-border);"
            onclick="setFilter('all', this)" title="Show all patients registered today">
         <div style="font-size: 22px; font-weight: 700; color: #111827;">{{ stats.total }}</div>
@@ -395,7 +396,7 @@
   </div>
 
   <!-- Patient Search (PRIMARY ACTION) -->
-  <div class="card" style="margin-bottom: 24px;">
+  <div class="card" style="margin-bottom: 24px;" data-tour="patients">
     <div style="font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 10px;">
       Patient Lookup
     </div>
@@ -423,6 +424,7 @@
   </div>
 
   <!-- Today's Queue -->
+  <div data-tour="queue">
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
     <div>
       <span style="font-size: 16px; font-weight: 600; color: #111827;">Today's Queue</span>
@@ -436,12 +438,13 @@
   <div id="queue-list">
     {% include "reception/_queue_list.html" %}
   </div>
+  </div>
 
 </div>
 
 <!-- Floating Add Walk-in button -->
 <a href="/patient/new/"
-   class="btn btn-primary btn-lg fab-walkin"
+   class="btn btn-primary btn-lg fab-walkin" data-tour="walkin"
    style="position: fixed; bottom: 28px; right: 28px; z-index: 50; text-align:center;"
    title="Register a new patient who's come in without an appointment">
   + Walk-in
@@ -498,6 +501,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "reception/_tour.html" %}
 <script>
 // ── Help bar ──────────────────────────────────────────────────────────────────
 (function() {

@@ -23,6 +23,8 @@ from .models import Clinic, StaffMember, ClinicRegistrationRequest, ContactMessa
 from .permissions import require_permission, set_permissions_from_role, ROLE_PERMISSIONS, ALL_PERMISSION_FLAGS
 
 
+from django.views.decorators.http import require_POST as _require_POST_early
+
 def login_view(request):
     """Clinic staff login. Redirects to reception dashboard on success."""
     if request.user.is_authenticated:
@@ -33,6 +35,12 @@ def login_view(request):
         return redirect('accounts:clinic_setup')
 
     form = StyledAuthForm(request, data=request.POST or None)
+    prefill = request.GET.get('u', '').strip()
+    if request.method == 'GET' and prefill.isdigit() and len(prefill) == 10:
+        # Coming from "Your clinic is live" — mobile pre-filled, cursor goes to password
+        form.fields['username'].initial = prefill
+        form.fields['username'].widget.attrs.pop('autofocus', None)
+        form.fields['password'].widget.attrs['autofocus'] = True
 
     # ── Step 2: user picked their clinic from the conflict selector ──
     chosen_namespaced = request.POST.get('chosen_namespaced_username', '').strip()
@@ -375,19 +383,33 @@ def register_view(request):
 
     form = ClinicRegistrationForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        reg = form.save()
-        referred_by_mobile = request.POST.get('referred_by_mobile', '').strip()
-        if referred_by_mobile.isdigit() and len(referred_by_mobile) == 10:
-            reg.referred_by_mobile = referred_by_mobile
-            reg.save(update_fields=['referred_by_mobile'])
-        return redirect('accounts:register_success')
+        from django.db import transaction
+        from .registration import provision_clinic, ProvisioningError
+        try:
+            # Registration is activated immediately — no manual approval step
+            with transaction.atomic():
+                reg = form.save()
+                referred_by_mobile = request.POST.get('referred_by_mobile', '').strip()
+                if referred_by_mobile.isdigit() and len(referred_by_mobile) == 10:
+                    reg.referred_by_mobile = referred_by_mobile
+                    reg.save(update_fields=['referred_by_mobile'])
+                provision_clinic(reg)
+        except ProvisioningError as e:
+            form.add_error('phone', str(e))
+        else:
+            request.session['registered_clinic'] = {
+                'phone': reg.phone, 'doctor_name': reg.doctor_name, 'clinic_name': reg.clinic_name,
+            }
+            return redirect('accounts:register_success')
 
     return render(request, 'accounts/register.html', {'form': form})
 
 
 def register_success_view(request):
-    """Thank-you page shown after registration form submitted."""
-    return render(request, 'accounts/register_success.html')
+    """Shown right after registration — the clinic is already live, so point straight to login."""
+    return render(request, 'accounts/register_success.html', {
+        'registered': request.session.get('registered_clinic'),
+    })
 
 
 def admin_panel_view(request):
@@ -396,8 +418,9 @@ def admin_panel_view(request):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden('Not authorized.')
 
-    pending = ClinicRegistrationRequest.objects.filter(status='pending')
-    approved = ClinicRegistrationRequest.objects.filter(status='approved').order_by('-reviewed_at')[:20]
+    # Registrations are auto-activated; 'pending' only exists for legacy rows not yet activated
+    pending = ClinicRegistrationRequest.objects.none()
+    approved = ClinicRegistrationRequest.objects.filter(status='approved').order_by('-reviewed_at')[:30]
     rejected = ClinicRegistrationRequest.objects.filter(status='rejected').order_by('-reviewed_at')[:10]
 
     # Annotate each registration with the referring executive's name
@@ -480,81 +503,6 @@ def admin_panel_view(request):
 
 from django.views.decorators.http import require_POST as _require_POST
 
-@_require_POST
-def approve_registration_view(request, pk):
-    """Approve a registration: create Clinic + User + StaffMember."""
-    if not request.user.is_superuser:
-        from django.http import HttpResponseForbidden
-        return HttpResponseForbidden('Not authorized.')
-
-    from django.db import transaction
-
-    reg = ClinicRegistrationRequest.objects.get(pk=pk, status='pending')
-
-    try:
-        with transaction.atomic():
-            # Create clinic
-            clinic = Clinic.objects.create(
-                name=reg.clinic_name,
-                city=reg.city,
-                state=reg.state,
-                phone=reg.clinic_phone,
-            )
-
-            # Create user (phone = username)
-            user = User(
-                username=reg.phone,
-                email=reg.email,
-                first_name=reg.doctor_name.split()[0] if reg.doctor_name else '',
-                last_name=' '.join(reg.doctor_name.split()[1:]) if reg.doctor_name else '',
-            )
-            user.password = reg.password_hash   # already hashed by make_password
-            user.save()
-
-            # Create staff member
-            sm = StaffMember.objects.create(
-                user=user,
-                clinic=clinic,
-                role='admin',
-                display_name=reg.doctor_name,
-                qualification=reg.qualification,
-                registration_number=reg.registration_number,
-            )
-            set_permissions_from_role(sm)
-            sm.save()
-
-            # Mark as approved
-            reg.status = 'approved'
-            reg.reviewed_at = timezone.now()
-            reg.save()
-
-    except Exception as e:
-        logger.error('APPROVAL_FAILED pk=%s error=%s', pk, e, exc_info=True)
-        messages.error(request, f'Approval failed: {e}')
-        return redirect('accounts:admin_panel')
-
-    logger.info('APPROVAL_OK clinic=%s phone=%s', reg.clinic_name, reg.phone)
-    messages.success(request, f'{reg.clinic_name} approved! Login: {reg.phone} / [password set at registration]. Send WhatsApp.')
-    return redirect('accounts:admin_panel')
-
-
-@_require_POST
-def reject_registration_view(request, pk):
-    """Reject a registration request."""
-    if not request.user.is_superuser:
-        from django.http import HttpResponseForbidden
-        return HttpResponseForbidden('Not authorized.')
-
-    reg = ClinicRegistrationRequest.objects.get(pk=pk, status='pending')
-    reg.status = 'rejected'
-    reg.reviewed_at = timezone.now()
-    reg.admin_notes = request.POST.get('notes', '')
-    reg.save()
-
-    messages.info(request, f'{reg.clinic_name} registration rejected.')
-    return redirect('accounts:admin_panel')
-
-
 def contact_view(request):
     """Public contact form — anyone can send a message."""
     if request.user.is_authenticated:
@@ -601,6 +549,18 @@ def update_preference_api(request):
     if data.get('rx_language') in ('en', 'hi'):
         staff.rx_language = data['rx_language']
         staff.save(update_fields=['rx_language'])
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@_require_POST_early
+def tour_complete_api(request):
+    """Mark the first-login product tour as seen (finished or skipped)."""
+    from django.http import JsonResponse
+    staff = getattr(request.user, 'staff_profile', None)
+    if staff and not staff.tour_completed:
+        staff.tour_completed = True
+        staff.save(update_fields=['tour_completed'])
     return JsonResponse({'ok': True})
 
 

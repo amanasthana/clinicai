@@ -292,8 +292,9 @@ MULTI-CLINIC SUPPORT
 CLINIC REGISTRATION (/accounts/register/)
 - Public self-registration form for new clinics wanting to join ClinicAI.
 - Three sections: clinic details, doctor details, login credentials.
-- After submitting, the request goes to the ClinicAI team for review.
-- Once approved, the doctor logs in using their 10-digit mobile number as the username.
+- The clinic is activated instantly on submit — there is no approval or waiting period.
+- The doctor logs in right away using their 10-digit mobile number (or email) and the password they chose.
+- On first login, a short guided tour shows where everything is. It can be replayed anytime from the "Take the tour" chip under the assistant on the home screen.
 
 LOGIN
 - Use your 10-digit mobile number OR username OR email address to log in.
