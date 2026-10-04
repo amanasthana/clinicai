@@ -287,6 +287,10 @@ def edit_staff_view(request, pk):
         sm.qualification = request.POST.get('qualification', '').strip()
         sm.registration_number = request.POST.get('registration_number', '').strip()
         sm.show_registration_on_rx = request.POST.get('show_registration_on_rx') == 'on'
+        sm.display_name_hi = request.POST.get('display_name_hi', '').strip()
+        sm.qualification_hi = request.POST.get('qualification_hi', '').strip()
+        if request.POST.get('rx_language') in ('en', 'hi'):
+            sm.rx_language = request.POST['rx_language']
         new_role = request.POST.get('role', sm.role)
         sm.role = new_role
 
@@ -323,9 +327,12 @@ def edit_staff_view(request, pk):
         return redirect('accounts:staff_list')
 
     import json as _json
+    from prescription.hindi import transliterate
     return render(request, 'accounts/edit_staff.html', {
         'sm': sm,
         'clinic': my_clinic,
+        'display_name_hi_suggest': transliterate(sm.display_name),
+        'qualification_hi_suggest': transliterate(sm.qualification),
         'role_permissions': ROLE_PERMISSIONS,
         'all_flags': ALL_PERMISSION_FLAGS,
         'role_permissions_json': _json.dumps(ROLE_PERMISSIONS),
@@ -591,6 +598,9 @@ def update_preference_api(request):
     if 'show_rx_remarks' in data:
         staff.show_rx_remarks = bool(data['show_rx_remarks'])
         staff.save(update_fields=['show_rx_remarks'])
+    if data.get('rx_language') in ('en', 'hi'):
+        staff.rx_language = data['rx_language']
+        staff.save(update_fields=['rx_language'])
     return JsonResponse({'ok': True})
 
 
@@ -941,6 +951,8 @@ def clinic_edit_view(request):
         clinic.city = request.POST.get('city', '').strip()
         clinic.state = request.POST.get('state', '').strip()
         clinic.phone = request.POST.get('phone', '').strip()
+        clinic.name_hi = request.POST.get('name_hi', '').strip()
+        clinic.address_hi = request.POST.get('address_hi', '').strip()
         clinic.drug_license_number = request.POST.get('drug_license_number', '').strip()
         clinic.medical_license_number = request.POST.get('medical_license_number', '').strip()
         clinic.gst_number = request.POST.get('gst_number', '').strip().upper()
@@ -956,13 +968,18 @@ def clinic_edit_view(request):
         except Exception:
             clinic.default_opd_fee = _decimal.Decimal('0')
         clinic.save(update_fields=[
-            'name', 'address', 'city', 'state', 'phone',
+            'name', 'address', 'city', 'state', 'phone', 'name_hi', 'address_hi',
             'drug_license_number', 'medical_license_number',
             'gst_number', 'default_gst_percent', 'default_opd_fee',
         ])
         messages.success(request, 'Clinic details updated.')
         return redirect('accounts:staff_list')
-    return render(request, 'accounts/clinic_edit.html', {'clinic': clinic})
+    from prescription.hindi import transliterate
+    return render(request, 'accounts/clinic_edit.html', {
+        'clinic': clinic,
+        'name_hi_suggest': transliterate(clinic.name),
+        'address_hi_suggest': transliterate(', '.join(p for p in (clinic.address, clinic.city, clinic.state) if p)),
+    })
 
 
 @login_required

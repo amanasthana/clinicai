@@ -1117,6 +1117,30 @@
           </div>
         </div>
 
+        <!-- Prescription language -->
+        <div id="rx-lang-box" style="margin-bottom:20px; padding:14px 16px; background:#F5F3FF; border:1px solid #DDD6FE; border-radius:12px;">
+          <label style="display:flex; align-items:flex-start; gap:12px; cursor:pointer;">
+            <input type="checkbox" id="rx-hindi-toggle" {% if rx_language == 'hi' %}checked{% endif %}
+                   onchange="document.getElementById('rx-hindi-name').style.display = this.checked ? '' : 'none'"
+                   style="margin-top:3px; accent-color:#7C3AED; width:18px; height:18px; flex-shrink:0;">
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#4C1D95;">
+                <span style="font-family:'Noto Sans Devanagari',sans-serif;">हिंदी पर्चा</span> — Hindi-only prescription
+              </div>
+              <div style="font-size:12px; color:#6D28D9; margin-top:2px; line-height:1.5;">
+                The entire printed prescription in Hindi: clinic, doctor, patient, medicines, advice. Numbers stay 0-9.
+              </div>
+            </div>
+          </label>
+          <div id="rx-hindi-name" style="margin-top:12px; {% if rx_language != 'hi' %}display:none;{% endif %}">
+            <label for="patient-name-hi" style="font-size:12px; font-weight:500; color:#4C1D95; display:block; margin-bottom:4px;">
+              Patient name in Hindi <span style="color:#7C3AED; font-weight:400;">(check the spelling)</span>
+            </label>
+            <input type="text" id="patient-name-hi" class="input-field" value="{{ patient_name_hi }}"
+                   style="font-family:'Noto Sans Devanagari',sans-serif; font-size:15px; max-width:320px; background:#fff;">
+          </div>
+        </div>
+
         <!-- Save actions -->
         <div class="rx-actions">
           <button onclick="savePrescription()" class="btn btn-success btn-lg">
@@ -2497,6 +2521,8 @@ async function savePrescription() {
         differential_diagnoses: _differentials.length ? _differentials : null,
         investigations: Object.keys(_investigations).length ? _investigations : null,
         selected_diagnosis: _selectedDiagnosis || '',
+        language: document.getElementById('rx-hindi-toggle')?.checked ? 'hi' : 'en',
+        patient_name_hi: (document.getElementById('patient-name-hi')?.value || '').trim(),
       }),
     });
     const data = await resp.json();

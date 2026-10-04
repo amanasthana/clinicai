@@ -38,6 +38,10 @@ class Prescription(models.Model):
     investigations_text = models.TextField(blank=True, default='')
     validity_days = models.PositiveSmallIntegerField(default=30)
     share_token = models.UUIDField(unique=True, null=True, blank=True)
+    LANGUAGE_CHOICES = [('en', 'English'), ('hi', 'Hindi')]
+    language = models.CharField(max_length=2, choices=LANGUAGE_CHOICES, default='en')
+    # Cached Hindi translation of the clinical content: {"hash": <source hash>, "data": {...}}
+    hindi_content = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

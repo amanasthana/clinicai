@@ -134,7 +134,10 @@ def consult_view(request, visit_id):
             ],
         })
 
+    from .hindi import patient_name_hi
     return render(request, 'prescription/consult.html', {
+        'rx_language': existing_rx.language if existing_rx else doctor.rx_language,
+        'patient_name_hi': patient_name_hi(patient),
         'visit': visit,
         'patient': patient,
         'clinic': clinic,
@@ -314,8 +317,16 @@ def save_prescription_api(request, visit_id):
             'drug_allergies': data.get('drug_allergies', ''),
             'investigations_text': rx_data.get('investigations_text', ''),
             'validity_days': int(rx_data.get('validity_days') or 30),
+            'language': 'hi' if data.get('language') == 'hi' else 'en',
         },
     )
+
+    # Doctor-confirmed Devanagari spelling of the patient's name (Hindi prescriptions)
+    patient_name_hi = (data.get('patient_name_hi') or '').strip()
+    if rx.language == 'hi' and patient_name_hi:
+        from .hindi import ensure_devanagari
+        visit.patient.name_hi = ensure_devanagari(patient_name_hi)[:200]
+        visit.patient.save(update_fields=['name_hi'])
 
     if not rx.share_token:
         import uuid as _uuid
@@ -370,12 +381,18 @@ def print_prescription_view(request, rx_id):
         from django.http import Http404
         raise Http404
 
+    hindi, hindi_error = _hindi_context(request, rx)
+
     # Build WhatsApp share URL with professional message
     wa_url = ''
     patient = rx.visit.patient
     if patient.phone:
         phone_digits = ''.join(filter(str.isdigit, patient.phone))
-        if phone_digits and rx.share_token:
+        if phone_digits and rx.share_token and hindi:
+            from .hindi import hindi_whatsapp_message
+            share_url = request.build_absolute_uri(f'/rx/share/{rx.share_token}/?lang=hi')
+            wa_url = f'https://wa.me/91{phone_digits}?text={quote(hindi_whatsapp_message(rx, share_url))}'
+        elif phone_digits and rx.share_token:
             share_url = request.build_absolute_uri(f'/rx/share/{rx.share_token}/')
             clinic_name = rx.visit.clinic.name
             doctor_name = rx.doctor.display_name if rx.doctor else ''
@@ -416,7 +433,25 @@ def print_prescription_view(request, rx_id):
         'medicines': rx.medicines.all(),
         'wa_url': wa_url,
         'show_remarks': show_remarks,
+        'hindi': hindi,
+        'hindi_error': hindi_error,
     })
+
+
+def _hindi_context(request, rx):
+    """
+    Hindi card context when this prescription should render in Hindi.
+    ?lang=hi / ?lang=en overrides the saved language for this view only.
+    Returns (context or None, error message).
+    """
+    lang = request.GET.get('lang') or rx.language
+    if lang != 'hi':
+        return None, ''
+    from .hindi import build_hindi_print_context, HindiTranslationError
+    try:
+        return build_hindi_print_context(rx), ''
+    except HindiTranslationError:
+        return None, 'Hindi translation is unavailable right now. Showing English — reload the page to retry.'
 
 
 @require_permission('can_prescribe')
@@ -590,6 +625,7 @@ def public_prescription_view(request, token):
     show_remarks = True
     if rx.doctor:
         show_remarks = rx.doctor.show_rx_remarks
+    hindi, _ = _hindi_context(request, rx)
     return render(request, 'prescription/print.html', {
         'rx': rx,
         'visit': rx.visit,
@@ -600,6 +636,7 @@ def public_prescription_view(request, token):
         'wa_url': '',   # no WA button on public view
         'show_remarks': show_remarks,
         'is_public': True,
+        'hindi': hindi,
     })
 
 

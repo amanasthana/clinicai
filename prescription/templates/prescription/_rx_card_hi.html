@@ -1,0 +1,153 @@
+{# Hindi-only prescription card. Every visible string is Devanagari; only digits 0-9 are English. #}
+<div class="rx-card{% if clinic.letterhead_image and clinic.use_letterhead %} has-letterhead{% endif %}" lang="hi">
+
+  {% if clinic.letterhead_image and clinic.use_letterhead %}
+  <div class="lh-spacer" style="height:{{ clinic.letterhead_height_mm }}mm;"></div>
+  {% endif %}
+
+  <!-- Header -->
+  <div class="rx-header">
+    <div>
+      <div class="rx-clinic-name">{{ hindi.clinic_name }}</div>
+      <div class="rx-clinic-addr">{{ hindi.clinic_address }}{% if hindi.clinic_phone %}{% if hindi.clinic_address %}&ensp;·&ensp;{% endif %}फ़ोन {{ hindi.clinic_phone }}{% endif %}</div>
+    </div>
+    {% if doctor %}
+    <div class="rx-doctor-block">
+      <div class="rx-doctor-name">{{ hindi.doctor_name }}</div>
+      <div class="rx-doctor-qual">{{ hindi.doctor_qualification }}{% if hindi.doctor_registration %}<br>पंजीकरण सं. {{ hindi.doctor_registration }}{% endif %}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Patient strip -->
+  <div class="rx-patient">
+    <div>
+      <div class="rx-pt-name">{{ hindi.patient_name }}</div>
+      <div class="rx-pt-meta">{{ hindi.patient_age }}{% if hindi.patient_gender %}{% if hindi.patient_age %}&ensp;·&ensp;{% endif %}{{ hindi.patient_gender }}{% endif %}{% if hindi.patient_blood_group %}&ensp;·&ensp;रक्त समूह {{ hindi.patient_blood_group }}{% endif %}</div>
+    </div>
+    <div class="rx-pt-date">दिनांक {{ hindi.date }}{% if visit.token_number %}<br>टोकन&nbsp;{{ visit.token_number }}{% endif %}</div>
+  </div>
+
+  <!-- Clinical info strip -->
+  {% if hindi.complaint or hindi.vitals or hindi.clinical_evaluation or hindi.comorbidities or hindi.past_history or hindi.drug_allergies %}
+  <div class="rx-clinical">
+    {% if hindi.complaint %}
+    <div class="rx-clin-row"><span class="rx-clin-label">तकलीफ़</span><span class="rx-clin-value">{{ hindi.complaint }}</span></div>
+    {% endif %}
+    {% if hindi.vitals %}
+    <div class="rx-clin-row"><span class="rx-clin-label">जाँच माप</span><span class="rx-clin-value">{{ hindi.vitals }}</span></div>
+    {% endif %}
+    {% if hindi.clinical_evaluation %}
+    <div class="rx-clin-row"><span class="rx-clin-label">शारीरिक जाँच</span><span class="rx-clin-value">{{ hindi.clinical_evaluation }}</span></div>
+    {% endif %}
+    {% if hindi.comorbidities %}
+    <div class="rx-clin-row"><span class="rx-clin-label">अन्य बीमारियाँ</span><span class="rx-clin-value">{{ hindi.comorbidities }}</span></div>
+    {% endif %}
+    {% if hindi.past_history %}
+    <div class="rx-clin-row"><span class="rx-clin-label">पुरानी बीमारी</span><span class="rx-clin-value">{{ hindi.past_history }}</span></div>
+    {% endif %}
+    {% if hindi.drug_allergies %}
+    <div class="rx-clin-row"><span class="rx-clin-label">दवा से एलर्जी</span><span class="rx-clin-value">{{ hindi.drug_allergies }}</span></div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Body -->
+  <div class="rx-body">
+
+    <div class="rx-symbol-row">
+      <span class="rx-symbol">&#8478;</span>
+      {% if hindi.diagnosis %}<div class="rx-diagnosis">{{ hindi.diagnosis }}</div>{% endif %}
+    </div>
+
+    <!-- SCREEN medicine cards -->
+    <div class="rx-meds-screen">
+      {% for med in hindi.medicines %}
+      <div class="rx-med-card">
+        <div class="rx-med-card-num">{{ forloop.counter }}</div>
+        <div>
+          <div class="rx-med-card-name">{{ med.drug_name }}</div>
+          <div class="rx-med-card-sig">
+            {% if med.route %}<span style="background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; margin-right:4px;">{{ med.route }}</span>{% endif %}
+            {% if med.dosage %}<span class="rx-dosage-badge">{{ med.dosage }}</span>{% endif %}
+            {% if med.frequency %}<span class="rx-med-card-sep">·</span><span class="rx-med-card-freq">{{ med.frequency }}</span>{% endif %}
+            {% if med.duration %}<span class="rx-med-card-sep">·</span><span class="rx-med-card-dur">{{ med.duration }}</span>{% endif %}
+          </div>
+          {% if med.notes and show_remarks %}<div class="rx-med-card-note">{{ med.notes }}</div>{% endif %}
+        </div>
+      </div>
+      {% empty %}
+      <div style="padding:6px 0;color:var(--muted);font-size:12px;">कोई दवा नहीं लिखी गई।</div>
+      {% endfor %}
+    </div>
+
+    <!-- PRINT medicine table -->
+    <div class="rx-meds-print">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-n">क्र.</th>
+            <th>दवा और मात्रा</th>
+            <th class="col-dose" style="padding-left:8pt;">खुराक</th>
+            <th class="col-when" style="padding-left:6pt;">कब</th>
+            <th class="col-dur">कितने दिन</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for med in hindi.medicines %}
+          <tr>
+            <td class="col-n">{{ forloop.counter }}</td>
+            <td class="col-drug">
+              {{ med.drug_name }}{% if med.route %} <span style="font-size:7.5pt; font-weight:700; color:#1D4ED8;">({{ med.route }})</span>{% endif %}
+              {% if med.notes and show_remarks %}<span class="drug-note">{{ med.notes }}</span>{% endif %}
+            </td>
+            <td class="col-dose" style="padding-left:8pt;">{% if med.dosage %}<span class="print-badge">{{ med.dosage }}</span>{% endif %}</td>
+            <td class="col-when">{{ med.frequency }}</td>
+            <td class="col-dur">{{ med.duration }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if hindi.investigations_text %}
+    <div class="rx-inv-wrap">
+      <div class="rx-inv-label">सुझाई गई जाँचें</div>
+      <div class="rx-inv-text">{{ hindi.investigations_text }}</div>
+    </div>
+    {% endif %}
+
+    {% if hindi.advice %}
+    <div class="rx-advice-wrap">
+      <div class="rx-advice-label">सलाह</div>
+      <div class="rx-advice-text">{{ hindi.advice }}</div>
+    </div>
+    {% endif %}
+
+    <div class="rx-footer-row">
+      <div>
+        {% if hindi.follow_up_date %}
+        <div class="rx-followup-lbl">अगली मुलाकात</div>
+        <div class="rx-followup">{{ hindi.follow_up_date }}</div>
+        {% endif %}
+      </div>
+      <div class="rx-signature">
+        <span class="rx-sig-line"></span>
+        <div class="rx-sig-name">{% if doctor %}{{ hindi.doctor_name }}{% else %}डॉक्टर के हस्ताक्षर{% endif %}</div>
+      </div>
+    </div>
+
+  </div><!-- /.rx-body -->
+
+  {% if hindi.summary %}
+  <div class="rx-summary-outer">
+    <div class="rx-summary-inner">
+      <div class="rx-summary-title">आपके लिए</div>
+      <div class="rx-summary-hi">{{ hindi.summary }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="rx-branding">क्लिनिकएआई द्वारा तैयार &ensp;·&ensp; {{ rx.validity_days|default:30 }} दिनों के लिए मान्य</div>
+
+</div>

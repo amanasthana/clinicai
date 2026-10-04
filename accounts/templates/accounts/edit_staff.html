@@ -81,6 +81,33 @@
           </div>
         </label>
       </div>
+
+      <div style="margin-top: 12px; padding: 12px 14px; background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 8px;">
+        <div style="font-size: 14px; font-weight: 600; color: #4C1D95; margin-bottom: 8px;">
+          Hindi prescriptions <span style="font-family:'Noto Sans Devanagari',sans-serif; font-weight:500;">(हिंदी पर्चा)</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="rx_language">Default prescription language</label>
+          <select name="rx_language" id="rx_language" class="form-control">
+            <option value="en" {% if sm.rx_language != 'hi' %}selected{% endif %}>English</option>
+            <option value="hi" {% if sm.rx_language == 'hi' %}selected{% endif %}>Hindi only — entire prescription in Hindi</option>
+          </select>
+          <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Can still be switched per patient on the consultation screen.</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label" for="display_name_hi">Name in Hindi</label>
+            <input type="text" name="display_name_hi" id="display_name_hi" value="{{ sm.display_name_hi }}" class="form-control"
+                   placeholder="{{ display_name_hi_suggest }}" style="font-family:'Noto Sans Devanagari',sans-serif;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="qualification_hi">Qualification in Hindi</label>
+            <input type="text" name="qualification_hi" id="qualification_hi" value="{{ sm.qualification_hi }}" class="form-control"
+                   placeholder="{{ qualification_hi_suggest }}" style="font-family:'Noto Sans Devanagari',sans-serif;">
+          </div>
+        </div>
+        <div style="font-size: 12px; color: #6B7280;">Leave blank to use the automatic spelling shown in grey.</div>
+      </div>
       {% endif %}
     </div>
 

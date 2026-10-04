@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{% if hindi %}hi{% else %}en{% endif %}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prescription · {{ patient.full_name }}</title>
+  <title>{% if hindi %}पर्चा · {{ hindi.patient_name }}{% else %}Prescription · {{ patient.full_name }}{% endif %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
@@ -198,15 +198,29 @@
 
   .rx-branding { padding: 7px 22px 10px; text-align: center; font-size: 10px; color: var(--muted); border-top: 1px solid var(--border); }
 
-  /* ─── Hindi mode ─────────────────────────────────────────────── */
-  .hi-only { display: none !important; }
-  body.hindi-mode .en-only { display: none !important; }
-  body.hindi-mode .hi-only { display: revert !important; }
-  body.hindi-mode .rx-med-card-sig    { display: none !important; }
-  body.hindi-mode .rx-med-card-sig-hi { display: flex !important; }
-  body.hindi-mode .rx-summary-en   { display: none !important; }
-  body.hindi-mode .rx-summary-hi   { display: block !important; }
-  body.hindi-mode .rx-summary-div  { display: none !important; }
+  /* ─── Hindi-only prescription ────────────────────────────────── */
+  /* Noto Sans Devanagari has Devanagari + Latin digits, so the whole card uses one font.
+     html2canvas (Save as PDF / WhatsApp PDF) draws text in pieces: letter-spacing or
+     word-break/overflow-wrap "break-word" make it split per code point, which detaches
+     matras and breaks conjuncts (पेशाब → पेश ब). Keep both off on the Hindi card. */
+  .rx-card[lang="hi"],
+  .rx-card[lang="hi"] .rx-dosage-badge,
+  .rx-card[lang="hi"] .print-badge,
+  .rx-card[lang="hi"] .rx-symbol-row .rx-diagnosis {
+    font-family: 'Noto Sans Devanagari', 'Inter', sans-serif !important;
+  }
+  .rx-card[lang="hi"] * {
+    letter-spacing: 0 !important; text-transform: none !important; font-style: normal;
+    word-break: normal !important; overflow-wrap: normal !important;
+  }
+  .rx-card[lang="hi"] .rx-symbol { font-style: italic; }
+  .rx-card[lang="hi"] .rx-clin-label { font-size: 11px; }
+  .rx-card[lang="hi"] .rx-summary-hi { font-size: 13px; }
+  .rx-card[lang="hi"] .rx-med-card-name { font-size: 14px; }
+  .hindi-error {
+    max-width: 560px; margin: 0 auto 12px; padding: 10px 14px; border-radius: 8px;
+    background: #FEF2F2; border: 1.5px solid #FECACA; color: #991B1B; font-size: 13px;
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      PRINT — A4 (default) or A5 (toggle)
@@ -398,11 +412,6 @@
     text-align: right; white-space: nowrap; width: 1%;
   }
 
-  /* Hindi print table variant */
-  .rx-meds-print .col-when-hi,
-  .rx-meds-print .col-dur-hi {
-    font-family: 'Noto Sans Devanagari', sans-serif;
-  }
   </style>
 <!-- A4 default; toggleSize() swaps this to A5 when needed -->
 <style id="page-size-style">@media print { @page { size: A4 portrait; margin: 8mm 12mm; } }</style>
@@ -421,10 +430,14 @@
     <option value="a4">A4 (210×297mm)</option>
     <option value="a5">A5 (148×210mm)</option>
   </select>
-  <button class="tb-btn tb-hindi" id="hindi-toggle" onclick="toggleHindi()">
+  {% if hindi %}
+  <a class="tb-btn tb-hindi" id="hindi-toggle" href="?lang=en">English</a>
+  {% else %}
+  <a class="tb-btn tb-hindi" id="hindi-toggle" href="?lang=hi">
     <span style="font-family:'Noto Sans Devanagari',sans-serif;font-size:15px;line-height:1;">अ</span>
     हिंदी
-  </button>
+  </a>
+  {% endif %}
 </div>
 {% else %}
 <div class="rx-toolbar">
@@ -442,10 +455,17 @@
     <option value="a4">A4 (210×297mm)</option>
     <option value="a5">A5 (148×210mm)</option>
   </select>
-  <button class="tb-btn tb-hindi" id="hindi-toggle" onclick="toggleHindi()">
+  {% if hindi %}
+  <a class="tb-btn tb-hindi active" id="hindi-toggle" href="?lang=en" title="Show this prescription in English">
+    <span style="font-family:'Noto Sans Devanagari',sans-serif;font-size:15px;line-height:1;">अ</span>
+    हिंदी ✓
+  </a>
+  {% else %}
+  <a class="tb-btn tb-hindi" id="hindi-toggle" href="?lang=hi" title="Show the complete prescription in Hindi">
     <span style="font-family:'Noto Sans Devanagari',sans-serif;font-size:15px;line-height:1;">अ</span>
     Hindi
-  </button>
+  </a>
+  {% endif %}
   {% if wa_url %}
   <button type="button" class="tb-btn tb-wa" onclick="sendPdfWhatsApp('{{ wa_url|escapejs }}')">
     <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.857L0 24l6.309-1.505A11.946 11.946 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.79 9.79 0 01-5.002-1.37l-.36-.213-3.743.892.925-3.645-.233-.374A9.77 9.77 0 012.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/></svg>
@@ -470,7 +490,12 @@
 {% endif %}
 {% endif %}
 
+{% if hindi_error %}<div class="hindi-error">{{ hindi_error }}</div>{% endif %}
+
 <!-- ── Prescription card ─────────────────────────────────────── -->
+{% if hindi %}
+{% include "prescription/_rx_card_hi.html" %}
+{% else %}
 <div class="rx-card{% if clinic.letterhead_image and clinic.use_letterhead %} has-letterhead{% endif %}">
 
   {% if clinic.letterhead_image and clinic.use_letterhead %}
@@ -563,24 +588,14 @@
         <div class="rx-med-card-num">{{ forloop.counter }}</div>
         <div>
           <div class="rx-med-card-name">{{ med.drug_name }}</div>
-          <!-- English sig -->
-          <div class="rx-med-card-sig en-only">
+          <div class="rx-med-card-sig">
             {% if med.route %}<span style="background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; margin-right:4px;">{{ med.route }}</span>{% endif %}
             <span class="rx-dosage-badge{% if dl|slice:':3' == 'sos' %} sos{% endif %}">{{ med.dosage }}</span>
             {% if med.frequency %}<span class="rx-med-card-sep">·</span><span class="rx-med-card-freq">{{ med.frequency }}</span>{% endif %}
             {% if med.duration %}<span class="rx-med-card-sep">·</span><span class="rx-med-card-dur">{{ med.duration }}</span>{% endif %}
           </div>
-          <!-- Hindi sig -->
-          <div class="rx-med-card-sig-hi hi-only">
-            <span class="rx-dosage-badge{% if dl|slice:':3' == 'sos' %} sos{% endif %}">{{ med.dosage }}</span>
-            {% if med.frequency %}<span class="rx-med-card-sep">·</span><span class="rx-med-hi-freq" data-en="{{ med.frequency }}"></span>{% endif %}
-            {% if med.duration %}<span class="rx-med-card-sep">·</span><span class="rx-med-hi-dur" data-en="{{ med.duration }}"></span>{% endif %}
-          </div>
           {% if med.notes and show_remarks %}
-          <div class="rx-med-card-note">
-            <span class="en-only">{{ med.notes }}</span>
-            <span class="hi-only" data-notes-en="{{ med.notes }}"></span>
-          </div>
+          <div class="rx-med-card-note">{{ med.notes }}</div>
           {% endif %}
         </div>
       </div>
@@ -598,10 +613,8 @@
             <th class="col-n">#</th>
             <th>Drug &amp; Strength</th>
             <th class="col-dose" style="padding-left:8pt;">Dosage</th>
-            <th class="col-when en-only" style="padding-left:6pt;">When</th>
-            <th class="col-when hi-only" style="padding-left:6pt;font-family:'Noto Sans Devanagari',sans-serif;">कब</th>
-            <th class="col-dur en-only">Duration</th>
-            <th class="col-dur hi-only" style="font-family:'Noto Sans Devanagari',sans-serif;">अवधि</th>
+            <th class="col-when" style="padding-left:6pt;">When</th>
+            <th class="col-dur">Duration</th>
           </tr>
         </thead>
         <tbody>
@@ -612,21 +625,14 @@
             <td class="col-drug">
               {{ med.drug_name }}{% if med.route %} <span style="font-size:7.5pt; font-weight:700; color:#1D4ED8;">({{ med.route }})</span>{% endif %}
               {% if med.notes and show_remarks %}
-              <span class="drug-note en-only">{{ med.notes }}</span>
-              <span class="drug-note hi-only" data-notes-en="{{ med.notes }}"></span>
+              <span class="drug-note">{{ med.notes }}</span>
               {% endif %}
             </td>
             <td class="col-dose" style="padding-left:8pt;">
               <span class="print-badge{% if dl|slice:':3' == 'sos' %} sos{% endif %}">{{ med.dosage }}</span>
             </td>
-            <td class="col-when">
-              <span class="en-only">{{ med.frequency }}</span>
-              <span class="hi-only col-when-hi" data-en="{{ med.frequency }}"></span>
-            </td>
-            <td class="col-dur">
-              <span class="en-only">{{ med.duration }}</span>
-              <span class="hi-only col-dur-hi" data-en="{{ med.duration }}"></span>
-            </td>
+            <td class="col-when">{{ med.frequency }}</td>
+            <td class="col-dur">{{ med.duration }}</td>
           </tr>
           {% endwith %}
           {% endfor %}
@@ -645,10 +651,7 @@
     <!-- Advice -->
     {% if rx.advice %}
     <div class="rx-advice-wrap">
-      <div class="rx-advice-label">
-        <span class="en-only">Advice</span>
-        <span class="hi-only" style="font-family:'Noto Sans Devanagari',sans-serif;">सलाह</span>
-      </div>
+      <div class="rx-advice-label">Advice</div>
       <div class="rx-advice-text">{{ rx.advice }}</div>
     </div>
     {% endif %}
@@ -657,7 +660,7 @@
     <div class="rx-footer-row">
       <div>
         {% if rx.follow_up_date %}
-        <div class="rx-followup-lbl"><span class="en-only">Next Visit</span><span class="hi-only" style="font-family:'Noto Sans Devanagari',sans-serif;">अगली मुलाकात</span></div>
+        <div class="rx-followup-lbl">Next Visit</div>
         <div class="rx-followup">{{ rx.follow_up_date|date:"d M Y" }}</div>
         {% endif %}
       </div>
@@ -673,12 +676,9 @@
   {% if rx.patient_summary_en or rx.patient_summary_hi %}
   <div class="rx-summary-outer">
     <div class="rx-summary-inner">
-      <div class="rx-summary-title">
-        <span class="en-only">For Patient</span>
-        <span class="hi-only" style="font-family:'Noto Sans Devanagari',sans-serif;">आपके लिए</span>
-      </div>
-      {% if rx.patient_summary_en %}<div class="rx-summary-en en-only">{{ rx.patient_summary_en }}</div>{% endif %}
-      {% if rx.patient_summary_en and rx.patient_summary_hi %}<hr class="rx-summary-div en-only">{% endif %}
+      <div class="rx-summary-title">For Patient</div>
+      {% if rx.patient_summary_en %}<div class="rx-summary-en">{{ rx.patient_summary_en }}</div>{% endif %}
+      {% if rx.patient_summary_en and rx.patient_summary_hi %}<hr class="rx-summary-div">{% endif %}
       {% if rx.patient_summary_hi %}<div class="rx-summary-hi">{{ rx.patient_summary_hi }}</div>{% endif %}
     </div>
   </div>
@@ -687,150 +687,10 @@
   <div class="rx-branding">Generated by ClinicAI &ensp;·&ensp; Valid for {{ rx.validity_days|default:30 }} days</div>
 
 </div>
+{% endif %}
 
 <script>
-const HI_FREQ = {
-  // Once daily variants
-  'Once daily':'एक बार रोज़',
-  'Once daily in morning':'सुबह एक बार',
-  'Once daily morning':'सुबह एक बार',
-  'Once daily at night':'रात में एक बार',
-  'Once daily at bedtime':'सोते वक्त एक बार',
-  'Once daily before bed':'सोते वक्त एक बार',
-  // Twice daily variants
-  'Twice daily':'दो बार रोज़',
-  'Twice daily after meals':'खाने के बाद, दो बार',
-  'Twice daily with food':'खाने के साथ, दो बार',
-  'Twice a day':'दो बार रोज़',
-  // Thrice daily variants
-  'Thrice daily':'तीन बार रोज़',
-  'Thrice daily after meals':'खाने के बाद, तीन बार',
-  'Three times daily':'तीन बार रोज़',
-  'Three times a day':'तीन बार रोज़',
-  '3 times daily':'तीन बार रोज़',
-  // Four times
-  'Four times daily':'दिन में 4 बार',
-  '4 times daily':'दिन में 4 बार',
-  // Interval dosing
-  'Every 4 hours':'हर 4 घंटे',
-  'Every 6 hours':'हर 6 घंटे',
-  'Every 8 hours':'हर 8 घंटे',
-  'Every 12 hours':'हर 12 घंटे',
-  // Meal-based
-  'After meals':'खाने के बाद',
-  'Before meals':'खाने से पहले',
-  'With food':'खाने के साथ',
-  'With meals':'खाने के साथ',
-  '30 min before food':'खाने से 30 मिनट पहले',
-  '30 minutes before food':'खाने से 30 मिनट पहले',
-  'Empty stomach':'खाली पेट',
-  'With milk':'दूध के साथ',
-  'At bedtime':'सोते समय',
-  // SOS / as needed
-  'SOS':'जरूरत पड़ने पर',
-  'SOS/As needed':'जरूरत पड़ने पर',
-  'As needed':'जरूरत पड़ने पर',
-  'As needed for fever':'बुखार होने पर',
-  'As needed for pain':'दर्द होने पर',
-  // Special
-  'Sip throughout the day':'दिन भर घूंट-घूंट पिएं',
-  'Sip slowly throughout the day':'दिन भर धीरे-धीरे पिएं',
-  'Apply locally':'स्थानीय रूप से लगाएं',
-  'Apply twice daily':'दिन में दो बार लगाएं',
-  'Apply once daily':'दिन में एक बार लगाएं',
-};
-const HI_DUR = {
-  // Single days
-  '1 day':'1 दिन','2 days':'2 दिन','3 days':'3 दिन',
-  '4 days':'4 दिन','5 days':'5 दिन','6 days':'6 दिन',
-  '7 days':'7 दिन','8 days':'8 दिन','9 days':'9 दिन',
-  '10 days':'10 दिन','12 days':'12 दिन','14 days':'14 दिन',
-  '15 days':'15 दिन','21 days':'21 दिन','28 days':'28 दिन',
-  '30 days':'30 दिन',
-  // Day ranges
-  '2-3 days':'2-3 दिन','3-5 days':'3-5 दिन','5-7 days':'5-7 दिन',
-  '7-10 days':'7-10 दिन','10-14 days':'10-14 दिन',
-  // Weeks
-  '1 week':'1 हफ्ता','2 weeks':'2 हफ्ते','3 weeks':'3 हफ्ते',
-  '4 weeks':'4 हफ्ते','6 weeks':'6 हफ्ते','8 weeks':'8 हफ्ते',
-  // Months
-  '1 month':'1 महीना','2 months':'2 महीने','3 months':'3 महीने',
-  '4 months':'4 महीने','6 months':'6 महीने','12 months':'12 महीने',
-  // Open-ended
-  'Lifelong':'आजीवन','Ongoing':'जारी रखें','Till better':'सुधार होने तक',
-  'Till symptoms resolve':'लक्षण ठीक होने तक',
-  'As needed':'जरूरत के अनुसार',
-};
-const HI_NOTES = {
-  'Take with food':'खाने के साथ लें',
-  'With food':'खाने के साथ लें',
-  'After food':'खाने के बाद लें',
-  'After meals':'खाने के बाद लें',
-  'Before food':'खाने से पहले लें',
-  'Before meals':'खाने से पहले लें',
-  'Empty stomach':'खाली पेट लें',
-  'Empty stomach, 30 min before breakfast':'नाश्ते से 30 मिनट पहले खाली पेट',
-  'Take with warm water':'गर्म पानी के साथ लें',
-  'Complete the full course':'पूरा कोर्स पूरा करें',
-  'Complete the course':'पूरा कोर्स पूरा करें',
-  'Shake well before use':'उपयोग से पहले हिलाएं',
-  'For fever and headache relief':'बुखार और सिरदर्द के लिए',
-  'For fever':'बुखार के लिए',
-  'For pain':'दर्द के लिए',
-  'For back pain':'पीठ दर्द के लिए',
-  'For nasal congestion and blocked nose':'बंद नाक के लिए',
-  'For cough relief':'खांसी के लिए',
-  'For cough':'खांसी के लिए',
-  'For acidity':'एसिडिटी के लिए',
-  'For hydration':'हाइड्रेशन के लिए',
-  'For hydration and electrolyte balance':'हाइड्रेशन और इलेक्ट्रोलाइट संतुलन के लिए',
-  'Apply on affected area':'प्रभावित जगह पर लगाएं',
-  'Apply locally':'प्रभावित जगह पर लगाएं',
-  'Do not crush':'कुचलकर न लें',
-  'Swallow whole':'पूरा निगल लें',
-};
-
-function translate(text, map) {
-  if (!text) return text;
-  const trimmed = text.trim();
-  // 1. Exact match
-  if (map[trimmed]) return map[trimmed];
-  // 2. Case-insensitive exact match
-  const low = trimmed.toLowerCase();
-  for (const [k, v] of Object.entries(map)) {
-    if (k.toLowerCase() === low) return v;
-  }
-  // 3. Prefix match — handles compound notes like "With food, for back pain"
-  //    Find the longest key that the text starts with
-  let bestMatch = '', bestVal = '';
-  for (const [k, v] of Object.entries(map)) {
-    if (k.length >= 4 && low.startsWith(k.toLowerCase()) && k.length > bestMatch.length) {
-      bestMatch = k; bestVal = v;
-    }
-  }
-  if (bestVal) return bestVal;
-  return text;
-}
-
-function applyHindi() {
-  document.querySelectorAll('.rx-med-hi-freq,[data-en].col-when-hi').forEach(el => {
-    el.textContent = translate(el.dataset.en, HI_FREQ);
-  });
-  document.querySelectorAll('.rx-med-hi-dur,[data-en].col-dur-hi').forEach(el => {
-    el.textContent = translate(el.dataset.en, HI_DUR);
-  });
-  document.querySelectorAll('[data-notes-en]').forEach(el => {
-    el.textContent = translate(el.dataset.notesEn, HI_NOTES);
-  });
-}
-
-let _hindi = false;
-function toggleHindi() {
-  _hindi = !_hindi;
-  document.body.classList.toggle('hindi-mode', _hindi);
-  document.getElementById('hindi-toggle').classList.toggle('active', _hindi);
-  if (_hindi) applyHindi();
-}
+const RX_CANVAS_OPTS = { scale: 2.5, useCORS: true, logging: false };
 
 let _isA5 = false;
 const RX_PAGE_RULES = {
@@ -860,13 +720,14 @@ async function downloadPdf() {
   btn.disabled = true;
   btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Preparing…</span>';
   try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
     const card = document.querySelector('.rx-card');
     const fmt  = _isA5 ? 'a5' : 'a4';
     const opt = {
       margin:      _isA5 ? [4, 5, 4, 5] : [6, 8, 6, 8],
       filename:    'prescription-{{ patient.full_name|slugify }}-{{ rx.created_at|date:"Y-m-d" }}.pdf',
       image:       { type: 'jpeg', quality: 0.97 },
-      html2canvas: { scale: 2.5, useCORS: true, logging: false },
+      html2canvas: RX_CANVAS_OPTS,
       jsPDF:       { unit: 'mm', format: fmt, orientation: 'portrait' },
     };
     await html2pdf().set(opt).from(card).save();
@@ -889,6 +750,7 @@ async function sendPdfWhatsApp(waUrl) {
   btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Preparing…</span>';
 
   try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
     const card = document.querySelector('.rx-card');
     const fmt  = _isA5 ? 'a5' : 'a4';
     const fname = 'prescription-{{ patient.full_name|slugify }}.pdf';
@@ -896,7 +758,7 @@ async function sendPdfWhatsApp(waUrl) {
       margin:      _isA5 ? [4, 5, 4, 5] : [6, 8, 6, 8],
       filename:    fname,
       image:       { type: 'jpeg', quality: 0.97 },
-      html2canvas: { scale: 2.5, useCORS: true, logging: false },
+      html2canvas: RX_CANVAS_OPTS,
       jsPDF:       { unit: 'mm', format: fmt, orientation: 'portrait' },
     };
 
@@ -908,8 +770,13 @@ async function sendPdfWhatsApp(waUrl) {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: 'Prescription — {{ patient.full_name }}',
-          text:  'Prescription from {{ clinic.name }}',
+          {% if hindi %}
+          title: 'पर्चा — {{ hindi.patient_name|escapejs }}',
+          text:  '{{ hindi.clinic_name|escapejs }} से पर्चा',
+          {% else %}
+          title: 'Prescription — {{ patient.full_name|escapejs }}',
+          text:  'Prescription from {{ clinic.name|escapejs }}',
+          {% endif %}
         });
         return;
       }

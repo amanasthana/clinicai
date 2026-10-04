@@ -34,6 +34,22 @@
         <label class="form-label">Phone</label>
         <input name="phone" value="{{ clinic.phone }}" class="input-field" inputmode="tel">
       </div>
+
+      <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
+      <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px;">For Hindi Prescriptions</div>
+      <div style="font-size:11px; color:#6B7280; margin-bottom:12px; line-height:1.5;">
+        Printed on Hindi-only prescriptions. Leave blank to use the automatic spelling shown in grey.
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="name_hi">Clinic Name in Hindi</label>
+        <input name="name_hi" id="name_hi" value="{{ clinic.name_hi }}" class="input-field"
+               placeholder="{{ name_hi_suggest }}" style="font-family:'Noto Sans Devanagari',sans-serif;">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="address_hi">Full Address in Hindi (with city &amp; state)</label>
+        <textarea name="address_hi" id="address_hi" class="input-field" rows="2"
+                  placeholder="{{ address_hi_suggest }}" style="font-family:'Noto Sans Devanagari',sans-serif;">{{ clinic.address_hi }}</textarea>
+      </div>
       <hr style="border:none; border-top:1px solid #E5E7EB; margin:20px 0;">
       <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">License Numbers</div>
       <div style="margin-bottom:12px;">

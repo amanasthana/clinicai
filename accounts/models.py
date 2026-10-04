@@ -36,6 +36,9 @@ class Clinic(models.Model):
         max_digits=8, decimal_places=2, default=0,
         help_text='Default OPD consultation fee pre-filled when collecting fees (0 = no default).'
     )
+    # Hindi versions for Hindi-only prescriptions (blank = auto-transliterated at print time)
+    name_hi = models.CharField(max_length=200, blank=True, default='')
+    address_hi = models.TextField(blank=True, default='')
 
     def __str__(self):
         return self.name
@@ -65,6 +68,14 @@ class StaffMember(models.Model):
         default=True,
         help_text='Print registration/licence number on prescriptions.'
     )
+    RX_LANGUAGE_CHOICES = [('en', 'English'), ('hi', 'Hindi only')]
+    rx_language = models.CharField(
+        max_length=2, choices=RX_LANGUAGE_CHOICES, default='en',
+        help_text='Default language of printed prescriptions.'
+    )
+    # Hindi versions for Hindi-only prescriptions (blank = auto-transliterated at print time)
+    display_name_hi = models.CharField(max_length=120, blank=True, default='')
+    qualification_hi = models.CharField(max_length=200, blank=True, default='')
 
     # Permission flags — set automatically from role preset, can be overridden per staff member
     can_register_patients = models.BooleanField(default=False)
