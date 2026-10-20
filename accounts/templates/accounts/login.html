@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}ClinicAI - The Clinic OS Built for Indian Doctors{% endblock %}
+{% load static %}
+{% block title %}MedlynAI - The Clinic OS Built for Indian Doctors{% endblock %}
 {% block public_nav %}{% endblock %}
 
 {% block content %}
@@ -53,7 +54,7 @@
   align-items: center;
   gap: 8px;
 }
-.hero-brand-dot { color: #60A5FA; }
+.hero-brand-logo { height: 76px; width: auto; display: block; }
 
 /* ── Headline ── */
 .hero-headline {
@@ -218,7 +219,7 @@
   <div class="login-hero">
 
     <div class="hero-brand">
-      ClinicAI<span class="hero-brand-dot">.</span>
+      <img src="{% static 'img/medlynai-logo-white-full.png' %}" alt="MedlynAI — More doctor. Less documentation." class="hero-brand-logo">
     </div>
 
     <div class="hero-headline">
@@ -277,7 +278,7 @@
       </div>
       <div class="ethics-heading">Your patients stay yours. We never contact them.</div>
       <div class="ethics-body">
-        ClinicAI <strong>never calls, messages, or markets to your patients</strong> for any reason. The only communication they ever receive is what you send yourself. No exceptions, no hidden outreach, no agenda.
+        MedlynAI <strong>never calls, messages, or markets to your patients</strong> for any reason. The only communication they ever receive is what you send yourself. No exceptions, no hidden outreach, no agenda.
         <br><br>
         Unlike some EMR platforms, we do not use your patient data to build our own relationship with them. <strong>Patient trust is clinic trust</strong> and we treat it that way.
       </div>
@@ -375,7 +376,7 @@
           Have a question? Get in touch
         </a>
         <a href="/accounts/executives/" style="display:block; text-align:center; font-size:12px; color:#9CA3AF; text-decoration:none; margin-top:6px;">
-          View ClinicAI Executive Network
+          View MedlynAI Executive Network
         </a>
       </div>
       {% endif %}

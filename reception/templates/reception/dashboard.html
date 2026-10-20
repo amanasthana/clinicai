@@ -255,7 +255,7 @@
     <!-- Label -->
     <div id="help-label-row">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-      <span id="help-label-text">ClinicAI Assistant</span>
+      <span id="help-label-text">MedlynAI Assistant</span>
       <span id="help-label-badge">AI</span>
     </div>
 
@@ -271,7 +271,7 @@
         maxlength="400"
         autocomplete="off"
         placeholder="Ask anything — how to print, add stock, change settings…"
-        aria-label="Ask ClinicAI"
+        aria-label="Ask MedlynAI"
       >
 
       <button id="help-clear-btn" class="help-icon-btn" title="Clear and start a new question" aria-label="Clear" style="display:none; background:none; color:#9CA3AF;" onclick="helpClear()">
@@ -301,7 +301,7 @@
       <span class="help-chip" role="listitem" onclick="helpChipClick('Add stock to pharmacy')">Add stock</span>
       <span class="help-chip" role="listitem" onclick="helpChipClick('Change staff member roles and permissions')">Change roles</span>
       <span class="help-chip" role="listitem" onclick="helpChipClick('How do I set up clinic letterhead?')">Letterhead setup</span>
-      <span class="help-chip" role="listitem" id="tour-replay-chip" onclick="window.ClinicTour && ClinicTour.start()" title="Replay the guided tour of ClinicAI">🧭 Take the tour</span>
+      <span class="help-chip" role="listitem" id="tour-replay-chip" onclick="window.ClinicTour && ClinicTour.start()" title="Replay the guided tour of MedlynAI">🧭 Take the tour</span>
     </div>
 
     <!-- Loading dots -->
@@ -315,7 +315,7 @@
     <!-- Response panel (white card inside gradient container) -->
     <div id="help-response-area" role="region" aria-live="polite" aria-label="Help response">
       <div id="help-response-header">
-        <span id="help-response-label">ClinicAI Help</span>
+        <span id="help-response-label">MedlynAI Help</span>
         <button id="help-close-btn" onclick="helpClose()" aria-label="Close help response">×</button>
       </div>
       <div id="help-response-body"></div>

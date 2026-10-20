@@ -1,0 +1,93 @@
+{# One-time "ClinicAI is now MedlynAI" notice for users who existed before the rebrand. #}
+{% load static %}
+<style>
+.rb-backdrop {
+  position: fixed; inset: 0; z-index: 10050;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.rb-card {
+  position: relative;
+  width: 100%; max-width: 440px;
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+}
+.rb-head {
+  background: linear-gradient(155deg, #0F172A 0%, #1E3A8A 55%, #1D4ED8 100%);
+  padding: 28px 24px 22px; text-align: center;
+}
+.rb-head img { height: 58px; width: auto; display: block; margin: 0 auto; }
+.rb-close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; cursor: pointer;
+  color: rgba(255,255,255,0.75); font-size: 22px; line-height: 1; padding: 4px;
+}
+.rb-close:hover { color: #fff; }
+.rb-body { padding: 22px 24px 24px; }
+.rb-title { font-size: 19px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+.rb-sub { font-size: 14px; color: #4B5563; line-height: 1.55; margin-bottom: 14px; }
+.rb-list { list-style: none; padding: 0; margin: 0 0 16px; }
+.rb-list li {
+  display: flex; gap: 10px; align-items: flex-start;
+  font-size: 13.5px; color: #374151; line-height: 1.5; margin-bottom: 9px;
+}
+.rb-tick {
+  flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 50%;
+  background: #CCFBF1; color: #0F766E; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.rb-hi {
+  font-family: 'Noto Sans Devanagari', 'Inter', sans-serif;
+  font-size: 13px; color: #6B7280; line-height: 1.6;
+  background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 18px;
+}
+.rb-btn {
+  width: 100%; border: none; border-radius: 10px; cursor: pointer;
+  background: #2563EB; color: #fff; font-size: 15px; font-weight: 600; padding: 12px;
+}
+.rb-btn:hover { background: #1D4ED8; }
+</style>
+
+<div class="rb-backdrop" id="rebrand-notice" role="dialog" aria-modal="true" aria-labelledby="rb-title">
+  <div class="rb-card">
+    <div class="rb-head">
+      <button type="button" class="rb-close" data-rb-dismiss aria-label="Close">&times;</button>
+      <img src="{% static 'img/medlynai-logo-white-full.png' %}" alt="MedlynAI — More doctor. Less documentation.">
+    </div>
+    <div class="rb-body">
+      <div class="rb-title" id="rb-title">ClinicAI is now MedlynAI</div>
+      <div class="rb-sub">Same app you use every day, with a new name. Nothing changes in how you work.</div>
+      <ul class="rb-list">
+        <li><span class="rb-tick">✓</span><span>Your login, password, patients, prescriptions and pharmacy records are all exactly as before.</span></li>
+        <li><span class="rb-tick">✓</span><span>New address: <strong>medlynai.com</strong>. The old ClinicAI link forwards automatically, but please update your bookmark or home-screen shortcut.</span></li>
+        <li><span class="rb-tick">✓</span><span>Printed prescriptions and WhatsApp messages now show the MedlynAI name.</span></li>
+      </ul>
+      <div class="rb-hi">ClinicAI का नया नाम अब MedlynAI है। आपका लॉगिन, पासवर्ड और सारा डेटा पहले जैसा ही है। नया पता: medlynai.com</div>
+      <button type="button" class="rb-btn" data-rb-dismiss autofocus>Got it</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const el = document.getElementById('rebrand-notice');
+  if (!el) return;
+  let done = false;
+  function dismiss() {
+    if (done) return;
+    done = true;
+    el.remove();
+    const CSRF = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+    fetch('/notifications/notices/rebrand-medlynai/dismiss/', {
+      method: 'POST', headers: { 'X-CSRFToken': CSRF }, credentials: 'same-origin',
+    }).catch(() => {});  // if this fails the notice simply shows again on the next page
+  }
+  el.querySelectorAll('[data-rb-dismiss]').forEach(b => b.addEventListener('click', dismiss));
+  el.addEventListener('click', e => { if (e.target === el) dismiss(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') dismiss(); });
+})();
+</script>

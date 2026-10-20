@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Admin Panel — ClinicAI{% endblock %}
+{% block title %}Admin Panel — MedlynAI{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -48,7 +48,7 @@
 
   <div class="ap-header" style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
     <div>
-      <h1 style="font-size:24px; font-weight:700; color:#111827; margin-bottom:4px;">ClinicAI — Admin Panel</h1>
+      <h1 style="font-size:24px; font-weight:700; color:#111827; margin-bottom:4px;">MedlynAI — Admin Panel</h1>
       <p style="font-size:14px; color:#6B7280;">Review registrations and messages from clinics.</p>
     </div>
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -327,7 +327,7 @@
             </div>
             <div style="font-size:13px; color:#374151; line-height:1.6; margin-bottom:10px;">{{ msg.message }}</div>
             <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:#6B7280;">
-              <span>📧 <a href="mailto:{{ msg.email }}?subject=Re: Your ClinicAI inquiry" style="color:#2563EB; font-weight:500; text-decoration:none;">{{ msg.email }}</a></span>
+              <span>📧 <a href="mailto:{{ msg.email }}?subject=Re: Your MedlynAI inquiry" style="color:#2563EB; font-weight:500; text-decoration:none;">{{ msg.email }}</a></span>
               {% if msg.phone %}<span>📱 <a href="https://wa.me/91{{ msg.phone }}" target="_blank" style="color:#25D366; font-weight:500; text-decoration:none;">{{ msg.phone }}</a></span>{% endif %}
               <span>🕐 {{ msg.created_at|date:"j M Y, H:i" }}</span>
             </div>

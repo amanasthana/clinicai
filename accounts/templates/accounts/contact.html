@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Get in Touch — ClinicAI{% endblock %}
+{% load static %}
+{% block title %}Get in Touch — MedlynAI{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -20,7 +21,7 @@
 <div class="contact-wrap">
 
   <div class="contact-header">
-    <div class="contact-brand">ClinicAI</div>
+    <div class="contact-brand"><img src="{% static 'img/medlynai-logo.png' %}" alt="MedlynAI" style="height:30px; width:auto; display:block; margin:0 auto;"></div>
     <h1 class="contact-title">Get in touch</h1>
     <p class="contact-sub">Have a question, want to know more, or need help?<br>We'll get back to you within a few hours.</p>
   </div>

@@ -1,14 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Setup Your Clinic — ClinicAI{% endblock %}
+{% load static %}
+{% block title %}Setup Your Clinic — MedlynAI{% endblock %}
 
 {% block content %}
 <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;">
   <div style="width: 100%; max-width: 560px;">
 
     <div style="text-align: center; margin-bottom: 32px;">
-      <div style="font-size: 32px; font-weight: 700; color: #2563EB; letter-spacing: -1px; margin-bottom: 8px;">
-        ClinicAI
-      </div>
+      <img src="{% static 'img/medlynai-logo-full.png' %}" alt="MedlynAI — More doctor. Less documentation." style="height:64px; width:auto; display:block; margin:0 auto 12px;">
       <div style="font-size: 15px; color: #6B7280;">
         Welcome! Let's set up your clinic in 2 minutes.
       </div>

@@ -9,6 +9,7 @@ urlpatterns = [
     path('accounts/', include('accounts.urls')),
     path('rx/', include('prescription.urls')),
     path('pharmacy/', include('pharmacy.urls')),
+    path('notifications/', include('notifications.urls')),
     # Serve media files in both dev and production (letterhead images etc.)
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 ]

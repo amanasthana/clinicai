@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Register your clinic — ClinicAI{% endblock %}
+{% load static %}
+{% block title %}Register your clinic — MedlynAI{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -38,9 +39,9 @@
 
   <!-- Header -->
   <div class="reg-header">
-    <div class="reg-brand">ClinicAI</div>
+    <div class="reg-brand"><img src="{% static 'img/medlynai-logo.png' %}" alt="MedlynAI" style="height:34px; width:auto; display:block; margin:0 auto;"></div>
     <h1 class="reg-title">Register your clinic</h1>
-    <p class="reg-sub">Join 164 clinics already running on ClinicAI.<br>Fill in the details below — your clinic goes live instantly. No waiting, no approval.</p>
+    <p class="reg-sub">Join 164 clinics already running on MedlynAI.<br>Fill in the details below — your clinic goes live instantly. No waiting, no approval.</p>
   </div>
 
   <form method="post" novalidate>
@@ -160,7 +161,7 @@
       <div class="reg-section-head">
         <div class="reg-step-badge">4</div>
         <div>
-          <div class="reg-section-title">Were you introduced by a ClinicAI Executive?</div>
+          <div class="reg-section-title">Were you introduced by a MedlynAI Executive?</div>
         </div>
       </div>
 
@@ -171,7 +172,7 @@
           placeholder="10-digit mobile of the executive who referred you"
           autocomplete="off">
         <div id="exec-lookup-result" style="margin-top:8px; font-size:13px; display:none;"></div>
-        <div class="form-help">If a ClinicAI Executive introduced you, enter their mobile number so they get credit.</div>
+        <div class="form-help">If a MedlynAI Executive introduced you, enter their mobile number so they get credit.</div>
       </div>
     </div>
 

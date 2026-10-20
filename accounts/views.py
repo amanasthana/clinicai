@@ -165,7 +165,7 @@ def clinic_setup_view(request):
             registration_number=cd.get('registration_number', ''),
         )
         login(request, user)
-        messages.success(request, f'Welcome to ClinicAI! {clinic.name} is ready.')
+        messages.success(request, f'Welcome to MedlynAI! {clinic.name} is ready.')
         return redirect('reception:dashboard')
 
     return render(request, 'accounts/setup.html', {
@@ -361,7 +361,7 @@ def delete_staff_view(request, pk):
 
     # Clinic admin accounts can only be deleted by a Django superuser
     if sm.role == 'admin':
-        messages.error(request, 'Clinic admin accounts cannot be deleted by staff. Contact ClinicAI support.')
+        messages.error(request, 'Clinic admin accounts cannot be deleted by staff. Contact MedlynAI support.')
         return redirect('accounts:staff_list')
 
     name = sm.display_name
@@ -687,7 +687,7 @@ def superuser_reset_password_view(request, pk):
     # Build WhatsApp deeplink
     phone = user.username
     wa_text = (
-        f"Hello! Your ClinicAI password has been reset. "
+        f"Hello! Your MedlynAI password has been reset. "
         f"Temporary password: {temp_password} — Please log in and change it immediately."
     )
     wa_url = f"https://wa.me/91{phone}?text={quote(wa_text)}"
@@ -881,7 +881,7 @@ def staff_reset_password_view(request, pk):
     # Build WhatsApp deeplink for admin to notify the staff member
     phone_number = sm.user.username  # phone is the username
     wa_text = (
-        f"Hello {sm.display_name}, your ClinicAI login password has been reset by your admin. "
+        f"Hello {sm.display_name}, your MedlynAI login password has been reset by your admin. "
         f"Temporary password: {temp_password} — Please log in and change it immediately."
     )
     wa_url = f"https://wa.me/91{phone_number}?text={quote(wa_text)}"

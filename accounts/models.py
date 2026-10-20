@@ -264,7 +264,7 @@ class ClinicRegistrationRequest(models.Model):
     state = models.CharField(max_length=100, default='Maharashtra')
     clinic_phone = models.CharField(max_length=15)
     referred_by_mobile = models.CharField(max_length=10, blank=True,
-        help_text='Mobile number of the ClinicAI Executive who referred this clinic.')
+        help_text='Mobile number of the MedlynAI Executive who referred this clinic.')
 
     # Doctor/admin info
     doctor_name = models.CharField(max_length=200)
@@ -307,6 +307,8 @@ class ClinicAIExecutive(models.Model):
 
     class Meta:
         ordering = ['name']
+        verbose_name = 'MedlynAI executive'
+        verbose_name_plural = 'MedlynAI executives'
 
     def __str__(self):
         return f"{self.name} ({self.mobile})"
@@ -328,7 +330,7 @@ class PasswordResetRequest(models.Model):
 
 class ContactMessage(models.Model):
     INQUIRY_TYPES = [
-        ('new_clinic', 'Interested in joining ClinicAI'),
+        ('new_clinic', 'Interested in joining MedlynAI'),
         ('existing', 'I am an existing clinic'),
         ('pricing', 'Pricing question'),
         ('support', 'Technical support'),
