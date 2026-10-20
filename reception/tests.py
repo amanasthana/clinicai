@@ -406,3 +406,15 @@ class AnalyticsViewTest(TestCase):
         resp = self.client.get('/analytics/?range=7')
         avg = resp.context['summary']['avg_daily']
         self.assertGreater(avg, 0)
+
+
+class SuperuserDashboardTest(TestCase):
+    """Superusers have no StaffMember; '/' must not 500 for them."""
+
+    def test_superuser_root_redirects_to_admin_panel(self):
+        su = User.objects.create_superuser(username='platformadmin', password='testpass123')
+        c = Client()
+        c.force_login(su)
+        resp = c.get('/')
+        self.assertRedirects(resp, '/accounts/admin-panel/', fetch_redirect_response=False)
+        self.assertEqual(c.get('/accounts/admin-panel/').status_code, 200)

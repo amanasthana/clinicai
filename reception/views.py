@@ -26,6 +26,10 @@ def dashboard_view(request):
     Shows today's queue + patient phone search bar.
     This is the primary screen for receptionists.
     """
+    # Platform superusers have no clinic; '/' is the post-login landing page,
+    # so send them to the admin panel instead of crashing on staff_profile.
+    if not hasattr(request.user, 'staff_profile'):
+        return redirect('accounts:admin_panel')
     clinic = request.user.staff_profile.clinic
     today = timezone.localdate()
 
