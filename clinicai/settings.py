@@ -21,6 +21,25 @@ SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
+# Canonical domain. Requests on CANONICAL_REDIRECT_HOSTS are 301/308-redirected
+# here by core.middleware.CanonicalHostMiddleware.
+CANONICAL_HOST = env('CANONICAL_HOST', default='medlynai.com')
+CANONICAL_REDIRECT_HOSTS = env.list(
+    'CANONICAL_REDIRECT_HOSTS',
+    default=['clinicai.azurewebsites.net', 'www.medlynai.com'],
+)
+# Paths never redirected off a legacy host. No webhook/OAuth/health endpoints
+# exist today; /robots933456.txt is Azure App Service's container warm-up probe.
+CANONICAL_REDIRECT_EXEMPT_PREFIXES = env.list(
+    'CANONICAL_REDIRECT_EXEMPT_PREFIXES',
+    default=['/.well-known/', '/robots933456.txt'],
+)
+
+# Always accept the canonical and legacy hosts, whatever the ALLOWED_HOSTS env
+# var says, so the legacy hosts reach the redirect instead of returning 400.
+_PUBLIC_HOSTS = [CANONICAL_HOST, *CANONICAL_REDIRECT_HOSTS]
+ALLOWED_HOSTS += [h for h in _PUBLIC_HOSTS if h not in ALLOWED_HOSTS]
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -39,6 +58,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'core.middleware.CanonicalHostMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -129,12 +149,19 @@ CACHES = {
 # Pricing / Usage limits
 FREE_DAILY_RX_LIMIT = 30   # prescriptions per clinic per day on free plan
 
+# Azure App Service terminates SSL at the load balancer and forwards HTTP
+# internally. Trust the X-Forwarded-Proto header so Django doesn't
+# redirect HTTPS requests to HTTPS in an infinite loop.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+CSRF_TRUSTED_ORIGINS += [
+    o for o in (f'https://{h}' for h in _PUBLIC_HOSTS)
+    if o not in CSRF_TRUSTED_ORIGINS
+]
+
 # Security settings (enforced in production)
 if not DEBUG:
-    # Azure App Service terminates SSL at the load balancer and forwards HTTP
-    # internally. Trust the X-Forwarded-Proto header so Django doesn't
-    # redirect HTTPS requests to HTTPS in an infinite loop.
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
@@ -143,10 +170,6 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SECURE = True
-    CSRF_TRUSTED_ORIGINS = env.list(
-        'CSRF_TRUSTED_ORIGINS',
-        default=['https://clinicai.azurewebsites.net']
-    )
 
 LOGGING = {
     'version': 1,
