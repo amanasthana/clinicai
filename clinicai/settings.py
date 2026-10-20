@@ -137,6 +137,23 @@ AUTHENTICATION_BACKENDS = [
 SESSION_COOKIE_AGE = 8 * 60 * 60
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
+# Email: Azure Communication Services (Entra ID auth, no secret). Without an
+# endpoint (e.g. local dev without ACS), emails are printed to the console.
+ACS_EMAIL_ENDPOINT = env('ACS_EMAIL_ENDPOINT', default='')
+EMAIL_BACKEND = (
+    'core.email_backend.AzureCommunicationEmailBackend' if ACS_EMAIL_ENDPOINT
+    else 'django.core.mail.backends.console.EmailBackend'
+)
+DEFAULT_FROM_EMAIL = env(
+    'DEFAULT_FROM_EMAIL',
+    default='MedlynAI <no-reply@medlynai.com>',
+)
+# If non-empty, mail to any other address is dropped. Set in local .env so dev
+# never emails real users; leave unset in production.
+EMAIL_ALLOWED_RECIPIENTS = env.list('EMAIL_ALLOWED_RECIPIENTS', default=[])
+# Password reset links expire after 1 hour.
+PASSWORD_RESET_TIMEOUT = 60 * 60
+
 # Anthropic AI
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
 
@@ -202,6 +219,12 @@ LOGGING = {
             'propagate': False,
         },
         'accounts': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # EMAIL_QUEUED / EMAIL_SEND_FAILED lines from the ACS email backend
+        'core.email_backend': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,

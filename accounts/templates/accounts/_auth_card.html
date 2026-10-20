@@ -1,0 +1,73 @@
+{# Shared look for the password-reset screens. #}
+{% load static %}
+<style>
+.ra-wrap {
+  min-height: calc(100vh - 52px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px 16px;
+  background:
+    radial-gradient(1200px 500px at 50% -10%, #DBEAFE 0%, rgba(219,234,254,0) 60%),
+    #F8FAFC;
+}
+.ra-col { width: 100%; max-width: 440px; }
+.ra-logo { display: block; height: 30px; width: auto; margin: 0 auto 22px; }
+.ra-card {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 12px 32px rgba(16,24,40,.08);
+  padding: 34px 32px 30px;
+}
+.ra-badge {
+  width: 48px; height: 48px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #EFF6FF, #ECFEFF);
+  border: 1px solid #DBEAFE; color: #1D4ED8; margin-bottom: 18px;
+}
+.ra-badge.ok { background: linear-gradient(135deg, #ECFDF5, #F0FDFA); border-color: #A7F3D0; color: #047857; }
+.ra-badge.warn { background: #FFFBEB; border-color: #FDE68A; color: #B45309; }
+.ra-title { font-size: 22px; font-weight: 700; color: #0F172A; letter-spacing: -0.3px; margin-bottom: 6px; }
+.ra-sub { font-size: 14px; color: #64748B; line-height: 1.6; margin-bottom: 24px; }
+.ra-label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+.ra-input {
+  width: 100%; box-sizing: border-box; padding: 12px 14px;
+  border: 1.5px solid #E2E8F0; border-radius: 10px; background: #fff;
+  font-size: 15px; font-family: inherit; color: #0F172A; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.ra-input:focus { border-color: #2563EB; box-shadow: 0 0 0 4px rgba(37,99,235,.12); }
+.ra-input.err { border-color: #DC2626; }
+.ra-hint { font-size: 12px; color: #94A3B8; margin-top: 6px; line-height: 1.5; }
+.ra-error { font-size: 13px; color: #B91C1C; margin-top: 6px; line-height: 1.5; }
+.ra-field + .ra-field { margin-top: 16px; }
+.ra-btn {
+  display: block; width: 100%; margin-top: 22px; padding: 13px;
+  border: none; border-radius: 10px; cursor: pointer; text-align: center; text-decoration: none;
+  background: #2563EB; color: #fff; font-size: 15px; font-weight: 600; font-family: inherit;
+  box-shadow: 0 1px 2px rgba(37,99,235,.25); transition: background .15s;
+}
+.ra-btn:hover { background: #1D4ED8; }
+.ra-btn[disabled] { opacity: .7; cursor: default; }
+.ra-panel {
+  border-radius: 12px; padding: 14px 16px; font-size: 13.5px; line-height: 1.6;
+  background: #F8FAFC; border: 1px solid #E2E8F0; color: #475569;
+}
+.ra-panel strong { color: #0F172A; }
+.ra-steps { list-style: none; margin: 0 0 18px; padding: 0; counter-reset: s; }
+.ra-steps li {
+  counter-increment: s; position: relative; padding-left: 34px;
+  font-size: 14px; color: #334155; line-height: 1.55; margin-bottom: 12px;
+}
+.ra-steps li::before {
+  content: counter(s); position: absolute; left: 0; top: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #EFF6FF; color: #1D4ED8; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.ra-foot { text-align: center; margin-top: 18px; font-size: 13px; color: #64748B; }
+.ra-foot a { color: #2563EB; text-decoration: none; font-weight: 500; }
+.ra-foot a:hover { text-decoration: underline; }
+.ra-trust {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin-top: 16px; font-size: 12px; color: #94A3B8;
+}
+@media (max-width: 480px) { .ra-card { padding: 26px 20px 24px; } }
+</style>

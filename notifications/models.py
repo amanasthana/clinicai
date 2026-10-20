@@ -35,3 +35,20 @@ class UserNotice(models.Model):
 
     def __str__(self):
         return f"{self.key} → {self.user.username} ({'seen' if self.seen_at else 'pending'})"
+
+
+class EmailCampaignSend(models.Model):
+    """One row per address that has been sent a given one-off email campaign,
+    so bulk sends can be throttled, resumed and never double-send."""
+    campaign = models.CharField(max_length=50)
+    email = models.EmailField()
+    user = models.ForeignKey('auth.User', null=True, blank=True, on_delete=models.SET_NULL)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['campaign', 'email'], name='unique_campaign_email'),
+        ]
+
+    def __str__(self):
+        return f"{self.campaign} → {self.email}"

@@ -299,7 +299,9 @@ CLINIC REGISTRATION (/accounts/register/)
 LOGIN
 - Use your 10-digit mobile number OR username OR email address to log in.
 - Password is set during clinic registration or by a clinic admin.
-- Forgot password: go to /accounts/forgot-password/ and enter your mobile number. The system notifies your clinic admin, who can reset the password for you.
+- Forgot password: on the login page tap "Forgot password?" (/accounts/forgot-password/) and enter your mobile number, User ID or email. If your account has an email on file, a secure reset link is emailed instantly (works once, expires in 1 hour); you then choose a new password yourself and also get a confirmation email.
+- No email on your account: staff can ask their clinic admin to reset it (Staff → Reset password); clinic owners can message support on WhatsApp.
+- Add or change your recovery email: Password button (Change Password page) → Recovery email → Save.
 
 ACCOUNT SETTINGS — EMAIL UPDATE
 - Go to Staff Management → your name → edit to add or update your email address.

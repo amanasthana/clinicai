@@ -802,6 +802,12 @@ def change_password_view(request):
             StaffMember.objects.filter(user=request.user, must_change_password=True).update(
                 must_change_password=False
             )
+            if request.user.email:
+                from .password_reset import send_password_changed_email
+                try:
+                    send_password_changed_email(request.user)
+                except Exception:
+                    logger.exception('PASSWORD_CHANGED_EMAIL_FAILED user=%s', request.user.username)
             messages.success(request, 'Password changed successfully.')
             return redirect('reception:dashboard')
 
@@ -830,27 +836,6 @@ def update_email_view(request):
     request.user.email = email
     request.user.save(update_fields=['email'])
     return JsonResponse({'ok': True})
-
-
-def forgot_password_view(request):
-    """Forgot password — shows security message; logs reset request for clinic admin to handle."""
-    if request.user.is_authenticated:
-        return redirect('reception:dashboard')
-
-    submitted = False
-    if request.method == 'POST':
-        phone = request.POST.get('phone', '').strip()
-        if phone:
-            try:
-                user = User.objects.get(username=phone)
-                # Only create one pending request at a time
-                PasswordResetRequest.objects.get_or_create(user=user, handled=False)
-                logger.info('FORGOT_PASSWORD_REQUEST username=%s', phone)
-            except User.DoesNotExist:
-                pass  # Don't reveal whether the account exists
-        submitted = True
-
-    return render(request, 'accounts/forgot_password.html', {'submitted': submitted})
 
 
 @require_permission('can_manage_staff')

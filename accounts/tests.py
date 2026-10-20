@@ -678,7 +678,7 @@ from accounts.models import PasswordResetRequest
 
 
 class ForgotPasswordRequestTest(TestCase):
-    """Tests for admin-mediated password reset request flow."""
+    """Admin-mediated fallback for accounts with no email (email resets: tests_password_reset.py)."""
 
     def setUp(self):
         self.clinic = make_clinic('Reset Request Clinic')
@@ -692,25 +692,25 @@ class ForgotPasswordRequestTest(TestCase):
         resp = self.client.get('/accounts/forgot-password/')
         self.assertEqual(resp.status_code, 200)
 
-    def test_forgot_password_shows_security_message(self):
+    def test_forgot_password_shows_reset_form(self):
         resp = self.client.get('/accounts/forgot-password/')
-        self.assertContains(resp, 'WhatsApp')
+        self.assertContains(resp, 'name="identifier"')
 
     def test_forgot_password_post_with_known_phone_creates_request(self):
-        resp = self.client.post('/accounts/forgot-password/', {'phone': '9222000001'})
+        resp = self.client.post('/accounts/forgot-password/', {'identifier': '9222000001'})
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'Request received')
+        self.assertContains(resp, 'Check your email')
         self.assertTrue(PasswordResetRequest.objects.filter(user=self.user, handled=False).exists())
 
     def test_forgot_password_post_with_unknown_phone_no_error(self):
         """Security: don't reveal whether the account exists."""
-        resp = self.client.post('/accounts/forgot-password/', {'phone': '9999999999'})
+        resp = self.client.post('/accounts/forgot-password/', {'identifier': '9999999999'})
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'Request received')
+        self.assertContains(resp, 'Check your email')
 
     def test_forgot_password_does_not_duplicate_pending_requests(self):
-        self.client.post('/accounts/forgot-password/', {'phone': '9222000001'})
-        self.client.post('/accounts/forgot-password/', {'phone': '9222000001'})
+        self.client.post('/accounts/forgot-password/', {'identifier': '9222000001'})
+        self.client.post('/accounts/forgot-password/', {'identifier': '9222000001'})
         self.assertEqual(PasswordResetRequest.objects.filter(user=self.user, handled=False).count(), 1)
 
     def test_superuser_can_see_pending_reset_in_admin_panel(self):

@@ -1,0 +1,142 @@
+{% extends "accounts/emails/_layout.html" %}
+{% block subject %}ClinicAI is now MedlynAI{% endblock %}
+{% block preheader %}Same app, same login, same data. A new name, a new address, and a few things that got better.{% endblock %}
+{% block body %}
+
+<!-- Eyebrow -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;">
+  <tr>
+    <td bgcolor="#ECFEFF" style="background:#ECFEFF; border:1px solid #A5F3FC; border-radius:999px; padding:5px 12px; font-size:11px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:#0E7490;">
+      Product update · {{ sent_on|date:"F Y" }}
+    </td>
+  </tr>
+</table>
+
+<h1 class="h1" style="margin:0 0 18px; font-size:28px; line-height:1.25; font-weight:800; color:#0F172A; letter-spacing:-0.6px;">
+  A new name for the app your clinic runs on
+</h1>
+
+<!-- Rename visual -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:16px;">
+  <tr>
+    <td align="center" style="padding:26px 12px 22px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td align="center" valign="middle" style="padding:0 10px;">
+            <div style="font-size:10px; font-weight:700; letter-spacing:1.4px; color:#94A3B8; margin-bottom:6px;">BEFORE</div>
+            <div style="font-size:22px; font-weight:700; color:#94A3B8; text-decoration:line-through; text-decoration-color:#CBD5E1; letter-spacing:-0.4px; font-family:Arial,Helvetica,sans-serif;">ClinicAI</div>
+          </td>
+          <td align="center" valign="middle" style="padding:16px 8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td width="38" height="38" align="center" valign="middle" bgcolor="#14B8A6" style="width:38px; height:38px; border-radius:50%; background:#14B8A6; background-image:linear-gradient(135deg,#2DD4BF,#0D9488); color:#FFFFFF; font-size:20px; font-weight:700; font-family:Arial,Helvetica,sans-serif;">&rarr;</td>
+              </tr>
+            </table>
+          </td>
+          <td align="center" valign="middle" style="padding:0 10px;">
+            <div style="font-size:10px; font-weight:700; letter-spacing:1.4px; color:#0D9488; margin-bottom:6px;">NOW</div>
+            <div style="font-size:30px; font-weight:800; letter-spacing:-0.8px; font-family:Arial,Helvetica,sans-serif; line-height:1;"><span style="color:#1A2642;">Medlyn</span><span style="color:#2DD4BF;">AI</span></div>
+          </td>
+        </tr>
+      </table>
+      <div style="margin-top:14px; font-size:12px; letter-spacing:2px; font-weight:600; color:#64748B;">MORE DOCTOR. LESS DOCUMENTATION.</div>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0 0 14px;">Hi {{ display_name }},</p>
+<p style="margin:0 0 14px;">
+  ClinicAI is now <strong style="color:#0F172A;">MedlynAI</strong>. It's the same app {% if clinic_name %}<strong style="color:#0F172A;">{{ clinic_name }}</strong> uses{% else %}you use{% endif %} for reception, prescriptions and pharmacy, with a name that reflects where we're headed:
+  giving doctors more time with patients and less time on paperwork.
+</p>
+<p style="margin:0 0 28px;"><strong style="color:#0F172A;">You don't need to do anything.</strong> Everything keeps working exactly as before.</p>
+
+<!-- What stays the same -->
+<div style="font-size:12px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:#047857; margin:0 0 12px;">What stays the same</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:14px;">
+  <tr><td style="padding:8px 18px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      {% for line in same_items %}
+      <tr>
+        <td width="30" valign="top" style="padding:10px 0;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+            <td width="22" height="22" align="center" valign="middle" bgcolor="#16A34A" style="width:22px; height:22px; border-radius:50%; background:#16A34A; color:#FFFFFF; font-size:12px; font-weight:700; font-family:Arial,Helvetica,sans-serif;">&#10003;</td>
+          </tr></table>
+        </td>
+        <td valign="top" style="padding:10px 0; font-size:14.5px; line-height:1.55; color:#14532D;">{{ line|safe }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </td></tr>
+</table>
+
+<!-- What's new: 2x2 tiles -->
+<div style="font-size:12px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:#1D4ED8; margin:0 0 12px;">What's new</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px;">
+  {% for row in new_tiles %}
+  <tr>
+    {% for t in row %}
+    <td class="tile" width="50%" height="100%" valign="top" style="height:100%; padding:{% if forloop.first %}0 6px 12px 0{% else %}0 0 12px 6px{% endif %};">
+      <table role="presentation" width="100%" height="100%" cellpadding="0" cellspacing="0" border="0" style="height:100%; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px;">
+        <tr><td valign="top" style="padding:18px 16px 16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px;"><tr>
+            <td width="40" height="40" align="center" valign="middle" bgcolor="{{ t.bg }}" style="width:40px; height:40px; border-radius:12px; background:{{ t.bg }}; font-size:20px; line-height:40px;">{{ t.icon }}</td>
+          </tr></table>
+          <div style="font-size:15px; font-weight:700; color:#0F172A; margin:0 0 4px;">{{ t.title }}</div>
+          <div style="font-size:13.5px; line-height:1.55; color:#64748B;">{{ t.text|safe }}</div>
+        </td></tr>
+      </table>
+    </td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+
+<!-- CTA -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td align="center" bgcolor="#2563EB" style="border-radius:12px; background:#2563EB;">
+            <a href="{{ login_url }}" target="_blank" style="display:inline-block; padding:15px 34px; font-size:16px; font-weight:700; color:#FFFFFF; text-decoration:none; border-radius:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Open MedlynAI &rarr;</a>
+          </td>
+        </tr>
+      </table>
+      <div style="margin-top:10px; font-size:13px; color:#64748B;">Sign in with your usual mobile number or User ID{% if login_id %} (<strong style="color:#334155;">{{ login_id }}</strong>){% endif %}.</div>
+    </td>
+  </tr>
+</table>
+
+<!-- Home screen tip -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:14px;">
+  <tr>
+    <td style="padding:16px 18px; font-size:13.5px; line-height:1.65; color:#1E3A8A;">
+      <strong style="font-size:14.5px;">📱 Update your phone shortcut</strong><br>
+      Open <strong>medlynai.com</strong>, then &nbsp;<strong>Android:</strong> Chrome menu ⋮ → <em>Add to Home screen</em>
+      &nbsp;·&nbsp; <strong>iPhone:</strong> Safari Share ⬆ → <em>Add to Home Screen</em>.
+    </td>
+  </tr>
+</table>
+
+<!-- Hindi summary -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px; background:#FFFBEB; border:1px solid #FDE68A; border-radius:14px;">
+  <tr>
+    <td style="padding:16px 18px; font-size:14px; line-height:1.75; color:#78350F; font-family:'Noto Sans Devanagari','Mangal','Nirmala UI',Arial,sans-serif;">
+      <strong>हिंदी में:</strong> ClinicAI का नया नाम अब <strong>MedlynAI</strong> है। आपका लॉगिन, पासवर्ड, मरीज़ों का रिकॉर्ड, पर्चे और फ़ार्मेसी का सारा डेटा पहले जैसा ही है। नया पता: <strong>medlynai.com</strong> (पुराना लिंक अपने-आप यहीं खुल जाएगा)।
+    </td>
+  </tr>
+</table>
+
+<!-- Sign-off -->
+<p style="margin:0 0 4px;">Thank you for trusting us with your clinic. We're just getting started.</p>
+<p style="margin:18px 0 0; line-height:1.5;">
+  <strong style="color:#0F172A;">Aman Asthana</strong><br>
+  <span style="color:#64748B; font-size:13.5px;">CTO, MedlynAI</span>
+</p>
+
+<p style="margin:26px 0 0; padding-top:18px; border-top:1px solid #E2E8F0; font-size:12.5px; line-height:1.6; color:#94A3B8;">
+  You're receiving this one-time service update because {{ email }} is linked to a MedlynAI (formerly ClinicAI) account.
+  Questions? Message us on WhatsApp at {{ support_whatsapp }}.
+</p>
+{% endblock %}

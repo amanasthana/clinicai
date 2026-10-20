@@ -1,0 +1,34 @@
+{% autoescape off %}ClinicAI is now MedlynAI
+More doctor. Less documentation.
+
+Hi {{ display_name }},
+
+ClinicAI is now MedlynAI. It's the same app {% if clinic_name %}{{ clinic_name }} uses{% else %}you use{% endif %} for reception, prescriptions and pharmacy, with a name that reflects where we're headed: giving doctors more time with patients and less time on paperwork.
+
+You don't need to do anything. Everything keeps working exactly as before.
+
+WHAT STAYS THE SAME
+- Your login and password
+- Every patient, prescription, bill and stock record
+- Your clinic settings, staff, letterhead and favourite medicines
+
+WHAT'S NEW
+- New address: medlynai.com (the old ClinicAI link forwards automatically)
+- Reset your own password: tap "Forgot password?" on the sign-in page to get an instant email link
+- Prescriptions and WhatsApp messages now carry the MedlynAI name
+- Same app, faster to reach: add medlynai.com to your phone's home screen
+
+Open MedlynAI: {{ login_url }}
+Sign in with your usual mobile number or User ID{% if login_id %} ({{ login_id }}){% endif %}.
+
+हिंदी में: ClinicAI का नया नाम अब MedlynAI है। आपका लॉगिन, पासवर्ड, मरीज़ों का रिकॉर्ड, पर्चे और फ़ार्मेसी का सारा डेटा पहले जैसा ही है। नया पता: medlynai.com
+
+Thank you for trusting us with your clinic. We're just getting started.
+
+Aman Asthana
+CTO, MedlynAI
+
+--
+You're receiving this one-time service update because {{ email }} is linked to a MedlynAI (formerly ClinicAI) account.
+MedlynAI (formerly ClinicAI) | {{ site_url }} | Help on WhatsApp: {{ support_whatsapp }}
+{% endautoescape %}

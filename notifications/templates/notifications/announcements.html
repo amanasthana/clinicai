@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Announcements — MedlynAI Admin{% endblock %}
+{% block content %}
+<style>
+.an-page { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
+.an-crumb { font-size: 13px; color: #6B7280; text-decoration: none; }
+.an-crumb:hover { color: #2563EB; }
+.an-h1 { font-size: 24px; font-weight: 700; color: #0F172A; margin: 8px 0 4px; letter-spacing: -0.3px; }
+.an-sub { font-size: 14px; color: #64748B; margin-bottom: 22px; }
+.an-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 16px; padding: 22px 24px; margin-bottom: 18px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.an-campaign { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.an-pill { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; border-radius: 999px; padding: 4px 10px; }
+.an-title { font-size: 17px; font-weight: 700; color: #0F172A; margin-top: 8px; }
+.an-meta { font-size: 13px; color: #64748B; margin-top: 2px; }
+.an-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
+.an-stat { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px 16px; }
+.an-stat-num { font-size: 26px; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; line-height: 1.1; }
+.an-stat-lbl { font-size: 12px; color: #64748B; margin-top: 4px; }
+.an-bar { height: 10px; background: #E2E8F0; border-radius: 999px; overflow: hidden; margin-top: 18px; }
+.an-bar > div { height: 100%; background: linear-gradient(90deg, #2563EB, #2DD4BF); border-radius: 999px; }
+.an-step { display: flex; gap: 14px; align-items: flex-start; }
+.an-step-n { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #EFF6FF; color: #1D4ED8; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.an-step-t { font-size: 15px; font-weight: 700; color: #0F172A; }
+.an-step-d { font-size: 13.5px; color: #64748B; margin: 2px 0 12px; line-height: 1.55; }
+.an-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.an-input { flex: 1; min-width: 220px; padding: 10px 12px; border: 1.5px solid #E2E8F0; border-radius: 10px; font-size: 14px; font-family: inherit; }
+.an-input:focus { outline: none; border-color: #2563EB; }
+.an-btn { border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
+.an-btn-primary { background: #2563EB; color: #fff; }
+.an-btn-primary:hover { background: #1D4ED8; }
+.an-btn-ghost { background: #fff; color: #1E293B; border: 1.5px solid #E2E8F0; }
+.an-btn-ghost:hover { border-color: #94A3B8; }
+.an-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.an-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.an-table th { text-align: left; font-size: 12px; color: #64748B; font-weight: 600; padding: 8px 6px; border-bottom: 1px solid #E5E7EB; }
+.an-table td { padding: 9px 6px; border-bottom: 1px solid #F1F5F9; color: #334155; }
+.an-note { font-size: 12.5px; color: #64748B; margin-top: 10px; line-height: 1.55; }
+@media (max-width: 720px) { .an-stats { grid-template-columns: repeat(2, 1fr); } }
+</style>
+
+<div class="an-page">
+  <a href="{% url 'accounts:admin_panel' %}" class="an-crumb">← Admin panel</a>
+  <h1 class="an-h1">📣 Announcements</h1>
+  <div class="an-sub">One-time emails to every MedlynAI user with an email on file. Each person gets it once, from no-reply@medlynai.com.</div>
+
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags|default:'info' }}" style="margin-bottom:16px;">{{ message }}</div>
+  {% endfor %}
+
+  <!-- Campaign overview -->
+  <div class="an-card">
+    <div class="an-campaign">
+      <div>
+        {% if status.pending_count == 0 and status.total %}
+          <span class="an-pill" style="background:#ECFDF5; color:#047857;">Complete</span>
+        {% elif status.sent %}
+          <span class="an-pill" style="background:#EFF6FF; color:#1D4ED8;">In progress</span>
+        {% else %}
+          <span class="an-pill" style="background:#F1F5F9; color:#475569;">Not started</span>
+        {% endif %}
+        <div class="an-title">{{ subject }}</div>
+        <div class="an-meta">Rebrand announcement · signed by Aman Asthana, CTO</div>
+      </div>
+      <a href="{% url 'notifications:announcement_preview' %}" target="_blank" class="an-btn an-btn-ghost">👁 Preview email</a>
+    </div>
+
+    <div class="an-stats">
+      <div class="an-stat"><div class="an-stat-num">{{ status.total }}</div><div class="an-stat-lbl">Recipients (unique emails)</div></div>
+      <div class="an-stat"><div class="an-stat-num" style="color:#047857;">{{ status.sent }}</div><div class="an-stat-lbl">Sent</div></div>
+      <div class="an-stat"><div class="an-stat-num" style="color:#1D4ED8;">{{ status.pending_count }}</div><div class="an-stat-lbl">Still to send</div></div>
+      <div class="an-stat"><div class="an-stat-num">{{ status.last_hour }}<span style="font-size:15px; color:#94A3B8; font-weight:600;"> / {{ hourly_budget }}</span></div><div class="an-stat-lbl">Sent in the last hour</div></div>
+    </div>
+    <div class="an-bar" title="{{ progress }}% sent"><div style="width:{{ progress }}%;"></div></div>
+  </div>
+
+  <!-- Step 1: test -->
+  <div class="an-card">
+    <div class="an-step">
+      <div class="an-step-n">1</div>
+      <div style="flex:1;">
+        <div class="an-step-t">Send yourself a test</div>
+        <div class="an-step-d">Goes only to the address below. Doesn't count as a send, so the real recipient still gets it later.</div>
+        <form method="post" class="an-row">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="test">
+          <input class="an-input" type="email" name="test_email" value="{{ user.email }}" placeholder="you@example.com" required>
+          <button type="submit" class="an-btn an-btn-ghost">Send test</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: batches -->
+  <div class="an-card">
+    <div class="an-step">
+      <div class="an-step-n">2</div>
+      <div style="flex:1;">
+        <div class="an-step-t">Send to users in batches</div>
+        <div class="an-step-d">
+          Start small, check a few inboxes, then continue. You can stop at any point; nobody is emailed twice.
+          {% if room < hourly_budget %}<br><strong>{{ room }}</strong> more can go out this hour.{% endif %}
+        </div>
+        {% if status.pending_count == 0 %}
+          <div style="font-size:14px; color:#047857; font-weight:600;">✓ Everyone with an email has received this announcement.</div>
+        {% else %}
+        <form method="post" class="an-row" id="batch-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="batch">
+          {% for s in batch_options %}
+          <button type="submit" name="size" value="{{ s }}" class="an-btn an-btn-primary"
+                  {% if room == 0 %}disabled{% endif %} data-n="{{ s }}">
+            Send next {{ s }}
+          </button>
+          {% endfor %}
+        </form>
+        <div class="an-note">
+          Azure allows 100 emails per hour for medlynai.com; this page keeps to {{ hourly_budget }} so password-reset emails always get through.
+          {% if room == 0 %}<strong>Limit reached for this hour.</strong>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent sends -->
+  {% if status.recent %}
+  <div class="an-card">
+    <div class="an-step-t" style="margin-bottom:10px;">Recently sent</div>
+    <table class="an-table">
+      <tr><th>Email</th><th>Account</th><th>Sent</th></tr>
+      {% for s in status.recent %}
+      <tr><td>{{ s.email }}</td><td>{{ s.user.username|default:"—" }}</td><td>{{ s.sent_at|date:"j M, g:i A" }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+  document.getElementById('batch-form')?.addEventListener('submit', function (e) {
+    const n = e.submitter?.dataset.n;
+    if (!confirm(`Send the announcement to the next ${n} users now? This can't be undone.`)) { e.preventDefault(); return; }
+    this.querySelectorAll('button').forEach(b => b.disabled = true);
+    e.submitter.textContent = 'Sending…';
+    const h = document.createElement('input'); h.type = 'hidden'; h.name = 'size'; h.value = e.submitter.value; this.appendChild(h);
+  });
+</script>
+{% endblock %}

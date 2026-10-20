@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, supervised_views
+from . import views, supervised_views, password_reset
 
 app_name = 'accounts'
 
@@ -26,7 +26,9 @@ urlpatterns = [
     path('admin-panel/pw-reset/<int:pk>/', views.superuser_reset_password_view, name='superuser_reset_password'),
     path('switch-clinic/', views.switch_clinic_view, name='switch_clinic'),
     path('add-clinic/', views.add_clinic_view, name='add_clinic'),
-    path('forgot-password/', views.forgot_password_view, name='forgot_password'),
+    path('forgot-password/', password_reset.forgot_password_view, name='forgot_password'),
+    path('reset/<uidb64>/<token>/', password_reset.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
+    path('reset/done/', password_reset.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
     path('staff/<int:pk>/reset-password/', views.staff_reset_password_view, name='staff_reset_password'),
     path('update-email/', views.update_email_view, name='update_email'),
     path('change-password/', views.change_password_view, name='change_password'),

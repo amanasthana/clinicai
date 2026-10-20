@@ -75,3 +75,104 @@ class RebrandNoticeMigrationTest(TestCase):
         mig.queue_notice(apps, None)
         mig.queue_notice(apps, None)  # idempotent
         self.assertEqual(UserNotice.objects.filter(key=KEY, user__in=[u1, u2], seen_at__isnull=True).count(), 2)
+
+
+class RebrandEmailCommandTest(TestCase):
+
+    def setUp(self):
+        from django.core.management import call_command
+        self.call = lambda *a: call_command('send_rebrand_email', *a, stdout=__import__('io').StringIO(),
+                                            stderr=__import__('io').StringIO())
+        clinic = Clinic.objects.create(name='Gupta Clinic', address='1 Rd', city='Agra', phone='9000000098')
+        User.objects.create_superuser('platform', 'shared@example.com', 'x-pass-123')
+        doc = User.objects.create_user('9444000001', email='Shared@Example.com', password='x-pass-123')
+        StaffMember.objects.create(user=doc, clinic=clinic, role='doctor', display_name='Dr. Gupta')
+        User.objects.create_user('9444000002', email='nurse@example.com', password='x-pass-123')
+        User.objects.create_user('9444000003', password='x-pass-123')                      # no email
+        User.objects.create_user('9444000004', email='gone@example.com', password='x', is_active=False)
+
+    def test_dry_run_sends_nothing(self):
+        from django.core import mail
+        self.call('--dry-run')
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_all_sends_once_per_address_and_is_resumable(self):
+        from django.core import mail
+        from notifications.models import EmailCampaignSend
+        self.call('--all', '--per-hour', '3600000')
+        self.assertEqual(sorted(m.to[0] for m in mail.outbox), ['nurse@example.com', 'shared@example.com'])
+        self.assertEqual(EmailCampaignSend.objects.count(), 2)
+        self.call('--all', '--per-hour', '3600000')
+        self.assertEqual(len(mail.outbox), 2)
+
+    def test_personalises_with_clinic_account(self):
+        from django.core import mail
+        self.call('--all', '--per-hour', '3600000', '--limit', '1')
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertIn('Dr. Gupta', html)
+        self.assertIn('Gupta Clinic', html)
+        self.assertEqual(mail.outbox[0].subject, 'ClinicAI is now MedlynAI')
+
+    def test_test_mode_not_recorded(self):
+        from django.core import mail
+        from notifications.models import EmailCampaignSend
+        self.call('--test', 'shared@example.com')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(EmailCampaignSend.objects.count(), 0)
+
+
+class AnnouncementsPageTest(TestCase):
+    URL = '/notifications/announcements/'
+
+    def setUp(self):
+        self.su = User.objects.create_superuser('boss', 'boss@example.com', 'x-pass-123')
+        for i in range(12):
+            User.objects.create_user(f'94550000{i:02d}', email=f'u{i}@example.com', password='x-pass-123')
+        self.client.force_login(self.su)
+
+    def test_non_superuser_forbidden(self):
+        c = Client()
+        c.force_login(User.objects.get(username='9455000000'))
+        self.assertEqual(c.get(self.URL).status_code, 403)
+        self.assertEqual(c.get(self.URL + 'preview/').status_code, 403)
+
+    def test_page_shows_counts(self):
+        resp = self.client.get(self.URL)
+        self.assertContains(resp, 'ClinicAI is now MedlynAI')
+        self.assertEqual(resp.context['status']['total'], 13)
+        self.assertEqual(resp.context['status']['pending_count'], 13)
+
+    def test_preview_renders_email(self):
+        resp = self.client.get(self.URL + 'preview/')
+        self.assertContains(resp, 'A new name for the app your clinic runs on')
+
+    def test_send_test_not_recorded(self):
+        from django.core import mail
+        from notifications.models import EmailCampaignSend
+        self.client.post(self.URL, {'action': 'test', 'test_email': 'boss@example.com'})
+        self.assertEqual([m.to for m in mail.outbox], [['boss@example.com']])
+        self.assertEqual(EmailCampaignSend.objects.count(), 0)
+
+    def test_batch_sends_and_records(self):
+        from django.core import mail
+        from notifications.models import EmailCampaignSend
+        self.client.post(self.URL, {'action': 'batch', 'size': '10'})
+        self.assertEqual(len(mail.outbox), 10)
+        self.assertEqual(EmailCampaignSend.objects.count(), 10)
+        self.client.post(self.URL, {'action': 'batch', 'size': '10'})
+        self.assertEqual(len(mail.outbox), 13)                    # only the 3 remaining
+        self.assertContains(self.client.get(self.URL), 'Everyone with an email has received')
+
+    def test_batch_respects_hourly_budget(self):
+        from django.core import mail
+        from notifications.models import EmailCampaignSend
+        from notifications.rebrand_email import CAMPAIGN
+        EmailCampaignSend.objects.bulk_create(
+            [EmailCampaignSend(campaign=CAMPAIGN, email=f'old{i}@example.com') for i in range(85)])
+        self.client.post(self.URL, {'action': 'batch', 'size': '10'})
+        self.assertEqual(len(mail.outbox), 5)                     # 90 - 85
+
+    def test_invalid_batch_size_rejected(self):
+        from django.core import mail
+        self.client.post(self.URL, {'action': 'batch', 'size': '999'})
+        self.assertEqual(len(mail.outbox), 0)
