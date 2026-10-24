@@ -1,0 +1,333 @@
+{% comment %}
+  MedlynAI loader — one consistent "please wait" for the whole app.
+
+  Shows automatically when:
+    • a link or form opens a new page (incl. JS redirects)      → bar at 150ms, card at 700ms
+    • a fetch() started by a click/submit is slow               → bar at 300ms, card at 1.5s
+  Further clicks are blocked while a page is opening, so doctors can't double-submit.
+
+  Opt out:   add  data-no-loader  to a link, form or any parent element,
+             or call  fetch(url, { loader: false })
+  Message:   data-loader-message="Saving bill…"  on a link, button or form
+  Manual:    const t = MedlynLoader.show('Generating PDF…'); …; MedlynLoader.hide(t);
+{% endcomment %}
+<style>
+  #ml-loader .ml-bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 3px;
+    z-index: 2147483001; pointer-events: none;
+  }
+  #ml-loader .ml-bar-fill {
+    height: 100%; width: 0; opacity: 0;
+    background: linear-gradient(90deg, #1FB5A3, #3DD2BF 60%, #8AEBDD);
+    box-shadow: 0 0 10px rgba(61, 210, 191, .75), 0 0 2px rgba(39, 196, 177, .9);
+    border-radius: 0 3px 3px 0;
+    transition: width .35s ease, opacity .4s ease;
+  }
+  #ml-loader .ml-shield {
+    position: fixed; inset: 0; z-index: 2147482999;
+    display: none; cursor: progress; background: transparent;
+  }
+  #ml-loader.ml-blocking .ml-shield { display: block; }
+
+  #ml-loader .ml-overlay {
+    position: fixed; inset: 0; z-index: 2147483000;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: rgba(244, 247, 250, .72);
+    -webkit-backdrop-filter: blur(6px) saturate(1.15);
+    backdrop-filter: blur(6px) saturate(1.15);
+    opacity: 0; visibility: hidden;
+    transition: opacity .25s ease, visibility 0s linear .25s;
+  }
+  #ml-loader.ml-on .ml-overlay {
+    opacity: 1; visibility: visible; transition: opacity .25s ease;
+  }
+  #ml-loader .ml-card {
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 220px; max-width: 300px; padding: 28px 32px 22px;
+    background: #fff; border-radius: 22px;
+    box-shadow: 0 24px 60px rgba(26, 38, 66, .16), 0 2px 8px rgba(26, 38, 66, .06);
+    transform: translateY(6px) scale(.97);
+    transition: transform .35s cubic-bezier(.2, .9, .3, 1.2);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    text-align: center;
+  }
+  #ml-loader.ml-on .ml-card { transform: none; }
+
+  /* Mark: rotating gradient ring + heartbeat line */
+  #ml-loader .ml-mark { position: relative; width: 88px; height: 88px; margin-bottom: 16px; }
+  #ml-loader .ml-mark::before {
+    content: ''; position: absolute; inset: 14px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(61, 210, 191, .22), rgba(61, 210, 191, 0) 70%);
+    animation: ml-breathe 1.6s ease-in-out infinite;
+  }
+  #ml-loader .ml-ring { position: absolute; inset: 0; width: 100%; height: 100%; animation: ml-spin 1.15s linear infinite; }
+  #ml-loader .ml-ring-track { fill: none; stroke: #EEF3F7; stroke-width: 6; }
+  #ml-loader .ml-ring-arc {
+    fill: none; stroke: url(#ml-grad); stroke-width: 6; stroke-linecap: round;
+    stroke-dasharray: 95 232; /* r=52 → circumference ≈ 327 */
+  }
+  #ml-loader .ml-ecg {
+    position: absolute; left: 50%; top: 50%; width: 48px; height: 26px;
+    transform: translate(-50%, -50%); overflow: visible;
+  }
+  #ml-loader .ml-ecg path {
+    fill: none; stroke: #1A2642; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 120; stroke-dashoffset: 120;
+    animation: ml-beat 1.6s cubic-bezier(.55, .1, .35, 1) infinite;
+  }
+  #ml-loader .ml-word {
+    font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: #1A2642; line-height: 1.2;
+  }
+  #ml-loader .ml-word span {
+    background: linear-gradient(90deg, #27C4B1, #3DD2BF);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  #ml-loader .ml-msg {
+    margin-top: 6px; font-size: 13px; color: #64748B; line-height: 1.45; min-height: 19px;
+    transition: opacity .2s ease;
+  }
+  #ml-loader .ml-dots::after {
+    content: ''; display: inline-block; width: 1.2em; text-align: left;
+    animation: ml-dots 1.2s steps(4, end) infinite;
+  }
+  #ml-loader .ml-dismiss {
+    display: none; margin-top: 14px; padding: 6px 14px;
+    background: #F1F5F9; color: #475569; border: none; border-radius: 999px;
+    font: 600 12px 'Inter', sans-serif; cursor: pointer;
+  }
+  #ml-loader.ml-slow .ml-dismiss { display: inline-block; }
+  #ml-loader .ml-dismiss:hover { background: #E2E8F0; }
+
+  .ml-pressed { opacity: .6 !important; transition: opacity .15s ease; }
+
+  @keyframes ml-spin { to { transform: rotate(360deg); } }
+  @keyframes ml-breathe { 0%, 100% { transform: scale(.85); opacity: .7; } 50% { transform: scale(1.12); opacity: 1; } }
+  @keyframes ml-beat {
+    0%   { stroke-dashoffset: 120; stroke: #1A2642; }
+    55%  { stroke-dashoffset: 0;   stroke: #27C4B1; }
+    100% { stroke-dashoffset: -120; stroke: #3DD2BF; }
+  }
+  @keyframes ml-dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75%, 100% { content: '...'; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #ml-loader .ml-ring, #ml-loader .ml-mark::before { animation: none; }
+    #ml-loader .ml-ecg path { animation: none; stroke-dashoffset: 0; stroke: #27C4B1; }
+    #ml-loader .ml-card { transition: none; }
+  }
+</style>
+
+<div id="ml-loader" aria-hidden="true">
+  <div class="ml-bar"><div class="ml-bar-fill" id="ml-bar"></div></div>
+  <div class="ml-shield"></div>
+  <div class="ml-overlay">
+    <div class="ml-card" role="status" aria-live="polite">
+      <div class="ml-mark">
+        <svg class="ml-ring" viewBox="0 0 120 120" aria-hidden="true">
+          <defs>
+            <linearGradient id="ml-grad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#3DD2BF"/>
+              <stop offset="100%" stop-color="#1A2642"/>
+            </linearGradient>
+          </defs>
+          <circle class="ml-ring-track" cx="60" cy="60" r="52"/>
+          <circle class="ml-ring-arc" cx="60" cy="60" r="52"/>
+        </svg>
+        <svg class="ml-ecg" viewBox="0 0 64 32" aria-hidden="true">
+          <path d="M2 17 H17 L22 8 L28 27 L35 3 L41 17 H62"/>
+        </svg>
+      </div>
+      <div class="ml-word">Medlyn<span>AI</span></div>
+      <div class="ml-msg" id="ml-msg"></div>
+      <button type="button" class="ml-dismiss" id="ml-dismiss">Hide</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (window.MedlynLoader) return;
+  var root = document.getElementById('ml-loader');
+  var bar = document.getElementById('ml-bar');
+  var msgEl = document.getElementById('ml-msg');
+  var active = [];            // pending tasks
+  var barOn = false, progress = 0, trickle = null, slowTimers = [];
+  var lastAction = 0;         // time of the last click/submit by the user
+  var pendingMessage = '';    // data-loader-message of the last clicked element
+  var pressedEl = null;
+  var navTask = null;
+  var skipUnloadUntil = 0;
+
+  function setMsg(text) {
+    msgEl.innerHTML = '';
+    var span = document.createElement('span');
+    span.textContent = text.replace(/[.…]+$/, '');
+    span.className = 'ml-dots';
+    msgEl.appendChild(span);
+  }
+
+  function startBar() {
+    if (barOn) return;
+    barOn = true; progress = 6;
+    bar.style.transition = 'none'; bar.style.width = '0'; bar.style.opacity = '1';
+    void bar.offsetWidth;
+    bar.style.transition = '';
+    bar.style.width = progress + '%';
+    trickle = setInterval(function () {
+      progress += (92 - progress) * 0.07;
+      bar.style.width = progress + '%';
+    }, 280);
+  }
+
+  function finishBar() {
+    if (!barOn) return;
+    barOn = false; clearInterval(trickle);
+    bar.style.width = '100%';
+    setTimeout(function () { if (!barOn) { bar.style.opacity = '0'; } }, 250);
+    setTimeout(function () { if (!barOn) { bar.style.transition = 'none'; bar.style.width = '0'; } }, 700);
+  }
+
+  function showCard(message) {
+    if (root.classList.contains('ml-on')) return;
+    setMsg(message);
+    root.classList.add('ml-on');
+    root.setAttribute('aria-hidden', 'false');
+    document.documentElement.setAttribute('aria-busy', 'true');
+    slowTimers.push(setTimeout(function () { setMsg('Still working, almost there'); }, 5000));
+    slowTimers.push(setTimeout(function () {
+      setMsg('Your internet seems slow. Please wait');
+      root.classList.add('ml-slow');
+    }, 12000));
+  }
+
+  function resetAll() {
+    active.forEach(function (t) { t.done = true; clearTimeout(t.bt); clearTimeout(t.ot); });
+    active = []; navTask = null;
+    slowTimers.forEach(clearTimeout); slowTimers = [];
+    root.classList.remove('ml-on', 'ml-blocking', 'ml-slow');
+    root.setAttribute('aria-hidden', 'true');
+    document.documentElement.removeAttribute('aria-busy');
+    if (pressedEl) { pressedEl.classList.remove('ml-pressed'); pressedEl = null; }
+    finishBar();
+  }
+
+  function start(opts) {
+    var t = { done: false };
+    active.push(t);
+    if (opts.block) root.classList.add('ml-blocking');
+    t.bt = setTimeout(function () { if (!t.done) startBar(); }, opts.barDelay);
+    t.ot = setTimeout(function () { if (!t.done) { root.classList.add('ml-blocking'); showCard(opts.message); } }, opts.cardDelay);
+    return t;
+  }
+
+  function end(t) {
+    if (!t || t.done) return;
+    t.done = true; clearTimeout(t.bt); clearTimeout(t.ot);
+    active = active.filter(function (x) { return x !== t; });
+    if (!active.length) resetAll();
+  }
+
+  function startNavigation(message) {
+    if (navTask) return navTask;
+    navTask = start({ block: true, barDelay: 150, cardDelay: 700, message: message || 'Loading' });
+    return navTask;
+  }
+
+  function optedOut(el) { return !!(el && el.closest && el.closest('[data-no-loader]')); }
+
+  function messageFor(el) {
+    var src = el && el.closest && el.closest('[data-loader-message]');
+    return src ? src.getAttribute('data-loader-message') : '';
+  }
+
+  // Is this link going to open another page in this tab?
+  function opensPage(a) {
+    if (!a || optedOut(a)) return false;
+    if (a.hasAttribute('download')) return false;
+    var target = (a.getAttribute('target') || '').toLowerCase();
+    if (target && target !== '_self') return false;
+    var href = a.getAttribute('href') || '';
+    if (!href || href.charAt(0) === '#' || /^javascript:/i.test(href)) return false;
+    var url;
+    try { url = new URL(a.href, location.href); } catch (e) { return false; }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    if (url.origin !== location.origin) return false;
+    if (url.pathname === location.pathname && url.search === location.search && url.hash) return false;
+    return true;
+  }
+
+  var ACTION_SELECTOR = 'a, button, [role="button"], input[type="submit"], input[type="button"], input[type="checkbox"], input[type="radio"], select, label, summary, [onclick]';
+
+  // Remember real user actions (not typing in a text box), so background polling never shows the loader
+  document.addEventListener('click', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest(ACTION_SELECTOR) : null;
+    if (!el || el.closest('#ml-loader')) return;
+    lastAction = Date.now();
+    pendingMessage = messageFor(el);
+    var a = el.closest('a[href]');
+    if (a && !opensPage(a)) skipUnloadUntil = Date.now() + 1500;   // tel:, mailto:, new tab, download…
+  }, true);
+
+  document.addEventListener('click', function (e) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a || !opensPage(a)) return;
+    // Wait until every other click handler has run, in case one of them cancels the navigation
+    setTimeout(function () {
+      if (e.defaultPrevented) return;
+      startNavigation(messageFor(a));
+      pressedEl = a; a.classList.add('ml-pressed');
+    }, 0);
+  });
+
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    lastAction = Date.now();
+    pendingMessage = messageFor(e.submitter || form);
+    setTimeout(function () {
+      if (e.defaultPrevented || optedOut(form)) return;
+      var target = (form.getAttribute('target') || '').toLowerCase();
+      if (target && target !== '_self') return;
+      if ((form.getAttribute('method') || '').toLowerCase() === 'dialog') return;
+      startNavigation(messageFor(e.submitter || form));
+      var btn = e.submitter || form.querySelector('[type="submit"]');
+      if (btn) { pressedEl = btn; btn.classList.add('ml-pressed'); }
+    }, 0);
+  });
+
+  // Page changes started from code (window.location = …, form.submit())
+  window.addEventListener('beforeunload', function () {
+    if (Date.now() < skipUnloadUntil) return;
+    startNavigation(pendingMessage);
+  });
+
+  // Coming back with the Back button restores the old page — make sure it isn't stuck loading
+  window.addEventListener('pageshow', function (e) { if (e.persisted) resetAll(); });
+
+  // Slow fetch() calls that the user started
+  if (window.fetch) {
+    var nativeFetch = window.fetch;
+    window.fetch = function (input, init) {
+      var promise = nativeFetch.apply(this, arguments);
+      var userStarted = Date.now() - lastAction < 1000;
+      if (!userStarted || (init && init.loader === false)) return promise;
+      var t = start({ block: false, barDelay: 300, cardDelay: 1500, message: pendingMessage || 'Working on it' });
+      promise.then(function () { end(t); }, function () { end(t); });
+      return promise;
+    };
+  }
+
+  document.getElementById('ml-dismiss').addEventListener('click', resetAll);
+
+  window.MedlynLoader = {
+    show: function (message) {
+      var t = start({ block: true, barDelay: 0, cardDelay: 0, message: message || 'Loading' });
+      return t;
+    },
+    hide: function (t) { if (t) end(t); else resetAll(); },
+    track: function (promise, message) {
+      var t = this.show(message);
+      return Promise.resolve(promise).finally(function () { end(t); });
+    }
+  };
+})();
+</script>

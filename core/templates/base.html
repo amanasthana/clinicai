@@ -21,6 +21,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body>
+  {% include "_loader.html" %}
 
   {% if user.is_authenticated %}
   <!-- Navigation -->

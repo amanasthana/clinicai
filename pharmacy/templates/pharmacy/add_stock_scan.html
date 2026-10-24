@@ -64,7 +64,7 @@
         <img id="preview-img" src="" alt="Invoice preview"
           style="max-width:100%; max-height:300px; border-radius:10px; border:1px solid #E5E7EB; object-fit:contain;">
       </div>
-      <button type="button" id="scan-btn" onclick="scanBill()" disabled
+      <button type="button" id="scan-btn" onclick="scanBill()" data-loader-message="Reading the bill with AI" disabled
         style="width:100%; padding:12px; background:#2563EB; color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; opacity:0.5;"
         >
         Read bill
@@ -87,7 +87,7 @@
       Some lines need review. Mark them as verified before you can save.
     </div>
 
-    <button type="button" id="save-btn" onclick="saveAll()"
+    <button type="button" id="save-btn" onclick="saveAll()" data-loader-message="Saving to inventory"
       style="width:100%; padding:14px; background:#059669; color:#fff; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer; font-family:inherit;">
       Save all to inventory
     </button>
