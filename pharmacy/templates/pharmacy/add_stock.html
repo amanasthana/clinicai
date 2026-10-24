@@ -35,7 +35,7 @@
   {% endif %}
 
   <div class="card">
-    <form method="post">
+    <form method="post" onsubmit="if(Date.now()-(this.dataset.sent||0)<5000){return false}this.dataset.sent=Date.now()">
       {% csrf_token %}
       <input type="hidden" id="catalog-id-input" name="catalog_id"
         value="{% if prefill_item and prefill_item.medicine %}{{ prefill_item.medicine.pk }}{% endif %}">

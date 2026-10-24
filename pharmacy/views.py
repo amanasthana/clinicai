@@ -7,11 +7,12 @@ from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.db.models import Q
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from accounts.permissions import require_permission
 from .models import MedicineCatalog, PharmacyItem, PharmacyBatch, DoctorFavorite, DispensedItem, PharmacyBill
+from . import stock
 
 
 def _get_clinic(request):
@@ -79,6 +80,7 @@ def pharmacy_dashboard(request):
     )
 
     return render(request, 'pharmacy/dashboard.html', {
+        'duplicate_groups': stock.duplicate_groups(items),
         'items': items,
         'clinic': clinic,
         'low_stock_items': low_stock_items,
@@ -94,79 +96,77 @@ def pharmacy_dashboard(request):
     })
 
 
+def _wants_json(request):
+    return 'application/json' in request.headers.get('Accept', '')
+
+
+def _read_batch_fields(post, require_price=True):
+    """Parse the batch fields shared by add/edit forms. Raises StockInputError."""
+    fields = {
+        'batch_number': stock.clean_batch_number(post.get('batch_number')),
+        'expiry_date': stock.parse_expiry(post.get('expiry_date')),
+        'quantity': stock.parse_quantity(post.get('quantity')),
+        'unit_price': stock.parse_price(post.get('unit_price'), 'Unit price (MRP per unit)'),
+        'purchase_price': stock.parse_price(post.get('purchase_price'), 'Purchase price'),
+        'purchase_gst_percent': stock.parse_gst(post.get('purchase_gst_percent'), 'Purchase GST %'),
+    }
+    # Layer 3: reject zero/missing price at the server side
+    if require_price and fields['unit_price'] <= 0:
+        raise stock.StockInputError(
+            'Unit price (MRP per unit) must be greater than ₹0. '
+            'Medicines with no price will bill patients ₹0.'
+        )
+    return fields
+
+
+def _merged_message(request, item, batch, added):
+    from django.contrib import messages
+    messages.info(
+        request,
+        f'Batch {batch.batch_number} of {item.display_name} was already in stock — '
+        f'added {added} units to it (now {batch.quantity}).'
+    )
+
+
 @require_permission('can_edit_inventory')
 def add_stock_view(request):
     clinic = _get_clinic(request)
 
     if request.method == 'POST':
-        catalog_id = request.POST.get('catalog_id')
-        custom_name = request.POST.get('custom_name', '').strip()
-        custom_generic_name = request.POST.get('custom_generic_name', '').strip()
-        batch_number = request.POST.get('batch_number', '').strip()
-        expiry_date = request.POST.get('expiry_date') or None
-        quantity = int(request.POST.get('quantity', 0) or 0)
-        unit_price_raw = request.POST.get('unit_price', '0') or '0'
-        purchase_price_raw = request.POST.get('purchase_price', '0') or '0'
-        purchase_gst_raw = request.POST.get('purchase_gst_percent', '0') or '0'
-        reorder_level = int(request.POST.get('reorder_level', 10) or 10)
+        def fail(msg):
+            if _wants_json(request):
+                return JsonResponse({'ok': False, 'error': msg}, status=400)
+            return render(request, 'pharmacy/add_stock.html', {'error': msg})
 
+        catalog_id = request.POST.get('catalog_id')
         medicine = None
         if catalog_id:
-            try:
-                medicine = MedicineCatalog.objects.get(pk=catalog_id)
-            except MedicineCatalog.DoesNotExist:
-                pass
-
-        if not medicine and not custom_name:
-            return render(request, 'pharmacy/add_stock.html', {
-                'error': 'Please select a medicine from catalog or enter a custom name.'
-            })
-
-        # Layer 3: reject zero/missing price at the server side
+            medicine = MedicineCatalog.objects.filter(pk=catalog_id).first() if str(catalog_id).isdigit() else None
         try:
-            unit_price_dec = decimal.Decimal(str(unit_price_raw))
-        except decimal.InvalidOperation:
-            unit_price_dec = decimal.Decimal('0')
-        if unit_price_dec <= 0:
-            return render(request, 'pharmacy/add_stock.html', {
-                'error': 'Unit price (MRP per unit) must be greater than ₹0. '
-                         'Medicines with no price will bill patients ₹0.',
-            })
-        unit_price = unit_price_raw
-        try:
-            purchase_price_dec = decimal.Decimal(str(purchase_price_raw))
-        except decimal.InvalidOperation:
-            purchase_price_dec = decimal.Decimal('0')
-        try:
-            purchase_gst_dec = decimal.Decimal(str(purchase_gst_raw))
-        except decimal.InvalidOperation:
-            purchase_gst_dec = decimal.Decimal('0')
+            custom_name = stock.parse_text(request.POST.get('custom_name'), 250, 'Medicine name')
+            custom_generic_name = stock.parse_text(request.POST.get('custom_generic_name'), 250, 'Generic name')
+            reorder_raw = request.POST.get('reorder_level')
+            if not medicine and not custom_name:
+                return fail('Please select a medicine from catalog or enter a custom name.')
+            reorder_level = stock.parse_quantity(reorder_raw, 'Reorder level') if str(reorder_raw or '').strip() else 10
+            fields = _read_batch_fields(request.POST)
+        except stock.StockInputError as e:
+            return fail(str(e))
 
-        # Check if this medicine already exists in the clinic's inventory
-        existing_item = None
-        if medicine:
-            existing_item = PharmacyItem.objects.filter(clinic=clinic, medicine=medicine).first()
-        elif custom_name:
-            existing_item = PharmacyItem.objects.filter(clinic=clinic, custom_name=custom_name).first()
-
-        if existing_item:
-            # Add a new batch to the existing item
-            PharmacyBatch.objects.create(
-                item=existing_item,
-                batch_number=batch_number,
-                expiry_date=expiry_date,
-                quantity=quantity,
-                unit_price=unit_price,
-                purchase_price=purchase_price_dec,
-                purchase_gst_percent=purchase_gst_dec,
-            )
-            existing_item.reorder_level = reorder_level
-            # Update generic name if provided and item is custom
-            if not existing_item.medicine and custom_generic_name:
-                existing_item.custom_generic_name = custom_generic_name
-            existing_item.save(update_fields=['reorder_level', 'custom_generic_name', 'updated_at'])
+        # Same medicine already in inventory (ignoring case, spacing, "Tab"/"Tablet" etc.)?
+        item = stock.find_matching_item(clinic, medicine=medicine, custom_name=custom_name)
+        if item:
+            item.reorder_level = reorder_level
+            update = ['reorder_level', 'updated_at']
+            if medicine and not item.medicine_id:
+                # A scanned/custom entry is the same as this catalog medicine — link it
+                item.medicine = medicine
+                update.append('medicine')
+            if not item.medicine_id and custom_generic_name:
+                item.custom_generic_name = custom_generic_name
+                update.append('custom_generic_name')
+            item.save(update_fields=update)
         else:
-            # Create new medicine master + first batch
             item = PharmacyItem.objects.create(
                 clinic=clinic,
                 medicine=medicine,
@@ -174,16 +174,15 @@ def add_stock_view(request):
                 custom_generic_name=custom_generic_name if not medicine else '',
                 reorder_level=reorder_level,
             )
-            PharmacyBatch.objects.create(
-                item=item,
-                batch_number=batch_number,
-                expiry_date=expiry_date,
-                quantity=quantity,
-                unit_price=unit_price,
-                purchase_price=purchase_price_dec,
-                purchase_gst_percent=purchase_gst_dec,
-            )
 
+        batch, merged = stock.add_stock(item, **fields)
+        if _wants_json(request):
+            return JsonResponse({
+                'ok': True, 'item_id': item.pk, 'item_name': item.display_name,
+                'batch_id': batch.pk, 'merged': merged, 'batch_quantity': batch.quantity,
+            })
+        if merged:
+            _merged_message(request, item, batch, fields['quantity'])
         return redirect('pharmacy:dashboard')
 
     # On GET: check if the URL has an item_id shortcut (from "Add Batch" button)
@@ -192,7 +191,7 @@ def add_stock_view(request):
     suggested_purchase_price = ''
     suggested_purchase_gst = ''
     item_id = request.GET.get('item_id')
-    if item_id:
+    if item_id and str(item_id).isdigit():
         prefill_item = PharmacyItem.objects.filter(pk=item_id, clinic=clinic).select_related('medicine').prefetch_related('batches').first()
         if prefill_item:
             last_batch = prefill_item.batches.order_by('-received_date', '-id').first()
@@ -214,47 +213,18 @@ def add_stock_view(request):
 
 @require_permission('can_edit_inventory')
 def add_batch_view(request, pk):
-    """POST only — adds a new batch to an existing PharmacyItem."""
+    """Adds a batch to an existing PharmacyItem (tops up the batch if the number already exists)."""
     clinic = _get_clinic(request)
     item = get_object_or_404(PharmacyItem, pk=pk, clinic=clinic)
 
     if request.method == 'POST':
-        batch_number = request.POST.get('batch_number', '').strip()
-        expiry_date = request.POST.get('expiry_date') or None
-        quantity = int(request.POST.get('quantity', 0) or 0)
-        unit_price_raw = request.POST.get('unit_price', '0') or '0'
-        purchase_price_raw = request.POST.get('purchase_price', '0') or '0'
-        purchase_gst_raw = request.POST.get('purchase_gst_percent', '0') or '0'
-
-        # Layer 3: reject zero/missing price
         try:
-            unit_price_dec = decimal.Decimal(str(unit_price_raw))
-        except decimal.InvalidOperation:
-            unit_price_dec = decimal.Decimal('0')
-        if unit_price_dec <= 0:
-            return render(request, 'pharmacy/add_batch.html', {
-                'item': item,
-                'error': 'Unit price (MRP per unit) must be greater than ₹0. '
-                         'Medicines with no price will bill patients ₹0.',
-            })
-        try:
-            purchase_price_dec = decimal.Decimal(str(purchase_price_raw))
-        except decimal.InvalidOperation:
-            purchase_price_dec = decimal.Decimal('0')
-        try:
-            purchase_gst_dec = decimal.Decimal(str(purchase_gst_raw))
-        except decimal.InvalidOperation:
-            purchase_gst_dec = decimal.Decimal('0')
-
-        PharmacyBatch.objects.create(
-            item=item,
-            batch_number=batch_number,
-            expiry_date=expiry_date,
-            quantity=quantity,
-            unit_price=unit_price_raw,
-            purchase_price=purchase_price_dec,
-            purchase_gst_percent=purchase_gst_dec,
-        )
+            fields = _read_batch_fields(request.POST)
+        except stock.StockInputError as e:
+            return render(request, 'pharmacy/add_batch.html', {'item': item, 'error': str(e)})
+        batch, merged = stock.add_stock(item, **fields)
+        if merged:
+            _merged_message(request, item, batch, fields['quantity'])
         return redirect('pharmacy:dashboard')
 
     # GET: pre-fill price from most recently added batch so pharmacist doesn't re-type unchanged MRPs
@@ -277,40 +247,30 @@ def edit_batch_view(request, pk):
     batch = get_object_or_404(PharmacyBatch, pk=pk, item__clinic=clinic)
 
     if request.method == 'POST':
-        unit_price_raw = request.POST.get('unit_price', '0') or '0'
-        purchase_price_raw = request.POST.get('purchase_price', '0') or '0'
-        purchase_gst_raw = request.POST.get('purchase_gst_percent', '0') or '0'
+        def fail(msg):
+            return render(request, 'pharmacy/edit_batch.html', {'batch': batch, 'error': msg})
+        try:
+            fields = _read_batch_fields(request.POST)
+            custom_generic_name = stock.parse_text(request.POST.get('custom_generic_name'), 250, 'Generic composition')
+        except stock.StockInputError as e:
+            return fail(str(e))
 
-        # Layer 3: reject zero/missing price
-        try:
-            unit_price_dec = decimal.Decimal(str(unit_price_raw))
-        except decimal.InvalidOperation:
-            unit_price_dec = decimal.Decimal('0')
-        if unit_price_dec <= 0:
-            return render(request, 'pharmacy/edit_batch.html', {
-                'batch': batch,
-                'error': 'Unit price (MRP per unit) must be greater than ₹0. '
-                         'Medicines with no price will bill patients ₹0.',
-            })
-        try:
-            purchase_price_dec = decimal.Decimal(str(purchase_price_raw))
-        except decimal.InvalidOperation:
-            purchase_price_dec = decimal.Decimal('0')
-        try:
-            purchase_gst_dec = decimal.Decimal(str(purchase_gst_raw))
-        except decimal.InvalidOperation:
-            purchase_gst_dec = decimal.Decimal('0')
+        clash = stock.batch_number_taken(batch.item, fields['batch_number'], exclude_pk=batch.pk)
+        if clash:
+            return fail(
+                f'Batch {clash.batch_number} already exists for this medicine. '
+                f'Edit that batch instead, or delete this one.'
+            )
 
-        batch.batch_number = request.POST.get('batch_number', '').strip()
-        batch.expiry_date = request.POST.get('expiry_date') or None
-        batch.quantity = int(request.POST.get('quantity', 0) or 0)
-        batch.unit_price = unit_price_raw
-        batch.purchase_price = purchase_price_dec
-        batch.purchase_gst_percent = purchase_gst_dec
-        batch.save()
+        for name, value in fields.items():
+            setattr(batch, name, value)
+        try:
+            with transaction.atomic():
+                batch.save()
+        except IntegrityError:
+            return fail('Another batch with this number was just added. Please reload and try again.')
         # Also save generic composition on the item if it's a custom medicine
         if not batch.item.medicine:
-            custom_generic_name = request.POST.get('custom_generic_name', '').strip()
             batch.item.custom_generic_name = custom_generic_name
             batch.item.save(update_fields=['custom_generic_name', 'updated_at'])
         return redirect('pharmacy:dashboard')
@@ -321,14 +281,18 @@ def edit_batch_view(request, pk):
 @require_permission('can_edit_inventory')
 @require_POST
 def delete_batch_view(request, pk):
-    """Delete a PharmacyBatch. If the item has no remaining batches the item itself is also removed."""
+    """Remove a batch. Sold batches are archived (bills still need them); others are deleted.
+    If the medicine has no batches left it is removed too."""
+    from django.contrib import messages
     clinic = _get_clinic(request)
     batch = get_object_or_404(PharmacyBatch, pk=pk, item__clinic=clinic)
     item = batch.item
-    batch.delete()
-    # Clean up orphan medicine masters with no batches
-    if not item.batches.exists():
-        item.delete()
+    with transaction.atomic():
+        stock.remove_batch(batch)
+        if not item.batches.exists():
+            stock.remove_item(item)
+    label = f'Batch {batch.batch_number}' if batch.batch_number else 'Batch'
+    messages.success(request, f'{label} of {item.display_name} removed from inventory.')
     return redirect('pharmacy:dashboard')
 
 
@@ -339,12 +303,15 @@ def edit_item_view(request, pk):
     item = get_object_or_404(PharmacyItem, pk=pk, clinic=clinic)
 
     if request.method == 'POST':
-        reorder_level = int(request.POST.get('reorder_level', 0) or 0)
+        try:
+            reorder_level = stock.parse_quantity(request.POST.get('reorder_level'), 'Reorder level')
+            custom_name = stock.parse_text(request.POST.get('custom_name'), 250, 'Medicine name')
+            custom_generic_name = stock.parse_text(request.POST.get('custom_generic_name'), 250, 'Generic composition')
+        except stock.StockInputError as e:
+            return render(request, 'pharmacy/edit_stock.html', {'item': item, 'error': str(e)})
         item.reorder_level = reorder_level
         # Only custom medicines (no catalog link) can have their name/generic edited
         if not item.medicine:
-            custom_name = request.POST.get('custom_name', '').strip()
-            custom_generic_name = request.POST.get('custom_generic_name', '').strip()
             if custom_name:
                 item.custom_name = custom_name
             item.custom_generic_name = custom_generic_name
@@ -357,11 +324,72 @@ def edit_item_view(request, pk):
 @require_permission('can_edit_inventory')
 @require_POST
 def delete_item_view(request, pk):
-    """Delete a PharmacyItem (and all its batches via CASCADE)."""
+    """Remove a medicine. If it was ever sold it is archived instead, so old bills keep working."""
+    from django.contrib import messages
     clinic = _get_clinic(request)
     item = get_object_or_404(PharmacyItem, pk=pk, clinic=clinic)
-    item.delete()
+    stock.remove_item(item)
+    messages.success(request, f'{item.display_name} removed from inventory.')
     return redirect('pharmacy:dashboard')
+
+
+@require_permission('can_edit_inventory')
+def merge_item_view(request, pk):
+    """Merge a duplicate medicine into another one (stock, batches and sales history move over)."""
+    from django.contrib import messages
+    clinic = _get_clinic(request)
+    item = get_object_or_404(PharmacyItem.objects.select_related('medicine'), pk=pk, clinic=clinic)
+    others = list(
+        PharmacyItem.objects.filter(clinic=clinic).exclude(pk=item.pk)
+        .select_related('medicine').prefetch_related('batches')
+        .order_by('medicine__name', 'custom_name')
+    )
+    key = stock.item_key(item)
+    suggested = [o for o in others if stock.keys_match(stock.item_key(o), key)]
+    error = None
+
+    if request.method == 'POST':
+        target_id = request.POST.get('target_id', '')
+        target = next((o for o in others if str(o.pk) == target_id), None)
+        if not target:
+            error = 'Please choose the medicine to keep.'
+        else:
+            try:
+                stock.merge_items(item, target)
+            except stock.StockInputError as e:
+                error = str(e)
+            else:
+                messages.success(request, f'Merged {item.display_name} into {target.display_name}.')
+                return redirect('pharmacy:dashboard')
+
+    return render(request, 'pharmacy/merge_item.html', {
+        'item': item, 'suggested': suggested, 'others': others, 'error': error,
+    })
+
+
+@require_permission('can_edit_inventory')
+@require_POST
+def stock_check_api(request):
+    """POST JSON [{name, batch_number}] → which scanned lines are already in stock.
+    Lets the scan screen warn before the same bill is saved twice."""
+    clinic = _get_clinic(request)
+    try:
+        rows = json.loads(request.body).get('items', [])
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+    results = []
+    for row in rows[:100]:
+        name = str((row or {}).get('name') or '').strip()
+        bn = str((row or {}).get('batch_number') or '').strip()
+        item = stock.find_matching_item(clinic, custom_name=name) if name else None
+        info = {'item_name': None, 'batch_quantity': None}
+        if item and not item.is_archived:
+            info['item_name'] = item.display_name
+            batch = PharmacyBatch.objects.filter(item=item, batch_number__iexact=bn).first() if bn else None
+            if batch:
+                info['batch_quantity'] = batch.quantity
+        results.append(info)
+    return JsonResponse({'ok': True, 'items': results})
 
 
 @require_permission('can_edit_inventory')
@@ -620,14 +648,22 @@ def confirm_dispense_api(request, visit_id):
 
     from django.db.models import Sum
 
-    # Validate all items before writing anything — check stock and price
+    # Validate all items before writing anything — check stock and price.
+    # Quantities are totalled per medicine, so the same medicine on two lines can't oversell.
+    requested = {}
     for item_data in items_data:
         batch_id = item_data.get('batch_id')
-        qty = int(item_data.get('qty', 0) or 0)
+        try:
+            qty = stock.parse_quantity(item_data.get('qty', 0))
+        except stock.StockInputError:
+            qty = 0
         if not batch_id or qty <= 0:
             return JsonResponse({'ok': False, 'error': 'Invalid item data.'}, status=400)
+        item_data['qty'] = qty
         batch = get_object_or_404(PharmacyBatch, pk=batch_id, item__clinic=clinic)
         pharmacy_item = batch.item
+        requested[pharmacy_item.pk] = requested.get(pharmacy_item.pk, 0) + qty
+        qty = requested[pharmacy_item.pk]
         # Only count non-expired batches — expired stock must not be dispensed
         total_available = pharmacy_item.batches.filter(
             quantity__gt=0
@@ -664,6 +700,10 @@ def confirm_dispense_api(request, visit_id):
 
     # All validations passed — write atomically
     with transaction.atomic():
+        # Lock the visit: a double-tap on "Confirm" must not bill twice
+        Visit.objects.select_for_update().get(pk=visit.pk)
+        if PharmacyBill.objects.filter(visit=visit).exists():
+            return JsonResponse({'ok': False, 'error': 'This visit already has a bill.'}, status=400)
         subtotal = decimal.Decimal('0.00')
 
         for item_data in items_data:
@@ -713,6 +753,14 @@ def confirm_dispense_api(request, visit_id):
                 subtotal += billing_price * use
                 remaining -= use
 
+            if remaining > 0:
+                # Stock changed since validation — undo everything rather than under-dispense
+                transaction.set_rollback(True)
+                return JsonResponse({
+                    'ok': False,
+                    'error': f'Not enough stock for {pharmacy_item.display_name}. Please refresh and try again.',
+                }, status=400)
+
         # Calculate final amount with optional GST
         # Support both flat ₹ discount and % discount
         if discount_type == 'amount' and discount_flat > 0:
@@ -757,11 +805,22 @@ def bill_view(request, bill_id):
     import urllib.parse
     clinic = _get_clinic(request)
     bill = get_object_or_404(PharmacyBill, pk=bill_id, clinic=clinic)
-    dispensed_items = bill.visit.dispensed_items.select_related(
+    raw_items = bill.visit.dispensed_items.select_related(
         'pharmacy_item', 'pharmacy_item__medicine', 'batch'
-    ).all()
+    ).order_by('pk')
+    # Show each medicine + batch once. Older bills can have the same batch split over
+    # two rows (from duplicate batches that have since been merged).
+    grouped = {}
+    for di in raw_items:
+        key = (di.pharmacy_item_id, di.batch_id, di.unit_price, di.is_substitute)
+        if key in grouped:
+            g = grouped[key]
+            g.quantity_dispensed += di.quantity_dispensed
+            g.quantity_returned = (g.quantity_returned or 0) + (di.quantity_returned or 0)
+        else:
+            grouped[key] = di
+    dispensed_items = list(grouped.values())
     # Pre-calculate line amounts (avoids widthratio integer truncation in template)
-    dispensed_items = list(dispensed_items)
     for item in dispensed_items:
         item.line_amount = item.quantity_dispensed * item.unit_price
     prescription = getattr(bill.visit, 'prescription', None)
@@ -1044,10 +1103,8 @@ def process_return_view(request, bill_id):
                     'ok': False,
                     'error': f'Cannot return more than dispensed for {di.pharmacy_item.display_name}.'
                 }, status=400)
-            # Restore inventory
-            batch = PharmacyBatch.objects.select_for_update().get(pk=di.batch_id)
-            batch.quantity += return_qty
-            batch.save(update_fields=['quantity', 'updated_at'])
+            # Restore inventory (brings an archived batch back if needed)
+            stock.restore_returned_stock(di.batch_id, return_qty)
             # Record the return on the dispensed item
             di.quantity_returned = (di.quantity_returned or 0) + return_qty
             di.save(update_fields=['quantity_returned'])
@@ -1072,9 +1129,8 @@ def edit_bill_view(request, bill_id):
     bill = get_object_or_404(PharmacyBill, pk=bill_id, clinic=clinic)
     visit = bill.visit
     with transaction.atomic():
-        for di in visit.dispensed_items.select_related('batch').all():
-            di.batch.quantity += di.quantity_dispensed
-            di.batch.save(update_fields=['quantity'])
+        for di in visit.dispensed_items.all():
+            stock.restore_returned_stock(di.batch_id, di.quantity_dispensed)
         visit.dispensed_items.all().delete()
         bill.delete()
     from django.contrib import messages as _messages

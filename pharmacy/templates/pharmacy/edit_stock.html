@@ -9,8 +9,12 @@
     <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Edit Medicine</h1>
   </div>
 
+  {% if error %}
+  <div class="alert alert-error" style="margin-bottom:16px;">{{ error }}</div>
+  {% endif %}
+
   <div class="card">
-    <form method="post">
+    <form method="post" onsubmit="if(Date.now()-(this.dataset.sent||0)<5000){return false}this.dataset.sent=Date.now()">
       {% csrf_token %}
 
       {% if not item.medicine %}
@@ -49,6 +53,11 @@
         <a href="/pharmacy/" class="btn btn-secondary btn-lg" style="flex:1; min-width:120px; text-align:center;">Cancel</a>
       </div>
     </form>
+  </div>
+
+  <div style="margin-top:14px; font-size:13px; color:#6B7280;">
+    Entered twice under a different name?
+    <a href="/pharmacy/item/{{ item.pk }}/merge/" style="color:#1D4ED8; font-weight:600;">Merge into another medicine</a>
   </div>
 
 </div>

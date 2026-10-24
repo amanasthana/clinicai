@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Merge Medicine — {{ item.display_name }}{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:600px;">
+
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+    <a href="/pharmacy/" style="font-size:13px; color:#6B7280; text-decoration:none;">← Back</a>
+    <h1 style="font-size:20px; font-weight:700; color:#111827; margin:0;">Merge Duplicate Medicine</h1>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-error" style="margin-bottom:16px;">{{ error }}</div>
+  {% endif %}
+
+  <div class="card">
+    <div style="padding:12px 14px; background:#F9FAFB; border-radius:10px; border:1px solid #E5E7EB; margin-bottom:18px;">
+      <div style="font-size:12px; color:#6B7280; margin-bottom:2px;">Merging</div>
+      <div style="font-size:15px; font-weight:600; color:#111827;">{{ item.display_name }}</div>
+      <div style="font-size:12px; color:#6B7280; margin-top:2px;">{{ item.total_quantity }} units · {{ item.batches.count }} batch{{ item.batches.count|pluralize:"es" }}</div>
+    </div>
+
+    <form method="post" onsubmit="if(Date.now()-(this.dataset.sent||0)<5000){return false}this.dataset.sent=Date.now()">
+      {% csrf_token %}
+      <div style="font-size:13px; font-weight:600; color:#374151; margin-bottom:8px;">Into (the one to keep)</div>
+
+      {% if suggested %}
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+        {% for o in suggested %}
+        <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid #E5E7EB; border-radius:10px; cursor:pointer;">
+          <input type="radio" name="target_id" value="{{ o.pk }}" {% if forloop.first %}checked{% endif %}>
+          <span style="font-size:14px; color:#111827;">{{ o.display_name }}</span>
+          <span style="font-size:12px; color:#6B7280; margin-left:auto;">{{ o.total_quantity }} units</span>
+        </label>
+        {% endfor %}
+      </div>
+      <div style="font-size:12px; color:#6B7280; margin-bottom:6px;">Or pick another medicine:</div>
+      {% endif %}
+
+      <select name="{% if suggested %}target_other{% else %}target_id{% endif %}" class="input-field" style="font-size:14px;"
+        {% if suggested %}onchange="if(this.value){document.querySelectorAll('input[name=target_id]').forEach(r=>r.checked=false);this.name='target_id';}"{% endif %}>
+        <option value="">— Select medicine —</option>
+        {% for o in others %}
+        <option value="{{ o.pk }}">{{ o.display_name }} ({{ o.total_quantity }} units)</option>
+        {% endfor %}
+      </select>
+
+      <div style="font-size:12px; color:#6B7280; margin-top:14px; line-height:1.5;">
+        All batches and past sales of <strong>{{ item.display_name }}</strong> move to the medicine you pick.
+        Batches with the same batch number are combined. <strong>{{ item.display_name }}</strong> is then removed.
+        Past bills are not changed.
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; padding-top:16px; margin-top:16px; border-top:1px solid #E5E7EB;">
+        <button type="submit" class="btn btn-primary btn-lg" style="flex:1; min-width:160px;"
+          onclick="return confirm('Merge {{ item.display_name|escapejs }} into the selected medicine? This cannot be undone.')">Merge</button>
+        <a href="/pharmacy/" class="btn btn-secondary btn-lg" style="flex:1; min-width:120px; text-align:center;">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

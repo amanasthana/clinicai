@@ -102,6 +102,8 @@
 <script>
 const CSRF = '{{ csrf_token }}';
 let scannedItems = [];
+// Rows already saved in this scan — a retry must never save them twice
+let savedRows = new Set();
 
 function previewImage(input) {
   const file = input.files[0];
@@ -139,7 +141,9 @@ async function scanBill() {
       return;
     }
     scannedItems = data.items || [];
+    savedRows = new Set();
     renderRows(scannedItems);
+    checkExisting();
     document.getElementById('results-section').style.display = 'block';
     document.getElementById('results-section').scrollIntoView({behavior: 'smooth'});
     btn.textContent = 'Read bill again';
@@ -195,6 +199,7 @@ function renderRows(items) {
         </label>
       </div>
       ` : ''}
+      <div class="row-note" id="row-note-${idx}" style="display:none; margin-top:10px; font-size:12px; line-height:1.45;"></div>
     `;
     container.appendChild(div);
   });
@@ -203,7 +208,56 @@ function renderRows(items) {
 }
 
 function checkRow(idx) {
-  // Mark row as edited
+  // Name/batch changed — re-check against stock after the user stops typing
+  clearTimeout(window._stockCheckTimer);
+  window._stockCheckTimer = setTimeout(checkExisting, 600);
+}
+
+function setRowNote(idx, html, kind) {
+  const el = document.getElementById('row-note-' + idx);
+  if (!el) return;
+  const colors = {warn: '#92400E', error: '#DC2626', ok: '#047857'};
+  el.style.color = colors[kind] || '#6B7280';
+  el.innerHTML = html;
+  el.style.display = html ? 'block' : 'none';
+}
+
+function lineKey(d) {
+  return (d.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + (d.batch_number || '').toLowerCase().trim();
+}
+
+// Warn when a line is already in stock (same bill scanned/saved before) or repeated on this bill
+async function checkExisting() {
+  const rows = scannedItems.map((_, idx) => getRowData(idx) || {name: '', batch_number: ''});
+  const seen = {};
+  const repeated = new Set();
+  rows.forEach((d, idx) => {
+    if (!d.name || !d.batch_number) return;
+    const k = lineKey(d);
+    if (k in seen) { repeated.add(idx); repeated.add(seen[k]); } else { seen[k] = idx; }
+  });
+  let info = [];
+  try {
+    const resp = await fetch('/pharmacy/api/stock-check/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({items: rows.map(d => ({name: d.name, batch_number: d.batch_number}))}),
+    });
+    const data = await resp.json();
+    if (data.ok) info = data.items;
+  } catch (e) { /* warnings are best-effort */ }
+  rows.forEach((d, idx) => {
+    if (savedRows.has(idx)) return;
+    const notes = [];
+    const hit = info[idx];
+    if (hit && hit.batch_quantity !== null && hit.batch_quantity !== undefined) {
+      notes.push(`Batch ${escHtml(d.batch_number)} of <strong>${escHtml(hit.item_name)}</strong> is already in stock (${hit.batch_quantity} units). Saving will add these units to it — if you already saved this bill, remove this line.`);
+    } else if (hit && hit.item_name) {
+      notes.push(`Will be added to existing medicine <strong>${escHtml(hit.item_name)}</strong>.`);
+    }
+    if (repeated.has(idx)) notes.push('This medicine and batch appear more than once on this bill.');
+    setRowNote(idx, notes.join('<br>'), 'warn');
+  });
 }
 
 function checkAllVerified() {
@@ -230,62 +284,72 @@ function getRowData(idx) {
 }
 
 async function saveAll() {
-  document.getElementById('save-error').style.display = 'none';
-  const rows = document.querySelectorAll('.scan-row');
+  const saveError = document.getElementById('save-error');
+  saveError.style.display = 'none';
   const saveBtn = document.getElementById('save-btn');
   const progress = document.getElementById('save-progress');
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving...';
   progress.style.display = 'block';
 
-  let savedCount = 0;
-  let errors = [];
+  let failed = 0;
+  let merged = 0;
 
   for (let idx = 0; idx < scannedItems.length; idx++) {
+    if (savedRows.has(idx)) continue;           // never save a line twice
     const data = getRowData(idx);
     if (!data || !data.name) continue;
     progress.textContent = `Saving ${idx + 1} of ${scannedItems.length}...`;
 
+    // YYYY-MM → YYYY-MM-01; other formats (03/2027 etc.) are understood by the server
+    let expiryStr = data.expiry_date || '';
+    if (/^\d{4}-\d{2}$/.test(expiryStr)) expiryStr += '-01';
+
+    const fd = new FormData();
+    fd.append('csrfmiddlewaretoken', CSRF);
+    fd.append('custom_name', data.name);
+    fd.append('batch_number', data.batch_number);
+    fd.append('expiry_date', expiryStr);
+    fd.append('quantity', data.quantity);
+    fd.append('unit_price', data.unit_price);
+    fd.append('reorder_level', 10);
+
+    let result = null;
     try {
-      // Convert expiry_date YYYY-MM to YYYY-MM-01 for the date field
-      let expiryStr = '';
-      if (data.expiry_date && data.expiry_date.match(/^\d{4}-\d{2}$/)) {
-        expiryStr = data.expiry_date + '-01';
-      } else if (data.expiry_date) {
-        expiryStr = data.expiry_date;
-      }
+      const resp = await fetch('/pharmacy/add/', {
+        method: 'POST', body: fd, headers: {'Accept': 'application/json'},
+      });
+      result = await resp.json().catch(() => null);
+      if (!result) result = {ok: false, error: `Server error (${resp.status}). Please try again.`};
+    } catch (e) {
+      result = {ok: false, error: 'Network error. Please try again.'};
+    }
 
-      const fd = new FormData();
-      fd.append('csrfmiddlewaretoken', CSRF);
-      fd.append('custom_name', data.name);
-      fd.append('batch_number', data.batch_number);
-      fd.append('expiry_date', expiryStr);
-      fd.append('quantity', data.quantity);
-      fd.append('unit_price', data.unit_price);
-      fd.append('reorder_level', 10);
-
-      const resp = await fetch('/pharmacy/add/', { method: 'POST', body: fd });
-      // add/ redirects on success (302), which fetch follows
-      if (resp.ok || resp.redirected) {
-        savedCount++;
-      } else {
-        errors.push(data.name);
-      }
-    } catch(e) {
-      errors.push(data.name);
+    const row = document.getElementById('scan-row-' + idx);
+    if (result.ok) {
+      savedRows.add(idx);
+      if (result.merged) merged++;
+      row.querySelectorAll('input').forEach(i => i.disabled = true);
+      row.style.opacity = '0.65';
+      setRowNote(idx, result.merged
+        ? `✓ Saved — added to existing batch ${escHtml(data.batch_number)} of ${escHtml(result.item_name)} (now ${result.batch_quantity} units).`
+        : `✓ Saved as ${escHtml(result.item_name)}.`, 'ok');
+    } else {
+      failed++;
+      setRowNote(idx, '✗ Not saved: ' + escHtml(result.error || 'Unknown error'), 'error');
     }
   }
 
   progress.style.display = 'none';
-  if (errors.length) {
-    document.getElementById('save-error').textContent = 'Could not save: ' + errors.join(', ');
-    document.getElementById('save-error').style.display = 'block';
+  if (failed) {
+    saveError.textContent = `${failed} line${failed > 1 ? 's' : ''} could not be saved — see the red notes, fix them and press Save again. Lines already saved will not be saved twice.`;
+    saveError.style.display = 'block';
     saveBtn.disabled = false;
-    saveBtn.textContent = 'Save all to inventory';
+    saveBtn.textContent = 'Save remaining lines';
   } else {
-    progress.textContent = `Saved ${savedCount} medicines. Redirecting...`;
+    progress.textContent = `Saved ${savedRows.size} medicines${merged ? ` (${merged} added to existing batches)` : ''}. Redirecting...`;
     progress.style.display = 'block';
-    setTimeout(() => { window.location.href = '/pharmacy/'; }, 800);
+    setTimeout(() => { window.location.href = '/pharmacy/'; }, merged ? 2000 : 800);
   }
 }
 

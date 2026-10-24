@@ -50,13 +50,13 @@ def _expire_stale(clinic):
 def _execute_bill_reversal(payload, clinic):
     """Reverse entire bill — restore inventory, delete bill so re-dispense is possible."""
     from pharmacy.models import PharmacyBill
+    from pharmacy.stock import restore_returned_stock
     bill_id = payload.get('bill_id')
     bill = PharmacyBill.objects.get(pk=bill_id, clinic=clinic)
     visit = bill.visit
     with transaction.atomic():
-        for di in visit.dispensed_items.select_related('batch').all():
-            di.batch.quantity += di.quantity_dispensed
-            di.batch.save(update_fields=['quantity'])
+        for di in visit.dispensed_items.all():
+            restore_returned_stock(di.batch_id, di.quantity_dispensed)
         visit.dispensed_items.all().delete()
         bill.delete()
     return {'redirect': f'/pharmacy/dispense/{visit.id}/'}
@@ -64,7 +64,8 @@ def _execute_bill_reversal(payload, clinic):
 
 def _execute_medicine_return(payload, clinic):
     """Restore returned medicines to inventory and record the return."""
-    from pharmacy.models import PharmacyBill, PharmacyBatch, DispensedItem
+    from pharmacy.models import PharmacyBill, DispensedItem
+    from pharmacy.stock import restore_returned_stock
     bill_id = payload.get('bill_id')
     returns = payload.get('returns', [])
     bill = PharmacyBill.objects.get(pk=bill_id, clinic=clinic)
@@ -80,9 +81,7 @@ def _execute_medicine_return(payload, clinic):
             if return_qty > di.quantity_dispensed:
                 raise ValueError(
                     f'Cannot return {return_qty} — only {di.quantity_dispensed} were dispensed.')
-            batch = PharmacyBatch.objects.select_for_update().get(pk=di.batch_id)
-            batch.quantity += return_qty
-            batch.save(update_fields=['quantity'])
+            restore_returned_stock(di.batch_id, return_qty)
             di.quantity_returned = (di.quantity_returned or 0) + return_qty
             di.save(update_fields=['quantity_returned'])
             total_returned += di.unit_price * return_qty

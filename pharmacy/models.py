@@ -1,4 +1,12 @@
 from django.db import models
+from django.db.models import F, Q
+from django.db.models.functions import Lower
+
+
+class ActiveManager(models.Manager):
+    """Hides archived rows. Use `all_objects` to include them."""
+    def get_queryset(self):
+        return super().get_queryset().filter(is_archived=False)
 
 
 class MedicineCatalog(models.Model):
@@ -23,10 +31,16 @@ class PharmacyItem(models.Model):
     custom_generic_name = models.CharField(max_length=250, blank=True, help_text="Generic/active ingredient for custom medicines (e.g. Clindamycin 1% w/w)")
     reorder_level = models.PositiveIntegerField(default=10)
     reorder_flagged = models.BooleanField(default=False)
+    # Set when a medicine that was already sold is "deleted": it leaves inventory but old bills still point at it
+    is_archived = models.BooleanField(default=False, db_default=False, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ActiveManager()
+    all_objects = models.Manager()
 
     class Meta:
         indexes = [models.Index(fields=['clinic', 'medicine'])]
+        base_manager_name = 'all_objects'
 
     @property
     def display_name(self):
@@ -87,10 +101,24 @@ class PharmacyBatch(models.Model):
         help_text='GST % on purchase (e.g. 12 for 12%).'
     )
     received_date = models.DateField(auto_now_add=True)
+    # Set when a batch that was already sold is "deleted": stock goes to 0, bills keep their batch details
+    is_archived = models.BooleanField(default=False, db_default=False, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ActiveManager()
+    all_objects = models.Manager()
 
     class Meta:
         ordering = ['expiry_date']  # FEFO order
+        base_manager_name = 'all_objects'
+        constraints = [
+            # A batch number appears once per medicine (blank batch numbers are allowed to repeat)
+            models.UniqueConstraint(
+                F('item'), Lower('batch_number'),
+                condition=~Q(batch_number=''),
+                name='pharmacy_batch_number_unique_per_item',
+            ),
+        ]
 
     @property
     def is_near_expiry(self):

@@ -24,7 +24,7 @@
       Received: {{ batch.received_date|date:"d M Y" }}
     </div>
 
-    <form method="post">
+    <form method="post" onsubmit="if(Date.now()-(this.dataset.sent||0)<5000){return false}this.dataset.sent=Date.now()">
       {% csrf_token %}
 
       {% if not batch.item.medicine %}
