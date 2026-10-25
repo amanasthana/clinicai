@@ -134,6 +134,11 @@ class StaffMember(models.Model):
         return self.role == 'admin'
 
     @property
+    def can_add_clinic(self):
+        """Doctors and clinic owners (sign-up makes the owner a Clinic Admin) can open another clinic."""
+        return self.role in ('doctor', 'admin')
+
+    @property
     def login_username(self):
         """Returns the username staff use to log in.
         New-format accounts: username is the full ID (e.g. 9876543210_prakash).

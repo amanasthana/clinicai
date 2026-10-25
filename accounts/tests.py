@@ -1112,3 +1112,26 @@ class StaffPhoneUsernameTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Mobile Number')
         self.assertContains(resp, 'User ID')
+
+
+class AddClinicRoleTest(TestCase):
+    """Sign-up makes the clinic owner a Clinic Admin — they must be able to add clinics too."""
+
+    def _login_as(self, role):
+        clinic = Clinic.objects.create(name=f'{role} clinic', address='a', city='Pune', phone='9811100000')
+        user = User.objects.create_user(f'u_{role}', password='pass12345')
+        make_membership(user, clinic, role=role, display_name=f'{role} user')
+        c = Client()
+        c.login(username=f'u_{role}', password='pass12345')
+        return c
+
+    def test_admin_and_doctor_see_and_can_open_add_clinic(self):
+        for role in ('admin', 'doctor'):
+            c = self._login_as(role)
+            resp = c.get('/accounts/add-clinic/')
+            self.assertEqual(resp.status_code, 200, role)
+            self.assertContains(resp, 'href="/accounts/add-clinic/"', msg_prefix=role)   # menu link
+
+    def test_receptionist_cannot(self):
+        c = self._login_as('receptionist')
+        self.assertEqual(c.get('/accounts/add-clinic/').status_code, 403)

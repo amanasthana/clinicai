@@ -768,9 +768,9 @@ def add_clinic_view(request):
     """Self-serve: create a new clinic and add the current user as a staff member. Doctor-only."""
     if not request.user.is_superuser:
         profile = getattr(request.user, 'staff_profile', None)
-        if not profile or not profile.is_doctor:
+        if not profile or not profile.can_add_clinic:
             return render(request, 'accounts/403.html', {
-                'required_permission': 'doctor role',
+                'required_permission': 'doctor or clinic admin role',
             }, status=403)
 
     if request.method == 'POST':
@@ -779,6 +779,8 @@ def add_clinic_view(request):
         address = request.POST.get('address', '').strip()
         phone = request.POST.get('clinic_phone', '').strip()
         role = request.POST.get('role', 'doctor')
+        if role not in ('doctor', 'admin'):
+            role = 'doctor'
         display_name = request.POST.get('display_name', '').strip()
         qualification = request.POST.get('qualification', '').strip()
         registration_number = request.POST.get('registration_number', '').strip()

@@ -91,7 +91,7 @@
           {% else %}
           <div style="padding:6px;">
           {% endif %}
-            {% if user.staff_profile.is_doctor %}
+            {% if user.staff_profile.can_add_clinic %}
             <a href="/accounts/add-clinic/"
               style="display:block; padding:8px 12px; font-size:13px; color:#2563EB; font-weight:500; text-decoration:none;">
               Add another clinic
@@ -139,7 +139,7 @@
     </form>
     {% endfor %}
     {% endif %}
-    {% if user.staff_profile.is_doctor %}<a href="/accounts/add-clinic/" style="font-size:13px; color:#2563EB; font-weight:500; padding:8px 20px; display:block;">Add another clinic</a>{% endif %}
+    {% if user.staff_profile.can_add_clinic %}<a href="/accounts/add-clinic/" style="font-size:13px; color:#2563EB; font-weight:500; padding:8px 20px; display:block;">Add another clinic</a>{% endif %}
     <div style="border-bottom:1px solid #F3F4F6; margin:4px 0 8px 0;"></div>
     {% endif %}
     {% if user.staff_profile.can_register_patients %}
