@@ -6,7 +6,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from . import rebrand_email
+from . import gift_email, rebrand_email
 from .models import UserNotice
 
 HOURLY_BUDGET = 90                 # under the 100/hour ACS quota; resets share it
@@ -85,4 +85,64 @@ def announcement_preview_view(request):
     _superuser(request)
     email = (request.user.email or 'doctor@example.com').lower()
     msg = rebrand_email.build_message(email, rebrand_email.recipients().get(email) or request.user)
+    return HttpResponse(msg.alternatives[0][0])
+
+
+@login_required
+def gift_email_view(request, clinic_pk):
+    """Superuser: send the 'unlimited prescriptions — lifetime gift' email to one clinic group."""
+    _superuser(request)
+    from django.shortcuts import get_object_or_404
+    from accounts.models import Clinic
+    clinic = get_object_or_404(Clinic, pk=clinic_pk)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'test':
+            to = request.POST.get('test_email', '').strip().lower()
+            if not to or '@' not in to:
+                messages.error(request, 'Enter an email address for the test.')
+            else:
+                names = [c.name for c in gift_email.gifted_clinics(clinic)] or [clinic.name]
+                try:
+                    if gift_email.build_message(to, names).send():
+                        messages.success(request, f'Test email sent to {to}. The clinic has not been emailed.')
+                    else:
+                        messages.error(request, f'Not sent to {to}: blocked by EMAIL_ALLOWED_RECIPIENTS.')
+                except Exception as exc:
+                    messages.error(request, f'Sending failed: {exc}')
+        elif action == 'send':
+            if not clinic.unlimited_prescriptions:
+                messages.error(request, 'Turn on unlimited prescriptions for this clinic first, so the email is true.')
+            else:
+                sent, failed, skipped = gift_email.send_to_clinic(clinic)
+                msg = f'Sent to {sent} recipient{"s" if sent != 1 else ""}.'
+                if skipped:
+                    msg += f' {skipped} already had it earlier (not sent again).'
+                if failed:
+                    msg += f' {failed} failed (see logs); you can press Send again to retry them.'
+                (messages.warning if failed else messages.success)(request, msg)
+        return redirect('notifications:gift_email', clinic_pk=clinic.pk)
+
+    people = gift_email.recipients(clinic)
+    done = gift_email.already_sent(people)
+    rows = [{'email': e, 'user': u, 'clinics': names, 'sent': e in done} for e, (u, names) in people.items()]
+    return render(request, 'notifications/gift_email.html', {
+        'clinic': clinic,
+        'gifted': gift_email.gifted_clinics(clinic),
+        'rows': rows,
+        'pending': sum(1 for r in rows if not r['sent']),
+        'subject': gift_email.SUBJECT,
+    })
+
+
+@login_required
+def gift_email_preview_view(request, clinic_pk):
+    """The gift email exactly as the clinic will get it."""
+    _superuser(request)
+    from django.shortcuts import get_object_or_404
+    from accounts.models import Clinic
+    clinic = get_object_or_404(Clinic, pk=clinic_pk)
+    names = [c.name for c in gift_email.gifted_clinics(clinic)] or [clinic.name]
+    msg = gift_email.build_message(request.user.email or 'doctor@example.com', names)
     return HttpResponse(msg.alternatives[0][0])

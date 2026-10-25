@@ -311,6 +311,9 @@
             {% if c.unlimited_prescriptions %}Remove unlimited{% else %}Give unlimited Rx{% endif %}
           </button>
         </form>
+        {% if c.unlimited_prescriptions %}
+        <a href="{% url 'notifications:gift_email' c.pk %}" class="btn btn-sm" style="background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE;">✉ Gift email</a>
+        {% endif %}
         <a href="/accounts/clinic/{{ c.pk }}/delete/"
            class="btn btn-sm" style="background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;"
            onclick="return confirm('Delete {{ c.name }} and ALL its data? This cannot be undone.');">

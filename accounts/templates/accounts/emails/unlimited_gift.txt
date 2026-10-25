@@ -1,0 +1,23 @@
+{% autoescape off %}{{ subject }}
+
+Dear Sir,
+
+This is to inform you that, in view of your contribution and patronage, the MedlynAI team is glad to gift you unlimited prescriptions per day, for a lifetime.
+
+Unlimited AI prescriptions - no daily limit, every day, for life.{% if clinic_names %}
+Active on: {{ clinic_names|join:", " }}{% endif %}
+
+It is already active on your account. You can see it any time under Plan & Usage in MedlynAI.
+
+Open MedlynAI: {{ login_url }}
+
+Thank you for your continued support.
+
+Warm regards,
+Team MedlynAI
+
+--
+MedlynAI - More doctor. Less documentation.
+{{ site_url }} | Help on WhatsApp: {{ support_whatsapp }}
+This is an automated message; replies aren't monitored.
+{% endautoescape %}
