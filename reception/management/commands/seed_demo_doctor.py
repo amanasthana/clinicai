@@ -21,7 +21,7 @@ from django.utils import timezone
 
 from accounts.models import Clinic, StaffMember
 from reception.models import Patient, Visit, next_token_for_clinic
-from pharmacy.models import PharmacyItem, PharmacyBatch, MedicineCatalog
+from pharmacy.models import PharmacyItem, PharmacyBatch, MedicineCatalog, StockReceipt
 
 
 DOCTOR_USERNAME = 'doctor'
@@ -336,13 +336,16 @@ class Command(BaseCommand):
             if item_created:
                 for (bno, qty, uprice, pprice, exp_months) in batches:
                     expiry = today + datetime.timedelta(days=exp_months * 30)
-                    PharmacyBatch.objects.create(
+                    batch = PharmacyBatch.objects.create(
                         item=item,
                         batch_number=bno,
                         quantity=qty,
                         unit_price=uprice,
                         purchase_price=pprice,
                         expiry_date=expiry,
+                    )
+                    StockReceipt.objects.create(
+                        batch=batch, quantity=qty, unit_price=uprice, purchase_price=pprice,
                     )
                 added += 1
 

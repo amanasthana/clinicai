@@ -278,7 +278,7 @@
   </div>
 
   <!-- ── All Clinics ── -->
-  <div style="margin-top:40px; padding-top:32px; border-top:2px solid var(--color-border);">
+  <div id="all-clinics" style="margin-top:40px; padding-top:32px; border-top:2px solid var(--color-border);">
     <div style="font-size:16px; font-weight:600; color:#111827; margin-bottom:4px; display:flex; align-items:center; gap:10px;">
       All Clinics
       <span style="background:#6B7280; color:#fff; font-size:12px; font-weight:700; padding:2px 9px; border-radius:20px;">{{ all_clinics|length }}</span>
@@ -287,13 +287,30 @@
     {% for c in all_clinics %}
     <div class="card" style="margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 18px;">
       <div>
-        <div style="font-size:15px; font-weight:600; color:#111827;">{{ c.name }}</div>
+        <div style="font-size:15px; font-weight:600; color:#111827;">
+          {{ c.name }}
+          {% if c.unlimited_prescriptions %}<span style="margin-left:6px; font-size:11px; font-weight:700; color:#047857; background:#D1FAE5; padding:2px 8px; border-radius:20px; vertical-align:2px;">∞ Unlimited Rx</span>{% endif %}
+        </div>
         <div style="font-size:13px; color:#6B7280;">
           {{ c.city }}{% if c.state %}, {{ c.state }}{% endif %}
           &middot; {{ c.staff.count }} staff
+          {% if c.linked %}&middot; linked: {% for l in c.linked %}{{ l.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
         </div>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <form method="post" action="/accounts/admin-panel/clinic/{{ c.pk }}/unlimited/" style="margin:0; display:flex; align-items:center; gap:8px;"
+              onsubmit="return confirm('{% if c.unlimited_prescriptions %}Remove{% else %}Give{% endif %} unlimited prescriptions for {{ c.name|escapejs }}{% if c.linked %} (and linked clinics if ticked){% endif %}?');">
+          {% csrf_token %}
+          <input type="hidden" name="enable" value="{% if c.unlimited_prescriptions %}0{% else %}1{% endif %}">
+          {% if c.linked %}
+          <label style="font-size:12px; color:#6B7280; display:flex; align-items:center; gap:4px; cursor:pointer;">
+            <input type="checkbox" name="include_linked" value="1" checked> + {{ c.linked|length }} linked
+          </label>
+          {% endif %}
+          <button type="submit" class="btn btn-sm" style="{% if c.unlimited_prescriptions %}background:#F3F4F6; color:#374151; border:1px solid #E5E7EB;{% else %}background:#ECFDF5; color:#047857; border:1px solid #A7F3D0;{% endif %}">
+            {% if c.unlimited_prescriptions %}Remove unlimited{% else %}Give unlimited Rx{% endif %}
+          </button>
+        </form>
         <a href="/accounts/clinic/{{ c.pk }}/delete/"
            class="btn btn-sm" style="background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;"
            onclick="return confirm('Delete {{ c.name }} and ALL its data? This cannot be undone.');">

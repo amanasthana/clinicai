@@ -3276,6 +3276,10 @@ def _make_item_with_batch(clinic, name='Paracetamol 500mg', unit_price=10, purch
         quantity=quantity,
         expiry_date=exp,
     )
+    # Stock added through the app always records a dated entry (used by purchase reports)
+    from pharmacy.models import StockReceipt
+    StockReceipt.objects.create(batch=batch, quantity=quantity, unit_price=unit_price,
+                                purchase_price=purchase_price, purchase_gst_percent=purchase_gst)
     return item, batch
 
 
@@ -3727,11 +3731,14 @@ class InventoryAnalyticsMathTest(TestCase):
         purchase_total = 100 * 1.18 * 10 = 1180
         """
         item = PharmacyItem.objects.create(clinic=self.clinic, custom_name='GST Batch')
-        PharmacyBatch.objects.create(
+        batch = PharmacyBatch.objects.create(
             item=item, unit_price=130, purchase_price=100,
             purchase_gst_percent=18, quantity=10,
             expiry_date=today() + datetime.timedelta(days=365),
         )
+        from pharmacy.models import StockReceipt
+        StockReceipt.objects.create(batch=batch, quantity=10, unit_price=130,
+                                    purchase_price=100, purchase_gst_percent=18)
         resp = self.client.get(self.url + '?range=30')
         self.assertAlmostEqual(float(resp.context['purchase_total']), 1180.0, places=0)
 

@@ -147,6 +147,40 @@ class PharmacyBatch(models.Model):
         return f"{self.item.display_name} — Batch {self.batch_number or 'N/A'}"
 
 
+def _today():
+    from django.utils import timezone
+    return timezone.localdate()
+
+
+class StockReceipt(models.Model):
+    """One stock entry into a batch. A batch can be received in parts on different days
+    (17 tablets on 12 Oct, 100 more of the same batch on 25 Oct) — each part is kept here
+    with its own date, so purchases are reported on the day they actually came in."""
+    batch = models.ForeignKey(PharmacyBatch, on_delete=models.CASCADE, related_name='receipts')
+    quantity = models.PositiveIntegerField()
+    received_date = models.DateField(default=_today)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    purchase_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    purchase_gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    added_by = models.ForeignKey('accounts.StaffMember', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['received_date', 'pk']
+        indexes = [models.Index(fields=['received_date'])]
+
+    @property
+    def cost(self):
+        """Purchase cost incl. GST; falls back to MRP when no purchase price was entered."""
+        import decimal
+        if self.purchase_price > 0:
+            return self.purchase_price * (1 + self.purchase_gst_percent / decimal.Decimal('100')) * self.quantity
+        return self.unit_price * self.quantity
+
+    def __str__(self):
+        return f"{self.batch} +{self.quantity} on {self.received_date}"
+
+
 class DispensedItem(models.Model):
     """One line item dispensed to a patient for a visit."""
     visit = models.ForeignKey('reception.Visit', on_delete=models.CASCADE, related_name='dispensed_items')

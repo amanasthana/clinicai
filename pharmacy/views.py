@@ -41,7 +41,7 @@ def pharmacy_dashboard(request):
         PharmacyItem.objects
         .filter(clinic=clinic)
         .select_related('medicine')
-        .prefetch_related('batches')
+        .prefetch_related('batches', 'batches__receipts')
         .order_by('medicine__name', 'custom_name')
     )
 
@@ -175,7 +175,7 @@ def add_stock_view(request):
                 reorder_level=reorder_level,
             )
 
-        batch, merged = stock.add_stock(item, **fields)
+        batch, merged = stock.add_stock(item, **fields, added_by=request.user.staff_profile)
         if _wants_json(request):
             return JsonResponse({
                 'ok': True, 'item_id': item.pk, 'item_name': item.display_name,
@@ -222,7 +222,7 @@ def add_batch_view(request, pk):
             fields = _read_batch_fields(request.POST)
         except stock.StockInputError as e:
             return render(request, 'pharmacy/add_batch.html', {'item': item, 'error': str(e)})
-        batch, merged = stock.add_stock(item, **fields)
+        batch, merged = stock.add_stock(item, **fields, added_by=request.user.staff_profile)
         if merged:
             _merged_message(request, item, batch, fields['quantity'])
         return redirect('pharmacy:dashboard')
@@ -1153,11 +1153,11 @@ def bill_list_view(request):
     range_param = request.GET.get('range', '30')
     try:
         days = int(range_param)
-        if days not in (7, 30, 90, 365):
+        if days not in (1, 7, 30, 90, 365):
             days = 30
     except ValueError:
         days = 30
-    today = tz.now().date()
+    today = tz.localdate()   # India date, not UTC (bills after midnight IST belong to today)
     since = today - datetime.timedelta(days=days - 1)
 
     bills_qs = (
@@ -1186,7 +1186,7 @@ def bill_list_view(request):
         'since': since,
         'today': today,
         'search': search,
-        'range_choices': [(7, '7 Days'), (30, '30 Days'), (90, '3 Months'), (365, '1 Year')],
+        'range_choices': [(1, 'Today'), (7, '7 Days'), (30, '30 Days'), (90, '3 Months'), (365, '1 Year')],
         'total_revenue': total_revenue,
         'total_bills': bills_qs.count(),
     })
@@ -1318,19 +1318,15 @@ def ledger_view(request):
     today = tz.localdate()
     since = today - dt.timedelta(days=29)  # 30 days incl. today
 
-    # ── Purchases (stock received) ──────────────────────────────────────────
-    batches = (
-        PharmacyBatch.objects
-        .filter(item__clinic=clinic, received_date__gte=since)
-        .select_related('item')
+    # ── Purchases (stock received) — one row per stock entry, on the day it came in ──
+    from .models import StockReceipt
+    receipts = list(
+        StockReceipt.objects
+        .filter(batch__item__clinic=clinic, received_date__gte=since)
+        .select_related('batch__item__medicine')
         .order_by('-received_date', '-pk')
     )
-    # Use purchase_price (cost) if set, else fall back to unit_price (MRP) for old records
-    def _batch_cost(b):
-        if b.purchase_price > 0:
-            return b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100')) * b.quantity
-        return b.unit_price * b.quantity
-    purchase_total = sum(_batch_cost(b) for b in batches)
+    purchase_total = sum(r.cost for r in receipts)
 
     # ── Sales (pharmacy bills) ──────────────────────────────────────────────
     bills = (
@@ -1365,25 +1361,26 @@ def ledger_view(request):
 
     # ── Build combined timeline entries ────────────────────────────────────
     entries = []
-    for b in batches:
-        cost = _batch_cost(b)
+    for r in receipts:
+        cost = r.cost
+        b = r.batch
         entries.append({
-            'date': b.received_date,
+            'date': r.received_date,
             'type': 'purchase',
             'label': b.item.display_name,
             'detail': f'Batch {b.batch_number}' if b.batch_number else 'No batch no.',
-            'qty': b.quantity,
-            'unit_price': b.purchase_price if b.purchase_price > 0 else b.unit_price,
-            'purchase_price': b.purchase_price,
-            'purchase_gst': b.purchase_gst_percent,
-            'mrp': b.unit_price,
+            'qty': r.quantity,
+            'unit_price': r.purchase_price if r.purchase_price > 0 else r.unit_price,
+            'purchase_price': r.purchase_price,
+            'purchase_gst': r.purchase_gst_percent,
+            'mrp': r.unit_price,
             'amount': cost,
             'in': cost,
             'out': None,
         })
     for bill in bills:
         entries.append({
-            'date': bill.created_at.date(),
+            'date': tz.localtime(bill.created_at).date(),
             'type': 'sale',
             'label': bill.visit.patient.full_name,
             'detail': bill.bill_number,
@@ -1396,7 +1393,7 @@ def ledger_view(request):
     for ret in returns:
         val = ret.quantity_returned * ret.unit_price
         entries.append({
-            'date': ret.dispensed_at.date(),
+            'date': tz.localtime(ret.dispensed_at).date(),
             'type': 'return',
             'label': ret.pharmacy_item.display_name,
             'detail': f'Return — {ret.visit.patient.full_name}',
@@ -1416,9 +1413,9 @@ def ledger_view(request):
     daily_sales = defaultdict(float)
     daily_purchases = defaultdict(float)
     for bill in bills:
-        daily_sales[str(bill.created_at.date())] += float(bill.final_amount)
-    for b in batches:
-        daily_purchases[str(b.received_date)] += float(_batch_cost(b))
+        daily_sales[str(tz.localtime(bill.created_at).date())] += float(bill.final_amount)
+    for r in receipts:
+        daily_purchases[str(r.received_date)] += float(r.cost)
 
     chart_labels = []
     chart_sales_data = []
@@ -1646,14 +1643,10 @@ def inventory_analytics_view(request):
     )
 
     # ── Section 2: P&L Statement (period) ──────────────────────────────────
-    period_batches = (
-        PharmacyBatch.objects
-        .filter(item__clinic=clinic, received_date__gte=since)
-    )
+    from .models import StockReceipt
     purchase_total = sum(
-        (b.purchase_price * (1 + b.purchase_gst_percent / decimal.Decimal('100')) * b.quantity)
-        if b.purchase_price > 0 else (b.unit_price * b.quantity)
-        for b in period_batches
+        (r.cost for r in StockReceipt.objects.filter(batch__item__clinic=clinic, received_date__gte=since)),
+        decimal.Decimal('0'),
     )
 
     sales_total = (

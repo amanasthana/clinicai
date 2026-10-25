@@ -14,14 +14,18 @@
       <div>
         <div style="display:inline-flex; align-items:center; gap:8px; background:#F3F4F6; border-radius:20px; padding:5px 14px; margin-bottom:12px;">
           <span style="width:8px; height:8px; border-radius:50%; background:#10B981; display:inline-block;"></span>
-          <span style="font-size:13px; font-weight:600; color:#374151;">Free Plan - Active</span>
+          <span style="font-size:13px; font-weight:600; color:#374151;">{% if unlimited %}Unlimited — Lifetime Gift{% else %}Free Plan - Active{% endif %}</span>
         </div>
         <h2 style="font-size:18px; font-weight:700; color:#111827; margin-bottom:4px;">
-          30 AI prescriptions / day
+          {% if unlimited %}Unlimited AI prescriptions{% else %}{{ daily_limit }} AI prescriptions / day{% endif %}
         </h2>
         <p style="font-size:14px; color:#6B7280; line-height:1.6;">
-          Free forever for clinics up to 30 consultations per day.
+          {% if unlimited %}
+          A gift from the MedlynAI team, with thanks for your support. No daily limit, for life.
+          {% else %}
+          Free forever for clinics up to {{ daily_limit }} consultations per day.
           No credit card required.
+          {% endif %}
         </p>
       </div>
       <div style="text-align:right;">
@@ -40,10 +44,12 @@
         <span style="font-size:36px; font-weight:700; color:{% if percent_used >= 100 %}#EF4444{% elif percent_used >= 80 %}#F59E0B{% else %}#111827{% endif %};">
           {{ daily_count }}
         </span>
-        <span style="font-size:18px; color:#9CA3AF; font-weight:400;"> / {{ daily_limit }}</span>
+        <span style="font-size:18px; color:#9CA3AF; font-weight:400;"> / {% if unlimited %}∞{% else %}{{ daily_limit }}{% endif %}</span>
       </div>
       <div style="text-align:right;">
-        {% if remaining == 0 %}
+        {% if unlimited %}
+        <span style="font-size:14px; color:#059669; font-weight:500;">No daily limit</span>
+        {% elif remaining == 0 %}
         <span style="font-size:14px; color:#EF4444; font-weight:500;">Limit reached — resets at midnight</span>
         {% elif remaining <= 5 %}
         <span style="font-size:14px; color:#F59E0B; font-weight:500;">{{ remaining }} remaining today</span>
@@ -53,6 +59,7 @@
       </div>
     </div>
 
+    {% if not unlimited %}
     <!-- Progress bar -->
     <div style="background:#F3F4F6; border-radius:8px; height:12px; overflow:hidden;">
       <div style="height:100%; border-radius:8px; width:{{ percent_used }}%;
@@ -63,6 +70,7 @@
       <span>0</span>
       <span>{{ daily_limit }} (limit)</span>
     </div>
+    {% endif %}
 
     {% if percent_used >= 80 and percent_used < 100 %}
     <div style="margin-top:14px; font-size:13px; color:#92400E; background:#FEF3C7; border-radius:8px; padding:10px 14px;">
@@ -105,6 +113,7 @@
     </div>
   </div>
 
+  {% if not unlimited %}
   <!-- Upgrade section -->
   <div class="card" style="border:2px solid #2563EB; background:linear-gradient(135deg, #EFF6FF 0%, #F9FAFB 100%);">
     <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:20px; flex-direction:row-reverse;">
@@ -138,6 +147,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
 </div>
 {% endblock %}

@@ -180,14 +180,15 @@ def plan_view(request):
     from prescription.models import Prescription
 
     clinic = request.user.staff_profile.clinic
-    today = timezone.now().date()
+    today = timezone.localdate()
+    unlimited = clinic.daily_rx_limit is None
     daily_limit = getattr(settings, 'FREE_DAILY_RX_LIMIT', 30)
     daily_count = Prescription.objects.filter(
         visit__clinic=clinic,
         created_at__date=today,
     ).count()
     remaining = max(0, daily_limit - daily_count)
-    percent_used = min(100, int(daily_count / daily_limit * 100)) if daily_limit else 0
+    percent_used = 0 if unlimited else (min(100, int(daily_count / daily_limit * 100)) if daily_limit else 0)
 
     # Last 7 days history
     from datetime import timedelta
@@ -196,12 +197,13 @@ def plan_view(request):
     for i in range(6, -1, -1):
         d = today - timedelta(days=i)
         count = Prescription.objects.filter(visit__clinic=clinic, created_at__date=d).count()
-        week_data.append({'date': d, 'count': count, 'at_limit': count >= daily_limit})
+        week_data.append({'date': d, 'count': count, 'at_limit': not unlimited and count >= daily_limit})
 
     return render(request, 'accounts/plan.html', {
         'clinic': clinic,
         'daily_count': daily_count,
         'daily_limit': daily_limit,
+        'unlimited': unlimited,
         'remaining': remaining,
         'percent_used': percent_used,
         'week_data': week_data,
@@ -454,7 +456,21 @@ def admin_panel_view(request):
     # All clinics (regardless of registration source)
     from .models import ClinicDeletionRequest
     from django.db.models import Count
-    all_clinics = Clinic.objects.all().order_by('name').prefetch_related('staff')
+    all_clinics = list(Clinic.objects.all().order_by('name').prefetch_related('staff'))
+    # Clinics run by the same doctor/admin account are "linked" (for granting unlimited together)
+    owners = {}
+    for c in all_clinics:
+        for sm in c.staff.all():
+            if sm.role in ('doctor', 'admin'):
+                owners.setdefault(sm.user_id, set()).add(c.pk)
+    by_pk = {c.pk: c for c in all_clinics}
+    for c in all_clinics:
+        linked = set()
+        for pks in owners.values():
+            if c.pk in pks:
+                linked |= pks
+        linked.discard(c.pk)
+        c.linked = sorted((by_pk[pk] for pk in linked), key=lambda x: x.name)
     pending_deletions = ClinicDeletionRequest.objects.filter(status='pending').select_related('clinic', 'requested_by')
 
     # ── Executive earnings: count approved referrals per executive ──
@@ -597,6 +613,27 @@ def letterhead_view(request):
         return redirect('accounts:letterhead')
 
     return render(request, 'accounts/letterhead.html', {'clinic': clinic})
+
+
+@_require_POST
+def set_unlimited_prescriptions_view(request, pk):
+    """Superuser-only: turn unlimited AI prescriptions on/off for a clinic (and its linked clinics)."""
+    if not request.user.is_superuser:
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden('Not authorized.')
+    clinic = get_object_or_404(Clinic, pk=pk)
+    enable = request.POST.get('enable') == '1'
+    clinics = [clinic]
+    if request.POST.get('include_linked') == '1':
+        clinics += list(clinic.linked_clinics())
+    Clinic.objects.filter(pk__in=[c.pk for c in clinics]).update(unlimited_prescriptions=enable)
+    import logging
+    logging.getLogger('accounts').info(
+        'UNLIMITED_RX %s by=%s clinics=%s', 'ON' if enable else 'OFF', request.user.username,
+        ','.join(f'{c.pk}:{c.name}' for c in clinics))
+    names = ', '.join(c.name for c in clinics)
+    messages.success(request, f'Unlimited prescriptions {"turned ON" if enable else "turned OFF"} for: {names}')
+    return redirect('/accounts/admin-panel/#all-clinics')
 
 
 @_require_POST

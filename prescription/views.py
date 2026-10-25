@@ -27,16 +27,11 @@ RATE_LIMIT_WINDOW = 60   # per second window
 
 def _get_daily_rx_count(clinic) -> int:
     """Count prescriptions saved today for this clinic."""
-    today = timezone.now().date()
+    today = timezone.localdate()   # India date — the count resets at midnight IST
     return Prescription.objects.filter(
         visit__clinic=clinic,
         created_at__date=today,
     ).count()
-
-
-def _get_daily_rx_limit() -> int:
-    from django.conf import settings
-    return getattr(settings, 'FREE_DAILY_RX_LIMIT', 30)
 
 
 def _check_rate_limit(user_id: int) -> bool:
@@ -165,9 +160,9 @@ def generate_prescription_api(request):
 
     # Daily free-plan limit check
     clinic = request.user.staff_profile.clinic
-    daily_count = _get_daily_rx_count(clinic)
-    daily_limit = _get_daily_rx_limit()
-    if daily_count >= daily_limit:
+    daily_limit = clinic.daily_rx_limit   # None = unlimited
+    daily_count = _get_daily_rx_count(clinic) if daily_limit is not None else 0
+    if daily_limit is not None and daily_count >= daily_limit:
         return JsonResponse({
             'ok': False,
             'limit_reached': True,

@@ -26,11 +26,12 @@
   <!-- Filters -->
   <div class="card" style="margin-bottom:16px;">
     <form method="get" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <input type="hidden" name="range" value="{{ days }}">
       <input type="text" name="q" value="{{ search }}" placeholder="Search patient / bill number"
              class="input-field" style="flex:1; min-width:180px; font-size:14px;">
       <div style="display:flex; gap:6px; flex-wrap:wrap;">
         {% for val, label in range_choices %}
-        <a href="?range={{ val }}{% if search %}&q={{ search }}{% endif %}"
+        <a href="?range={{ val }}{% if search %}&q={{ search|urlencode }}{% endif %}"
            class="btn btn-sm {% if days == val %}btn-primary{% else %}btn-secondary{% endif %}">
           {{ label }}
         </a>
@@ -51,7 +52,7 @@
       <div style="font-size:12px; color:#6B7280; margin-top:2px;">Bills</div>
     </div>
     <div class="card" style="flex:1; min-width:110px; text-align:center; padding:14px;">
-      <div style="font-size:13px; font-weight:600; color:#374151;">{{ since|date:"d M" }} – {{ today|date:"d M Y" }}</div>
+      <div style="font-size:13px; font-weight:600; color:#374151;">{% if days == 1 %}Today, {{ today|date:"d M Y" }}{% else %}{{ since|date:"d M" }} – {{ today|date:"d M Y" }}{% endif %}</div>
       <div style="font-size:12px; color:#6B7280; margin-top:2px;">Period</div>
     </div>
   </div>
@@ -105,7 +106,7 @@
         {% empty %}
         <tr>
           <td colspan="7" style="padding:40px; text-align:center; color:#6B7280;">
-            No bills found{% if search %} for "{{ search }}"{% endif %} in the last {{ days }} days.
+            No bills found{% if search %} for "{{ search }}"{% endif %} {% if days == 1 %}today{% else %}in the last {{ days }} days{% endif %}.
           </td>
         </tr>
         {% endfor %}

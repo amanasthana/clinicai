@@ -23,6 +23,7 @@ urlpatterns = [
     path('letterhead/', views.letterhead_view, name='letterhead'),
     path('admin-panel/check-user/<str:phone>/', views.check_user_view, name='check_user'),
     path('admin-panel/reset-password/<int:pk>/', views.reset_clinic_password_view, name='reset_clinic_password'),
+    path('admin-panel/clinic/<int:pk>/unlimited/', views.set_unlimited_prescriptions_view, name='set_unlimited_prescriptions'),
     path('admin-panel/pw-reset/<int:pk>/', views.superuser_reset_password_view, name='superuser_reset_password'),
     path('switch-clinic/', views.switch_clinic_view, name='switch_clinic'),
     path('add-clinic/', views.add_clinic_view, name='add_clinic'),

@@ -458,8 +458,20 @@
                     </span>
                     {% endif %}
                     {% if batch.unit_price %}<span class="text-xs text-gray-500">₹{{ batch.unit_price }}/unit</span>{% endif %}
-                    <span class="text-xs text-gray-400">Recd {{ batch.received_date|date:"d M Y" }}</span>
+                    {% with entries=batch.receipts.all %}
+                    {% if entries|length <= 1 %}
+                    <span class="text-xs text-gray-400">Recd {% if entries %}{{ entries.0.received_date|date:"d M Y" }}{% else %}{{ batch.received_date|date:"d M Y" }}{% endif %}</span>
+                    {% endif %}
+                    {% endwith %}
                   </div>
+                  {% with entries=batch.receipts.all %}
+                  {% if entries|length > 1 %}
+                  <div class="text-xs text-gray-500 mt-1" style="line-height:1.6;">
+                    <span class="text-gray-400">Received:</span>
+                    {% for r in entries %}<span style="white-space:nowrap;">{% if not forloop.first %}+{% endif %}<strong class="text-gray-700">{{ r.quantity }}</strong> on {{ r.received_date|date:"d M Y" }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}
+                  </div>
+                  {% endif %}
+                  {% endwith %}
                 </div>
                 <div class="flex gap-2 flex-shrink-0 pt-0.5">
                   <a href="/pharmacy/batch/{{ batch.pk }}/edit/" class="btn btn-sm btn-secondary" style="font-size:12px; padding:5px 12px;">Edit</a>

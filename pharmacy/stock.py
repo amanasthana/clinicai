@@ -16,7 +16,7 @@ import re
 
 from django.db import IntegrityError, transaction
 
-from .models import DispensedItem, PharmacyBatch, PharmacyItem
+from .models import DispensedItem, PharmacyBatch, PharmacyItem, StockReceipt
 
 
 class StockInputError(ValueError):
@@ -209,9 +209,11 @@ def _unarchive_item(item):
 
 
 def add_stock(item, batch_number, expiry_date, quantity, unit_price,
-              purchase_price=decimal.Decimal('0'), purchase_gst_percent=decimal.Decimal('0')):
+              purchase_price=decimal.Decimal('0'), purchase_gst_percent=decimal.Decimal('0'),
+              added_by=None):
     """Add stock to a medicine. Returns (batch, merged). merged=True means an existing
-    batch with the same number was topped up."""
+    batch with the same number was topped up. Every call records a dated StockReceipt,
+    so parts of one batch received on different days keep their own dates."""
     batch_number = (batch_number or '').strip()
     for attempt in range(2):
         try:
@@ -248,6 +250,15 @@ def add_stock(item, batch_number, expiry_date, quantity, unit_price,
                         purchase_gst_percent=purchase_gst_percent,
                     )
                     merged = False
+                if quantity > 0:
+                    StockReceipt.objects.create(
+                        batch=batch, quantity=quantity,
+                        unit_price=unit_price if unit_price > 0 else batch.unit_price,
+                        purchase_price=purchase_price if purchase_price > 0 else batch.purchase_price,
+                        purchase_gst_percent=(purchase_gst_percent if purchase_gst_percent > 0
+                                              else batch.purchase_gst_percent),
+                        added_by=added_by,
+                    )
                 _unarchive_item(item)
                 return batch, merged
         except IntegrityError:
@@ -335,6 +346,7 @@ def merge_items(source, target):
                     match.purchase_price = b.purchase_price
                 match.save()
                 DispensedItem.objects.filter(batch_id=b.pk).update(batch=match)
+                StockReceipt.objects.filter(batch_id=b.pk).update(batch=match)
                 b.delete()
             else:
                 b.item = target

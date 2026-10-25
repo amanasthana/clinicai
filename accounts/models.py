@@ -39,9 +39,28 @@ class Clinic(models.Model):
     # Hindi versions for Hindi-only prescriptions (blank = auto-transliterated at print time)
     name_hi = models.CharField(max_length=200, blank=True, default='')
     address_hi = models.TextField(blank=True, default='')
+    # Granted by the MedlynAI team (e.g. lifetime gift) — no daily AI prescription limit
+    unlimited_prescriptions = models.BooleanField(
+        default=False, db_default=False,
+        help_text='No daily limit on AI prescriptions for this clinic.',
+    )
 
     def __str__(self):
         return self.name
+
+    @property
+    def daily_rx_limit(self):
+        """AI prescriptions allowed per day, or None for unlimited."""
+        if self.unlimited_prescriptions:
+            return None
+        return getattr(settings, 'FREE_DAILY_RX_LIMIT', 30)
+
+    def linked_clinics(self):
+        """Other clinics run by the same doctor/admin accounts as this one."""
+        owner_ids = self.staff.filter(role__in=['doctor', 'admin']).values_list('user_id', flat=True)
+        return (Clinic.objects
+                .filter(staff__user_id__in=list(owner_ids), staff__role__in=['doctor', 'admin'])
+                .exclude(pk=self.pk).distinct().order_by('name'))
 
 
 class StaffMember(models.Model):
